@@ -1,0 +1,10 @@
+node_modules/
+dist/
+out/
+.env
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/bin/
+Research.md
+Research_2.md

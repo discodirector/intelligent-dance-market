@@ -1,0 +1,362 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Intelligent Dance Market render</title>
+<style>
+  html, body { margin: 0; background: #07090b; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// Bot fallback renderer (SPEC §4 intent). Deterministic: same timeline + options -> same frames + audio.
+// API used by bot/src/render:
+//   await __setup({ timeline, meta, width, height, fps, seconds, title, subtitle }) -> { frames, steps }
+//   __frame(i) -> JPEG data URL of frame i
+//   await __audio() -> base64 WAV (44.1 kHz stereo 16-bit)
+(() => {
+  const SCALES = [
+    [0, 2, 3, 5, 7, 9, 10], // Dorian
+    [0, 1, 3, 5, 7, 8, 10], // Phrygian
+    [0, 2, 4, 6, 7, 9, 11], // Lydian
+    [0, 1, 3, 5, 6, 8, 10], // Locrian
+  ];
+  const MODES = ["DORIAN", "PHRYGIAN", "LYDIAN", "LOCRIAN"];
+  const NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  const TRACKS = ["KICK", "SNARE", "HAT", "GLITCH"];
+  const SR = 44100;
+
+  const C = {
+    bg: "#07090b", panel: "#0d1115", grid: "#161c22", dim: "#2a333c", text: "#c9d1d9", mute: "#5d6b78",
+    accent: "#7cf2c4", buy: "#7cf2c4", sell: "#ff6b6b", whale: "#ffd166",
+    tracks: ["#ff8a5b", "#e9e4d4", "#76b7ff", "#c58bff"], bass: "#7cf2c4",
+  };
+
+  let T, M, O, sched, canvas, ctx;
+
+  function mulberry(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const bitOn = (patHex, track, step) => (BigInt(patHex) >> BigInt(track * 16 + step)) & 1n ? 1 : 0;
+  const nib = (bassHex, step) => Number((BigInt(bassHex) >> BigInt(step * 4)) & 0xfn);
+
+  // Precompute the step schedule: tempo follows the replayed state; timeline index advances linearly in time.
+  function buildSchedule() {
+    const N = T.length, D = O.seconds, steps = [];
+    let t = 0.25, k = 0;
+    while (t < D - 0.6) {
+      const idx = Math.min(N - 1, Math.floor(((t - 0.25) / (D - 0.85)) * N));
+      const e = T[idx];
+      const st = e.state;
+      const dur = 60 / st.bpm / 4;
+      const rng = mulberry(st.patternId * 977 + k);
+      const swing = (k % 2 ? 0.14 : 0) * dur + (rng() - 0.5) * 0.012;
+      steps.push({ t: t + swing, t0: t, dur, k, step: k % 16, idx, e, r: rng() });
+      t += dur;
+      k++;
+    }
+    return steps;
+  }
+
+  function stepAt(time) {
+    let lo = 0, hi = sched.length - 1;
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (sched[mid].t0 <= time) lo = mid; else hi = mid - 1; }
+    return sched[lo];
+  }
+
+  // ---------- drawing ----------
+  function txt(s, x, y, size, color, align = "left", weight = 400) {
+    ctx.font = `${weight} ${size}px "JetBrains Mono", "DejaVu Sans Mono", "Menlo", monospace`;
+    ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = "alphabetic";
+    ctx.fillText(s, x, y);
+  }
+  const fmtDate = (ts) => new Date(ts * 1000).toISOString().slice(0, 16).replace("T", " ") + " UTC";
+
+  function draw(time) {
+    const W = O.width, H = O.height, wide = W > H * 1.3;
+    const S = Math.min(W, H) / 1080;
+    const cur = stepAt(time);
+    const e = cur.e, st = e.state;
+    ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+
+    // scanlines
+    ctx.fillStyle = "rgba(255,255,255,0.012)";
+    for (let y = 0; y < H; y += 4 * S) ctx.fillRect(0, y, W, S);
+
+    const pad = 60 * S;
+    const gx = wide ? 140 * S : 120 * S, gw = wide ? W * 0.56 : W - gx - pad;
+    const gy = wide ? 210 * S : 250 * S;
+    const cell = gw / 16, ch = Math.min(cell, 92 * S), gap = 6 * S;
+
+    // header
+    txt("INTELLIGENT DANCE MARKET", gx, 80 * S, 34 * S, C.text, "left", 700);
+    txt(O.title || "IMD/ETH · ETHEREUM · UNISWAP V4", gx, 118 * S, 20 * S, C.mute);
+    txt(O.subtitle || "", gx, 146 * S, 18 * S, C.dim);
+    txt(fmtDate(e.ts), gx + gw, 80 * S, 20 * S, C.mute, "right");
+    txt(`BLOCK ${e.blockNumber}`, gx + gw, 108 * S, 18 * S, C.dim, "right");
+
+    // recent mutations for flashes
+    const flashes = new Map();
+    for (let j = Math.max(0, cur.idx - 24); j <= cur.idx; j++) {
+      const m = T[j], age = (cur.idx - j);
+      const key = m.track * 16 + m.step;
+      if (!flashes.has(key) || flashes.get(key).age > age) flashes.set(key, { age, m });
+    }
+
+    // grid
+    for (let tr = 0; tr < 4; tr++) {
+      const y = gy + tr * (ch + gap);
+      txt(TRACKS[tr], gx - 14 * S, y + ch * 0.62, 15 * S, C.mute, "right");
+      for (let s = 0; s < 16; s++) {
+        const x = gx + s * cell;
+        const on = bitOn(st.pattern, tr, s);
+        const playing = s === cur.step;
+        ctx.fillStyle = s % 4 === 0 ? "#10161b" : C.panel;
+        ctx.fillRect(x + gap / 2, y, cell - gap, ch);
+        if (on) {
+          ctx.fillStyle = C.tracks[tr];
+          ctx.globalAlpha = playing ? 1 : 0.78;
+          ctx.fillRect(x + gap / 2, y, cell - gap, ch);
+          ctx.globalAlpha = 1;
+        }
+        const f = flashes.get(tr * 16 + s);
+        if (f && f.age < 24) {
+          const a = Math.max(0, 1 - f.age / 24);
+          ctx.strokeStyle = f.m.whale ? C.whale : f.m.isBuy ? C.buy : C.sell;
+          ctx.globalAlpha = a; ctx.lineWidth = 4 * S;
+          ctx.strokeRect(x + gap / 2 + 2 * S, y + 2 * S, cell - gap - 4 * S, ch - 4 * S);
+          ctx.globalAlpha = 1;
+        }
+        if (playing) { ctx.fillStyle = "rgba(255,255,255,0.10)"; ctx.fillRect(x + gap / 2, y, cell - gap, ch); }
+      }
+    }
+    // bass row
+    const by = gy + 4 * (ch + gap) + 14 * S, bh = ch * 0.7;
+    txt("BASS", gx - 14 * S, by + bh * 0.66, 15 * S, C.mute, "right");
+    for (let s = 0; s < 16; s++) {
+      const x = gx + s * cell, d = nib(st.bass, s);
+      ctx.fillStyle = C.panel; ctx.fillRect(x + gap / 2, by, cell - gap, bh);
+      if (d) {
+        const hgt = (bh - 6 * S) * (d / 15);
+        ctx.fillStyle = C.bass; ctx.globalAlpha = s === cur.step ? 1 : 0.55;
+        ctx.fillRect(x + gap / 2, by + bh - hgt, cell - gap, hgt); ctx.globalAlpha = 1;
+        txt(String(d), x + cell / 2, by + 20 * S, 13 * S, s === cur.step ? C.bg : C.text, "center");
+      }
+    }
+    // playhead
+    ctx.fillStyle = C.accent;
+    ctx.fillRect(gx + cur.step * cell + gap / 2, by + bh + 10 * S, cell - gap, 4 * S);
+
+    // status panel
+    const key = `${NOTES[st.root % 12]} ${MODES[st.mode] || "?"}`;
+    const py = by + bh + 70 * S;
+    const items = [["BPM", String(st.bpm)], ["KEY", key], ["SWAP", "#" + st.swapCount], ["PAGE", "#" + st.patternId]];
+    if (wide) {
+      const px = gx + gw + 70 * S;
+      items.forEach(([k, v], i) => {
+        txt(k, px, gy + 30 * S + i * 92 * S, 16 * S, C.mute);
+        txt(v, px, gy + 66 * S + i * 92 * S, 34 * S, C.text, "left", 700);
+      });
+      drawFeed(px, gy + 420 * S, W - px - 60 * S, cur, S, 9);
+    } else {
+      const colw = gw / 4;
+      items.forEach(([k, v], i) => {
+        txt(k, gx + i * colw, py, 16 * S, C.mute);
+        txt(v, gx + i * colw, py + 38 * S, 30 * S, C.text, "left", 700);
+      });
+      drawFeed(gx, py + 90 * S, gw, cur, S, 5);
+    }
+
+    // pressure meter + progress
+    const my = H - 70 * S;
+    const p = Math.max(-16000, Math.min(16000, st.pressure)) / 16000;
+    ctx.fillStyle = C.grid; ctx.fillRect(gx, my, gw, 6 * S);
+    ctx.fillStyle = p >= 0 ? C.buy : C.sell;
+    const mid = gx + gw / 2;
+    ctx.fillRect(p >= 0 ? mid : mid + p * gw / 2, my, Math.abs(p) * gw / 2, 6 * S);
+    txt("PRESSURE", gx, my - 12 * S, 14 * S, C.mute);
+    txt(`${cur.idx + 1}/${T.length} SWAPS REPLAYED`, gx + gw, my - 12 * S, 14 * S, C.mute, "right");
+    ctx.fillStyle = C.dim; ctx.fillRect(0, H - 4 * S, W * (time / O.seconds), 4 * S);
+
+    // whale banner
+    for (let j = Math.max(0, cur.idx - 18); j <= cur.idx; j++) {
+      if (T[j].movement) {
+        const a = 1 - (cur.idx - j) / 18;
+        ctx.globalAlpha = a;
+        txt(`MOVEMENT → ROOT ${NOTES[T[j].state.root]}`, gx + gw, 146 * S, 18 * S, C.whale, "right", 700);
+        ctx.globalAlpha = 1;
+        break;
+      }
+    }
+  }
+
+  function drawFeed(x, y, w, cur, S, rows) {
+    txt("MUTATIONS", x, y, 14 * S, C.mute);
+    for (let r = 0; r < rows; r++) {
+      const j = cur.idx - r; if (j < 0) break;
+      const m = T[j];
+      const side = m.isBuy ? "BUY " : "SELL";
+      const amt = m.imd >= 100 ? m.imd.toFixed(0) : m.imd.toFixed(2);
+      const line = `${side} ${amt.padStart(7)} IMD  ${TRACKS[m.track].padEnd(6)} s${String(m.step).padStart(2, "0")} ${m.on ? "+" : "-"}${m.whale ? "  WHALE" : ""}`;
+      ctx.globalAlpha = 1 - r / (rows + 1);
+      txt(line, x, y + 30 * S + r * 28 * S, 18 * S, m.whale ? C.whale : m.isBuy ? C.buy : C.sell);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // ---------- audio ----------
+  function noiseBuffer(ac, seconds, seed) {
+    const b = ac.createBuffer(1, Math.ceil(seconds * SR), SR), d = b.getChannelData(0), r = mulberry(seed);
+    for (let i = 0; i < d.length; i++) d[i] = r() * 2 - 1;
+    return b;
+  }
+  const midiHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+
+  async function renderAudio() {
+    const ac = new OfflineAudioContext(2, Math.ceil(O.seconds * SR), SR);
+    const master = ac.createGain(); master.gain.value = 0.62;
+    const comp = ac.createDynamicsCompressor();
+    comp.threshold.value = -14; comp.ratio.value = 4; comp.attack.value = 0.003; comp.release.value = 0.15;
+    master.connect(comp); comp.connect(ac.destination);
+    // short feedback delay for space
+    const dl = ac.createDelay(1); const fb = ac.createGain(); const wet = ac.createGain();
+    dl.connect(fb); fb.connect(dl); dl.connect(wet); wet.connect(master);
+    fb.gain.value = 0.32; wet.gain.value = 0.22;
+    const noise = noiseBuffer(ac, 1, 7);
+    const fadeIn = ac.createGain(); fadeIn.connect(master);
+    fadeIn.gain.setValueAtTime(0, 0); fadeIn.gain.linearRampToValueAtTime(1, 0.4);
+    fadeIn.gain.setValueAtTime(1, O.seconds - 1.2); fadeIn.gain.linearRampToValueAtTime(0, O.seconds - 0.05);
+    const out = fadeIn;
+
+    const crushCurve = new Float32Array(256);
+    for (let i = 0; i < 256; i++) { const x = i / 128 - 1; crushCurve[i] = Math.round(x * 6) / 6; }
+
+    let lastBpm = 0;
+    for (const s of sched) {
+      const st = s.e.state, t = s.t, d = s.dur;
+      if (st.bpm !== lastBpm) { dl.delayTime.setValueAtTime((60 / st.bpm) * 0.75, Math.max(0, s.t0)); lastBpm = st.bpm; }
+      const dirty = st.mode === 3 ? 1 : st.mode === 1 ? 0.5 : 0;
+      // kick
+      if (bitOn(st.pattern, 0, s.step)) {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.frequency.setValueAtTime(160, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.95, t + 0.004);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.38);
+        o.connect(g); g.connect(out); o.start(t); o.stop(t + 0.4);
+      }
+      // snare
+      if (bitOn(st.pattern, 1, s.step)) {
+        const n = ac.createBufferSource(); n.buffer = noise;
+        const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 1800 + dirty * 1500; bp.Q.value = 0.8;
+        const g = ac.createGain(); g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+        n.connect(bp); bp.connect(g); g.connect(out); g.connect(dl); n.start(t, s.r * 0.5, 0.2);
+        const o = ac.createOscillator(), og = ac.createGain();
+        o.frequency.setValueAtTime(210, t); o.frequency.exponentialRampToValueAtTime(150, t + 0.08);
+        og.gain.setValueAtTime(0.3, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+        o.connect(og); og.connect(out); o.start(t); o.stop(t + 0.12);
+      }
+      // hat
+      if (bitOn(st.pattern, 2, s.step)) {
+        const n = ac.createBufferSource(); n.buffer = noise;
+        const hp = ac.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 7500;
+        const g = ac.createGain(); const len = s.r > 0.85 ? 0.12 : 0.035;
+        g.gain.setValueAtTime(0.22, t); g.gain.exponentialRampToValueAtTime(0.001, t + len);
+        n.connect(hp); hp.connect(g); g.connect(out); n.start(t, s.r * 0.8, len + 0.01);
+      }
+      // glitch: FM blips, ratchets on hash
+      if (bitOn(st.pattern, 3, s.step)) {
+        const reps = s.r > 0.8 ? 4 : s.r > 0.55 ? 2 : 1;
+        for (let k = 0; k < reps; k++) {
+          const tt = t + (k * d) / reps;
+          const car = ac.createOscillator(), mod = ac.createOscillator(), mg = ac.createGain(), g = ac.createGain();
+          const sh = ac.createWaveShaper(); sh.curve = crushCurve;
+          const f = 400 + Math.floor(s.r * 8) * 220 + k * 90;
+          car.frequency.value = f; mod.frequency.value = f * (1.5 + Math.floor(s.r * 5) * 0.5);
+          mg.gain.value = f * (2 + dirty * 4);
+          mod.connect(mg); mg.connect(car.frequency);
+          g.gain.setValueAtTime(0.11, tt); g.gain.exponentialRampToValueAtTime(0.001, tt + 0.05);
+          car.connect(sh); sh.connect(g); g.connect(out); g.connect(dl);
+          car.start(tt); mod.start(tt); car.stop(tt + 0.06); mod.stop(tt + 0.06);
+        }
+      }
+      // bass
+      const deg = nib(st.bass, s.step);
+      if (deg) {
+        const sc = SCALES[st.mode] || SCALES[0];
+        const i = deg - 1, midi = 33 + st.root + sc[i % 7] + 12 * Math.floor(i / 7);
+        const o = ac.createOscillator(), o2 = ac.createOscillator(), lp = ac.createBiquadFilter(), g = ac.createGain();
+        o.type = "sawtooth"; o2.type = "square"; o.frequency.value = midiHz(midi); o2.frequency.value = midiHz(midi) * 0.5;
+        o2.detune.value = 6;
+        lp.type = "lowpass"; lp.Q.value = 6 + dirty * 6;
+        lp.frequency.setValueAtTime(1400 + dirty * 900, t); lp.frequency.exponentialRampToValueAtTime(180, t + d * 1.6);
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22, t + 0.006);
+        g.gain.exponentialRampToValueAtTime(0.001, t + d * 1.8);
+        o.connect(lp); o2.connect(lp); lp.connect(g); g.connect(out);
+        o.start(t); o2.start(t); o.stop(t + d * 2); o2.stop(t + d * 2);
+      }
+      // whale / movement swell
+      if (s.k > 0 && sched[s.k - 1].idx !== s.idx) {
+        for (let j = sched[s.k - 1].idx + 1; j <= s.idx; j++) {
+          if (!T[j].movement) continue;
+          const n = ac.createBufferSource(); n.buffer = noise; n.loop = true;
+          const bp = ac.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 3;
+          bp.frequency.setValueAtTime(300, t); bp.frequency.exponentialRampToValueAtTime(6000, t + 0.6);
+          const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.18, t + 0.05);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+          n.connect(bp); bp.connect(g); g.connect(out); g.connect(dl); n.start(t); n.stop(t + 1);
+          break;
+        }
+      }
+    }
+    const buf = await ac.startRendering();
+    return wavBase64(buf);
+  }
+
+  function wavBase64(buf) {
+    const ch = buf.numberOfChannels, len = buf.length, bytes = 44 + len * ch * 2;
+    const ab = new ArrayBuffer(bytes), v = new DataView(ab);
+    const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    w(0, "RIFF"); v.setUint32(4, bytes - 8, true); w(8, "WAVE"); w(12, "fmt ");
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, ch, true); v.setUint32(24, SR, true);
+    v.setUint32(28, SR * ch * 2, true); v.setUint16(32, ch * 2, true); v.setUint16(34, 16, true);
+    w(36, "data"); v.setUint32(40, len * ch * 2, true);
+    const data = []; for (let c = 0; c < ch; c++) data.push(buf.getChannelData(c));
+    let o = 44;
+    for (let i = 0; i < len; i++) for (let c = 0; c < ch; c++) {
+      const x = Math.max(-1, Math.min(1, data[c][i])); v.setInt16(o, x < 0 ? x * 0x8000 : x * 0x7fff, true); o += 2;
+    }
+    const u8 = new Uint8Array(ab); let bin = "";
+    for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+
+  window.__setup = async (opts) => {
+    O = { width: 1080, height: 1080, fps: 30, seconds: 32, ...opts };
+    T = opts.timeline;
+    if (!T) {
+      const url = new URLSearchParams(location.search).get("timeline");
+      T = await (await fetch(url)).json();
+    }
+    if (!Array.isArray(T)) T = T.entries || T.frames;
+    canvas = document.getElementById("c");
+    canvas.width = O.width; canvas.height = O.height;
+    canvas.style.width = O.width + "px"; canvas.style.height = O.height + "px";
+    ctx = canvas.getContext("2d");
+    sched = buildSchedule();
+    return { frames: Math.round(O.seconds * O.fps), steps: sched.length, swaps: T.length };
+  };
+  window.__frame = (i) => { draw(i / O.fps); return canvas.toDataURL("image/jpeg", 0.93); };
+  window.__audio = () => renderAudio();
+})();
+</script>
+</body>
+</html>

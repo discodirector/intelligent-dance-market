@@ -1,0 +1,28 @@
+{
+  "name": "@swarm-sequencer/bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "replay": "tsx src/replay/index.ts",
+    "render": "tsx src/render/index.ts",
+    "caption": "tsx src/caption/index.ts",
+    "post": "tsx src/post/index.ts",
+    "teaser": "tsx src/pipeline.ts teaser",
+    "scheduler": "tsx src/scheduler.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.65.0",
+    "@swarm-sequencer/core": "*",
+    "playwright": "1.64.1",
+    "tsx": "^4.19.0",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

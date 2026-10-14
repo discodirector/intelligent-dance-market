@@ -1,0 +1,60 @@
+// Strict facts object: the only source of truth a caption may use.
+import { MODE_NAMES, NOTE_NAMES, TRACK_NAMES } from "@swarm-sequencer/core";
+import type { TimelineEntry } from "./timeline.ts";
+
+export interface Facts {
+  kind: "teaser" | "snapshot" | "movement";
+  project: string;
+  chain: string;
+  pool: string;
+  window: { from: string; to: string; hours: number; days: number };
+  sequencer: { steps: 16; tracks: 4 };
+  swaps: number;
+  buys: number;
+  sells: number;
+  whales: number;
+  movements: number;
+  pageTurns: number;
+  busiestTrack: string;
+  bpm: { start: number; end: number; min: number; max: number };
+  key: { start: string; end: string };
+  swapCount: number;
+  page: number;
+  videoSeconds?: number;
+  hook?: string;
+}
+
+const key = (root: number, mode: number) => `${NOTE_NAMES[root % 12]} ${MODE_NAMES[mode] ?? "?"}`;
+const iso = (ts: number) => new Date(ts * 1000).toISOString().replace(/\.\d+Z$/, "Z");
+
+export function factsFromTimeline(
+  entries: TimelineEntry[],
+  o: { kind: Facts["kind"]; chain: string; pool: string; project?: string; videoSeconds?: number; hook?: string; startPage?: number },
+): Facts {
+  if (!entries.length) throw new Error("no entries");
+  const first = entries[0], last = entries.at(-1)!;
+  const counts = [0, 0, 0, 0];
+  for (const e of entries) counts[e.track]++;
+  const bpms = entries.map((e) => e.state.bpm);
+  return {
+    kind: o.kind,
+    project: o.project ?? "Intelligent Dance Market",
+    chain: o.chain,
+    pool: o.pool,
+    window: { from: iso(first.ts), to: iso(last.ts), hours: Math.round((last.ts - first.ts) / 3600), days: Math.round((last.ts - first.ts) / 86400) },
+    sequencer: { steps: 16, tracks: 4 },
+    swaps: entries.length,
+    buys: entries.filter((e) => e.isBuy).length,
+    sells: entries.filter((e) => !e.isBuy).length,
+    whales: entries.filter((e) => e.whale).length,
+    movements: entries.filter((e) => e.movement).length,
+    pageTurns: last.state.patternId - (o.startPage ?? 0),
+    busiestTrack: TRACK_NAMES[counts.indexOf(Math.max(...counts))],
+    bpm: { start: first.state.bpm, end: last.state.bpm, min: Math.min(...bpms), max: Math.max(...bpms) },
+    key: { start: key(first.state.root, first.state.mode), end: key(last.state.root, last.state.mode) },
+    swapCount: last.state.swapCount,
+    page: last.state.patternId,
+    videoSeconds: o.videoSeconds,
+    hook: o.hook,
+  };
+}

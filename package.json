@@ -1,0 +1,5 @@
+{
+  "name": "swarm-sequencer",
+  "private": true,
+  "workspaces": ["packages/*", "web", "bot"]
+}

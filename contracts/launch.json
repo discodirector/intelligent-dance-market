@@ -1,0 +1,30 @@
+{
+  "kind": "univ4_hook",
+  "hook": {
+    "contract": "SequencerHook",
+    "constructorArgs": [
+      "$poolManager",
+      "$token",
+      "$factory",
+      "0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127",
+      "500000000000000000",
+      "5000000000000000000",
+      "25000000000000000000",
+      "100000000000000000000"
+    ],
+    "permissions": ["beforeInitialize", "afterInitialize", "afterSwap"]
+  },
+  "token": {
+    "contract": "SequencerToken",
+    "name": "Intelligent Dance Market",
+    "symbol": "IDM",
+    "decimals": 18
+  },
+  "pool": {
+    "pairedCurrency": "0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127",
+    "fee": 12500,
+    "tickSpacing": 60,
+    "initialPrice": "79228162514264337593543950336"
+  },
+  "notes": "Reference manifest for Robinhood Chain 4663, launch.open kind univ4_hook, pairWith imd. Name and ticker finalized by owner: Intelligent Dance Market (IDM). Build from contracts/; resolve $poolManager, predicted $token and $factory for the selected LaunchFactory. Mine exact hook flags 0x3040 with final constructor arguments and factory CREATE2 deployer. Constructor makes no external calls. Factory-only initialization binds exactly one sorted SEQ/IMD pool at fee 12500 and tickSpacing 60. afterInitialize seeds SPEC section 3 state; afterSwap reads actual BalanceDelta and post-swap tick, mutates two packed words and emits Mutated/Movement. No owner, admin, fees, return deltas or fund handling in the hook. The fixed-supply token mints 1e27 units once to its deployer; factory performs all allocations and single-sided seeding. initialPrice is provenance-only 2^96; the launch system must calculate actual opening price from its policy and sorted currency order. No transaction has been broadcast; chain-fork factory rehearsal remains a launch-stage requirement. Preserve SPEC.md, vectors and ABI bit-for-bit. Normal cold callback <35k; rare zero slot1 transition is documented separately in GAS.md by coordinator-approved exception."
+}
