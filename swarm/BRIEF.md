@@ -4,7 +4,7 @@ Launch an immutable Uniswap v4 music sequencer hook and its fixed-supply token o
 
 ## Source of truth and provenance
 
-Repository: **`{{REPO_URL}}`**. Immutable source commit: **`{{COMMIT}}`**.
+Repository: **`https://github.com/discodirector/intelligent-dance-market`**. Immutable source commit: **`3bd29b0e7e1c154175cc6e9ee2f1f193ce7a5cdf`**.
 
 These are intentional placeholders approved by the coordinator: this repository is not public yet, and publication still requires the owner's approval. Before `launch.open`, the coordinator must pin the actual commit containing `contracts/`, `spec/vectors.json`, and `SPEC.md`, then replace both placeholders and import the repository. Do not use the initial planning commit as if it contained the implementation. The local source workspace is `IMD_vibe`; the Foundry project root is `contracts/`.
 
@@ -16,7 +16,7 @@ Use the following fields in the final validated request; integrate the imported 
 
 ```json
 {
-  "objective": "Review and launch Intelligent Dance Market (IDM) from {{REPO_URL}} at {{COMMIT}} on Robinhood Chain 4663 with its immutable zero-fee Uniswap v4 sequencer hook. Preserve SPEC.md section 3, the two packed state words, ABI and Solidity test vectors exactly. Use the supplied contracts/ Foundry project and launch.json. No owner, signer, upgrade, fee, return delta or fund handling in the hook. Pair SEQ with IMD and provide verified deployed hook/token/pool addresses and launch receipts.",
+  "objective": "Review and launch Intelligent Dance Market (IDM) from https://github.com/discodirector/intelligent-dance-market at 3bd29b0e7e1c154175cc6e9ee2f1f193ce7a5cdf on Robinhood Chain 4663 with its immutable zero-fee Uniswap v4 sequencer hook. Preserve SPEC.md section 3, the two packed state words, ABI and Solidity test vectors exactly. Use the supplied contracts/ Foundry project and launch.json. No owner, signer, upgrade, fee, return delta or fund handling in the hook. Pair SEQ with IMD and provide verified deployed hook/token/pool addresses and launch receipts.",
   "shape": "chain",
   "references": ["uniswap-v4-hooks", "uniswap-v4-security"],
   "steps": [{"skill": "build-contract-project"}, {"skill": "adversarial-review"}],
