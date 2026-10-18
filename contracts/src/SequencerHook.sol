@@ -57,6 +57,20 @@ contract SequencerHook is IHooks {
         uint256 slot1
     );
     event Movement(uint32 indexed patternId, uint8 root, uint32 swapCount);
+    /// @notice Whale track action (SPEC §3.3.8): fill = Euclidean rhythm written, else the track was wiped.
+    event Drop(uint32 indexed swapCount, uint8 track, bool fill, uint16 mask);
+    /// @notice Finished-track snapshot before reset; identity and seed describe the next track.
+    event TrackComplete(
+        uint16 indexed trackNo,
+        uint32 patternId,
+        uint8 root,
+        uint256 slot0,
+        uint256 slot1,
+        uint32 swapCount,
+        uint64 seed
+    );
+    /// @notice Emitted only for promoted/spilled or no-op non-whale writes; Mutated.step remains the bass/hash step.
+    event Accumulated(uint32 indexed swapCount, uint8 fromTrack, uint8 writeStep, bool promoted, bool noop);
     // Reserved ABI for stretch R7; there is no oracle callback or release mutation in this implementation.
     event TrackReleased(uint32 indexed releaseId, uint32 patternId, uint256 slot0, uint256 slot1);
 
@@ -125,7 +139,7 @@ contract SequencerHook is IHooks {
         _validateInitialization(sender, key);
         poolId = key.toId();
         initialized = true;
-        (slot0, slot1) = SequencerState.encode(SequencerState.initial());
+        (slot0, slot1) = SequencerState.encode(SequencerState.initialV2());
         return IHooks.afterInitialize.selector;
     }
 
@@ -141,13 +155,22 @@ contract SequencerHook is IHooks {
         bool isBuy = (seqIs0 ? delta.amount0() : delta.amount1()) > 0;
         uint128 amount = uint128(uint256(imdDelta < 0 ? -imdDelta : imdDelta));
         (, int24 tick,,) = poolManager.getSlot0(id);
-        (SequencerState.State memory s, SequencerState.Mutation memory m) = SequencerState.mutate(
+        (SequencerState.State memory s, SequencerState.Mutation memory m) = SequencerState.mutateV2(
             SequencerState.decode(slot0, slot1),
             SequencerState.Input(isBuy, amount, tick, uint64(block.number), uint40(block.timestamp)),
             SequencerState.Thresholds(T_HAT, T_GLITCH, T_SNARE, T_KICK)
         );
         (slot0, slot1) = SequencerState.encode(s);
-        if (m.whale) emit Movement(m.movementPatternId, s.root, s.swapCount);
+        if (m.whale) {
+            emit Movement(m.movementPatternId, m.movementRoot, s.swapCount);
+            emit Drop(s.swapCount, m.track, isBuy, m.dropMask);
+        }
+        if (!m.whale && (m.promoted || m.noop)) {
+            emit Accumulated(s.swapCount, m.fromTrack, m.writeStep, m.promoted, m.noop);
+        }
+        if (m.completed) {
+            emit TrackComplete(s.trackNo, s.patternId, s.root, m.snapshot0, m.snapshot1, s.swapCount, s.pattern);
+        }
         emit Mutated(sender, s.swapCount, m.track, m.step, isBuy, m.bassNote, isBuy, amount, tick, slot0, slot1);
         return (IHooks.afterSwap.selector, 0);
     }

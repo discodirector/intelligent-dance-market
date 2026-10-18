@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>IDM-16 bot render</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=VT323&display=swap" rel="stylesheet" />
+</head>
+<body class="bot">
+  <!-- Bot render contract (bot/src/render): __setup(opts) → {frames, steps, swaps}; __frame(i) paints frame i
+       and returns null (the bot screenshots the viewport); __audio() → base64 WAV. Same timeline → same output. -->
+  <div class="stage" id="stage">
+    <div class="slot slot-module" id="slot-module">
+      <div class="module" id="panel">
+        <div class="screws" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="eyebrow">INTELLIGENT DANCE MARKET</span>
+            <h1>IDM-16 <em>swarm sequencer</em></h1>
+          </div>
+          <div class="panel-meta"><span class="dot"></span><span id="net-status">REPLAY</span></div>
+        </div>
+        <div class="panel-body">
+          <div class="screen-grid">
+            <div class="bezel lcd-main">
+              <span class="silk">PATTERN · 4×16 + BASS</span>
+              <canvas id="grid"></canvas>
+            </div>
+            <div class="side-col">
+              <div class="bezel scope"><span class="silk">SCOPE</span><canvas id="scope"></canvas></div>
+              <div class="bezel spec"><span class="silk">SPECTRUM</span><canvas id="spectrum"></canvas></div>
+            </div>
+          </div>
+          <div class="readouts">
+            <div class="ro"><span class="silk">BPM</span><div class="seg" id="seg-bpm"></div></div>
+            <div class="ro"><span class="silk">KEY</span><div class="seg" id="seg-key"></div></div>
+            <div class="ro"><span class="silk">MODE</span><div class="seg" id="seg-mode"></div></div>
+            <div class="ro"><span class="silk">SWAP #</span><div class="seg" id="seg-swap"></div></div>
+            <div class="ro"><span class="silk">PAGE</span><div class="seg" id="seg-page"></div></div>
+            <div class="ro"><span class="silk">EPOCH</span><div class="seg" id="seg-epoch"></div></div>
+            <div class="ro v2-only"><span class="silk">TRACK #</span><div class="seg" id="seg-track"></div></div>
+          </div>
+          <div class="controls bot-controls">
+            <div class="era-lcd">
+              <span class="silk">GENRE</span>
+              <div class="dotmatrix" id="era-name">—</div>
+              <div class="era-sub" id="era-sub">EPOCH 0</div>
+            </div>
+            <div class="idle">
+              <span class="silk">IDLE STAGE</span>
+              <ul class="leds" id="idle-leds">
+                <li data-stage="full"><b></b>FULL</li>
+                <li data-stage="thinning"><b></b>THIN</li>
+                <li data-stage="sparse"><b></b>SPARSE</li>
+                <li data-stage="drone"><b></b>DRONE</li>
+              </ul>
+              <span class="idle-label" id="idle-label">IDLE 0s</span>
+            </div>
+            <div class="heat v2-only"><span class="silk">HEAT</span><div class="heat-bar" id="heat-bar"></div><span class="heat-label" id="heat-label">00/16</span></div>
+            <div class="vu"><span class="silk">OUT</span><div class="vu-bars" id="vu"></div></div>
+          </div>
+        </div>
+        <div class="panel-foot">
+          <span id="foot-left">EVERY TRADE IS A NOTE · $IDM</span>
+          <span id="foot-right"></span>
+        </div>
+      </div>
+    </div>
+    <div class="slot slot-console">
+      <div class="console">
+        <div class="console-head">
+          <span class="hash">#</span>
+          <span id="c-swaps">0</span> swaps · <span id="c-buys" class="g">0</span> buys · <span id="c-sells" class="r">0</span> sells · <span id="c-whales" class="a">0</span> whales
+        </div>
+        <div class="console-intro"><span id="title">IMD/ETH · ETHEREUM · UNISWAP V4</span><br /><span id="subtitle"></span></div>
+        <ol class="log" id="log"></ol>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/src/bot.ts"></script>
+</body>
+</html>

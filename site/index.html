@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Intelligent Dance Market — $IDM</title>
+  <meta name="description" content="Intelligent Dance Market ($IDM): a Uniswap v4 hook whose on-chain state is a 16-step drum machine. Every trade is a note." />
+  <meta name="theme-color" content="#050605" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23050605'/%3E%3Crect x='2' y='9' width='3' height='5' fill='%2365f08c'/%3E%3Crect x='6.5' y='5' width='3' height='9' fill='%23e8e2cf'/%3E%3Crect x='11' y='2' width='3' height='12' fill='%2365f08c'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=VT323&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <canvas class="bg-floor" id="bg-floor" aria-hidden="true"></canvas>
+  <header class="top">
+    <a class="brand" href="#" aria-label="Intelligent Dance Market home">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><rect x="3" y="14" width="4" height="7"/><rect x="10" y="8" width="4" height="13" class="mid"/><rect x="17" y="3" width="4" height="18"/><rect x="1" y="22.4" width="22" height="1.2" class="base"/></svg>
+      </span>
+      <span class="word">IDM</span>
+    </a>
+    <nav class="nav">
+      <a href="#module">PLAYER</a>
+      <a href="#how">HOW</a>
+      <a href="#eras">GENRES</a>
+      <a href="#onchain">ONCHAIN</a>
+    </nav>
+    <a class="btn-outline" id="src-switch" href="?replay=imd-week">REPLAY IMD WEEK</a>
+  </header>
+
+  <main>
+    <section class="hero" id="module">
+      <div class="stage" id="stage">
+      <div class="wall wall-left" id="wall-left" aria-hidden="true"></div>
+      <div class="module" id="panel">
+        <div class="screws" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="eyebrow">INTELLIGENT DANCE MARKET</span>
+            <h1>IDM-16 <em>swarm sequencer</em></h1>
+          </div>
+          <div class="panel-meta">
+            <span class="dot" id="net-dot"></span><span id="net-status">CONNECTING</span>
+          </div>
+        </div>
+
+        <div class="panel-body">
+          <div class="screen-grid">
+            <div class="bezel lcd-main">
+              <span class="silk">PATTERN · 4×16 + BASS</span>
+              <canvas id="grid" aria-label="Drum grid"></canvas>
+            </div>
+            <div class="side-col">
+              <div class="bezel scope">
+                <span class="silk">SCOPE</span>
+                <canvas id="scope" aria-label="Oscilloscope"></canvas>
+              </div>
+              <div class="bezel spec">
+                <span class="silk">SPECTRUM</span>
+                <canvas id="spectrum" aria-label="Spectrum analyser"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <div class="readouts">
+            <div class="ro"><span class="silk">BPM</span><div class="seg" id="seg-bpm"></div></div>
+            <div class="ro"><span class="silk">KEY</span><div class="seg" id="seg-key"></div></div>
+            <div class="ro"><span class="silk">MODE</span><div class="seg" id="seg-mode"></div></div>
+            <div class="ro"><span class="silk">SWAP #</span><div class="seg" id="seg-swap"></div></div>
+            <div class="ro"><span class="silk">PAGE</span><div class="seg" id="seg-page"></div></div>
+            <div class="ro"><span class="silk">EPOCH</span><div class="seg" id="seg-epoch"></div></div>
+            <div class="ro v2-only"><span class="silk">TRACK #</span><div class="seg" id="seg-track"></div></div>
+          </div>
+
+          <div class="tape">
+            <span class="silk">LAST SWAP</span>
+            <ol class="tape-lcd" id="tape" aria-live="polite"><li class="sys">WAITING FOR THE FIRST SWAP…</li></ol>
+          </div>
+
+          <div class="controls">
+            <button class="play" id="play" aria-pressed="false">
+              <span class="play-glyph" aria-hidden="true"></span><span class="play-label">PLAY</span>
+            </button>
+            <div class="knob-wrap">
+              <div class="knob" id="knob" role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="75">
+                <div class="knob-cap"><i></i></div>
+              </div>
+              <span class="silk">VOLUME</span>
+            </div>
+            <div class="era-lcd">
+              <span class="silk">GENRE</span>
+              <div class="dotmatrix" id="era-name">—</div>
+              <div class="era-sub" id="era-sub">EPOCH 0 · FOLLOWING CHAIN</div>
+            </div>
+            <div class="idle">
+              <span class="silk">IDLE STAGE</span>
+              <ul class="leds" id="idle-leds">
+                <li data-stage="full"><b></b>FULL</li>
+                <li data-stage="thinning"><b></b>THIN</li>
+                <li data-stage="sparse"><b></b>SPARSE</li>
+                <li data-stage="drone"><b></b>DRONE</li>
+              </ul>
+              <span class="idle-label" id="idle-label">IDLE 0s</span>
+            </div>
+            <div class="heat v2-only" aria-label="Heat"><span class="silk">HEAT</span><div class="heat-bar" id="heat-bar"></div><span class="heat-label" id="heat-label">00/16</span></div>
+            <div class="vu" aria-hidden="true"><span class="silk">OUT</span><div class="vu-bars" id="vu"></div><span class="heat-label">&nbsp;</span></div>
+          </div>
+        </div>
+        <div class="panel-foot">
+          <span>MODEL IDM-16 · HOOK FLAGS 0x3040 · 4 TRACKS · 16 STEPS · 10 GENRES</span>
+          <span id="src-label">LIVE</span>
+        </div>
+      </div>
+      <div class="wall wall-right" id="wall-right" aria-hidden="true"></div>
+      </div>
+    </section>
+
+    <section class="console-wrap">
+      <div class="console">
+        <div class="console-head">
+          <span class="hash">#</span>
+          <span id="c-swaps">0</span> swaps · <span id="c-buys" class="g">0</span> buys · <span id="c-sells" class="r">0</span> sells · <span id="c-whales" class="a">0</span> whales
+          <span class="spacer"></span>
+          <span class="legend"><i class="g"></i>buy</span><span class="legend"><i class="r"></i>sell</span><span class="legend"><i class="a"></i>whale</span>
+        </div>
+        <div class="console-intro">IDM swarm sequencer<br /><span>every trade is a note · reading the hook</span></div>
+        <ol class="log" id="log" aria-live="polite"></ol>
+        <div class="prompt">&gt; <span class="caret"></span> <span class="muted">listening for Mutated(…)</span></div>
+      </div>
+    </section>
+
+    <section class="how" id="how">
+      <div class="pitch">
+        <p class="big">every trade is a note.</p>
+        <p>A Uniswap v4 hook stores a 16-step, 4-track drum pattern and a bass line in two storage slots.</p>
+        <p>Each swap in the IDM/IMD pool flips one step and moves the bass and the tempo. Nothing is off-chain.</p>
+      </div>
+      <div class="table-term">
+        <div class="tt-head">&gt; cat spec/mapping.txt <span class="tt-rules v1-only">· rules v1</span><span class="tt-rules v2-only">· rules v2</span></div>
+        <table>
+          <thead><tr><th>input</th><th>rule</th><th>sound</th></tr></thead>
+          <tbody>
+            <tr class="v1-only"><td>trade size</td><td>&lt;0.5 · &lt;5 · &lt;25 · &lt;100 · ≥100 IMD</td><td><b>HAT</b> · <b>GLITCH</b> · <b>SNARE</b> · <b>KICK</b> · <b class="a">WHALE</b></td></tr>
+            <tr class="v2-only"><td>trade size</td><td>vs the market's typical size (log EMA): &lt;0.7× · &lt;1.5× · &lt;3× · ≥3× · ≥100 IMD</td><td><b>HAT</b> · <b>GLITCH</b> · <b>SNARE</b> · <b>KICK</b> · <b class="a">WHALE</b></td></tr>
+            <tr><td>step</td><td>keccak(swapCount, tick, block) % 16</td><td>where on the bar</td></tr>
+            <tr><td>buy / sell</td><td>buy sets the bit · sell clears it</td><td><span class="g">+</span> adds · <span class="r">−</span> removes</td></tr>
+            <tr class="v2-only"><td>repeat trades</td><td>buy on a set step climbs hat → glitch → snare → kick · sell clears the next rung up</td><td>the groove thickens · no trade is lost</td></tr>
+            <tr><td>pool tick</td><td>1 + (|tick| / 60) % 15 · price level</td><td>bass rhythm · filter and timbre</td></tr>
+            <tr><td>trade rhythm</td><td>EMA of seconds between swaps</td><td>fast market, fast track · inside the genre's tempo range</td></tr>
+            <tr><td>pressure</td><td>p − p/16 ± 1000</td><td>sells darken and widen · buys add drive</td></tr>
+            <tr><td>whale ≥100</td><td>root + 7 (circle of fifths), page + 1</td><td><b class="a">MOVEMENT</b> · drop / fill</td></tr>
+            <tr class="v2-only"><td>heat</td><td>buy on a full grid (≥48 of 64 bits) + 1 · sell − 1 · 60 min silence → 0</td><td>filter opens · rolls · riser</td></tr>
+            <tr class="v2-only"><td>heat 16</td><td>track #N complete: root + 7, page + 1, fresh seed</td><td><b class="a">DROP</b> · the swarm finishes a track</td></tr>
+            <tr><td>64 swaps</td><td>page + 1</td><td>new page</td></tr>
+            <tr><td>4 pages</td><td>epoch = page / 4 → hash(epoch) % 10</td><td>a new <b>GENRE</b></td></tr>
+            <tr><td>silence</td><td>10 / 30 / 60 min since last swap</td><td>thinning → sparse → drone</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="eras" id="eras">
+      <div class="section-head"><h2>GENRES</h2><span>ten genres · an epoch picks one · audition them here</span><button class="btn-outline small" id="era-follow">FOLLOW CHAIN</button></div>
+      <div class="rack" id="rack"></div>
+    </section>
+
+    <section class="onchain" id="onchain">
+      <div class="section-head"><h2>ONCHAIN</h2><span id="onchain-sub">hook, token and pool</span></div>
+      <div class="oc-grid" id="oc-grid"></div>
+    </section>
+  </main>
+
+  <footer class="statusbar" id="statusbar">
+    <div class="sb"><span class="dot" id="sb-dot"></span><span id="sb-net">—</span></div>
+    <div class="sb">BLK <b id="sb-block">—</b></div>
+    <div class="sb hide-s"><b id="sb-swaps">0</b> swaps</div>
+    <div class="sb"><b id="sb-bpm">96</b> bpm</div>
+    <div class="sb hide-s">EPOCH <b id="sb-epoch">0</b> · <span id="sb-era">—</span></div>
+    <div class="sb grow"><span class="hide-s">24h</span><svg id="sb-spark" viewBox="0 0 120 14" preserveAspectRatio="none"></svg></div>
+  </footer>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

@@ -2,13 +2,36 @@
 //   tsx src/render/index.ts --timeline out/timeline.json [--seconds 32] [--fps 30] [--sizes 1080x1080,1920x1080] [--out out/render]
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
+import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium, type Browser } from "playwright";
 import type { TimelineEntry } from "../lib/timeline.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const FALLBACK_PAGE = join(here, "page", "teaser.html");
+/** Built site (npm -w site run build); its bot.html is the IDM-16 module page. */
+export const SITE_DIST = resolve(process.env.RENDER_SITE_DIR ?? join(here, "../../../site/dist"));
+const MIME: Record<string, string> = {
+  ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json",
+  ".svg": "image/svg+xml", ".png": "image/png", ".woff2": "font/woff2", ".woff": "font/woff",
+};
+
+/** Module scripts do not load from file://, so the built site is served on loopback for the render. */
+async function serveDir(dir: string): Promise<{ server: Server; base: string }> {
+  const server = createServer((req, res) => {
+    const path = normalize(decodeURIComponent((req.url ?? "/").split("?")[0])).replace(/^(\.\.[/\\])+/, "");
+    const file = join(dir, path === "/" ? "bot.html" : path);
+    if (!file.startsWith(dir) || !existsSync(file)) {
+      res.writeHead(404).end();
+      return;
+    }
+    res.writeHead(200, { "content-type": MIME[extname(file)] ?? "application/octet-stream" }).end(readFileSync(file));
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  return { server, base: `http://127.0.0.1:${(server.address() as AddressInfo).port}` };
+}
 const log = (...a: unknown[]) => console.error("[render]", ...a);
 
 export interface RenderOpts {
@@ -19,7 +42,7 @@ export interface RenderOpts {
   sizes?: [number, number][];
   title?: string;
   subtitle?: string;
-  page?: string; // path to a page implementing __setup/__frame/__audio
+  page?: string; // path or URL of a page implementing __setup/__frame/__audio; default site bot.html, else teaser
 }
 
 export interface RenderResult {
@@ -43,7 +66,14 @@ export async function render(opts: RenderOpts): Promise<RenderResult> {
   const fps = opts.fps ?? 30;
   const sizes = opts.sizes ?? [[1080, 1080], [1920, 1080]];
   mkdirSync(opts.outDir, { recursive: true });
-  const page = opts.page ?? FALLBACK_PAGE;
+  let site: { server: Server; base: string } | null = null;
+  let page = opts.page;
+  if (!page && existsSync(join(SITE_DIST, "bot.html"))) {
+    site = await serveDir(SITE_DIST);
+    page = `${site.base}/bot.html`;
+  }
+  page ??= FALLBACK_PAGE;
+  log(`page ${page}`);
 
   const browser: Browser = await chromium.launch({
     args: ["--autoplay-policy=no-user-gesture-required", "--disable-dev-shm-usage", "--no-sandbox"],
@@ -55,7 +85,8 @@ export async function render(opts: RenderOpts): Promise<RenderResult> {
       const pg = await ctx.newPage();
       pg.on("console", (m) => m.type() === "error" && log("page:", m.text()));
       pg.on("pageerror", (e) => log("pageerror:", e.message));
-      await pg.goto(pathToFileURL(page).href);
+      await pg.goto(/^https?:/.test(page) ? page : pathToFileURL(page).href, { waitUntil: "load" });
+      await pg.waitForFunction(() => typeof (window as any).__setup === "function");
       const info = await pg.evaluate(
         (o) => (window as any).__setup(o),
         { timeline: opts.timeline, width, height, fps, seconds, title: opts.title, subtitle: opts.subtitle },
@@ -83,8 +114,11 @@ export async function render(opts: RenderOpts): Promise<RenderResult> {
       );
       const t0 = Date.now();
       for (let f = 0; f < info.frames; f++) {
-        const url: string = await pg.evaluate((n) => (window as any).__frame(n), f);
-        const buf = Buffer.from(url.slice(url.indexOf(",") + 1), "base64");
+        const url: string | null = await pg.evaluate((n) => (window as any).__frame(n), f);
+        // A page that returns null paints the DOM; the frame is a viewport screenshot.
+        const buf = url
+          ? Buffer.from(url.slice(url.indexOf(",") + 1), "base64")
+          : await pg.screenshot({ type: "jpeg", quality: 90 });
         if (!ff.p.stdin!.write(buf)) await new Promise((r) => ff.p.stdin!.once("drain", r));
         if (f % (fps * 5) === 0) process.stderr.write(`\r[render] ${width}x${height} frame ${f}/${info.frames}   `);
       }
@@ -97,6 +131,7 @@ export async function render(opts: RenderOpts): Promise<RenderResult> {
     }
   } finally {
     await browser.close();
+    site?.server.close();
   }
   return result;
 }

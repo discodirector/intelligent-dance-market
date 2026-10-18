@@ -1,0 +1,45 @@
+{
+  "desktop-1440": {
+    "swapsInTerminal": 82,
+    "horizontalOverflowPx": 0,
+    "audio": [
+      {
+        "dev": 18,
+        "spec": 4188,
+        "running": true
+      },
+      {
+        "dev": 7,
+        "spec": 3052,
+        "running": true
+      },
+      {
+        "dev": 25,
+        "spec": 4813,
+        "running": true
+      },
+      {
+        "dev": 9,
+        "spec": 6921,
+        "running": true
+      },
+      {
+        "dev": 2,
+        "spec": 1722,
+        "running": true
+      }
+    ],
+    "audioOk": true,
+    "fps": 61,
+    "auditionEra": "ACID"
+  },
+  "mobile-390": {
+    "swapsInTerminal": 82,
+    "horizontalOverflowPx": 0
+  },
+  "replay": {
+    "swapsInTerminal": 38,
+    "epochLines": 0
+  },
+  "errors": []
+}

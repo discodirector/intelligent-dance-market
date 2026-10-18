@@ -21,7 +21,7 @@ contract SequencerStateTest is SequencerTestBase {
     function test_InitialState() public pure {
         S.State memory s = S.initial();
         assertEq(s.pattern, 0x10100101);
-        assertEq(s.bpm, 128);
+        assertEq(s.bpm, 96);
         assertEq(s.root, 9);
         assertEq(s.intervalEma, 600);
         assertEq(s.bass, 0);
@@ -35,7 +35,7 @@ contract SequencerStateTest is SequencerTestBase {
     }
 
     function test_ExactBitLayoutAndSignedFields() public pure {
-        S.State memory s = S.State(1, 2, 3, 4, 128, 9, 2, 5, -60, -1000, 600, 6);
+        S.State memory s = S.State(1, 2, 3, 4, 128, 9, 2, 5, -60, -1000, 600, 6, 0, 0, 0);
         (uint256 a, uint256 b) = S.encode(s);
         assertEq(
             a,
@@ -64,8 +64,10 @@ contract SequencerStateTest is SequencerTestBase {
         uint8[13] memory tracks = [uint8(2), 2, 3, 3, 3, 1, 1, 1, 0, 0, 0, 0, 0];
         for (uint256 i; i < 13; ++i) {
             (, S.Mutation memory m) = change(S.initial(), input(true, amounts[i], 0));
-            assertEq(m.track, tracks[i]);
             assertEq(m.whale, i >= 11);
+            // Whales act on dropTrack = (h >> 16) % 4 instead of the kick cell.
+            if (i < 11) assertEq(m.track, tracks[i]);
+            else assertEq(m.track, (_hash(1, 0) >> 16) % 4);
         }
     }
 
@@ -119,7 +121,7 @@ contract SequencerStateTest is SequencerTestBase {
     function test_FirstSwapKeepsEmaEvenWithHugeTimestamp() public pure {
         (S.State memory a,) = change(S.initial(), input(true, 0, 0));
         assertEq(a.intervalEma, 600);
-        assertEq(a.bpm, 157);
+        assertEq(a.bpm, 88);
         assertEq(a.lastTs, 1_800_000_000);
     }
 
@@ -129,7 +131,7 @@ contract SequencerStateTest is SequencerTestBase {
         (S.State memory a,) = change(S.initial(), x);
         (a,) = change(a, x);
         assertEq(a.intervalEma, 525);
-        assertEq(a.bpm, 159);
+        assertEq(a.bpm, 92);
     }
 
     function test_EmaSameBlockAndCap() public pure {
@@ -145,8 +147,8 @@ contract SequencerStateTest is SequencerTestBase {
         s.lastTs = 100;
         x.timestamp = type(uint40).max;
         (a,) = change(s, x);
-        assertEq(a.intervalEma, 975);
-        assertEq(a.bpm, 149);
+        assertEq(a.intervalEma, 637);
+        assertEq(a.bpm, 86);
     }
 
     function test_TimestampWrapUsesZeroInterval() public pure {
@@ -165,13 +167,13 @@ contract SequencerStateTest is SequencerTestBase {
         s.intervalEma = type(uint32).max;
         (S.State memory a,) = change(s, input(true, 0, 0));
         assertEq(a.intervalEma, type(uint32).max);
-        assertEq(a.bpm, 90);
+        assertEq(a.bpm, 72);
         s = S.initial();
         s.swapCount = 1;
         s.intervalEma = type(uint32).max;
         (a,) = change(s, input(true, 0, 0));
-        assertEq(a.intervalEma, (uint256(type(uint32).max) * 7 + 3600) / 8);
-        assertEq(a.bpm, 90);
+        assertEq(a.intervalEma, (uint256(type(uint32).max) * 7 + 900) / 8);
+        assertEq(a.bpm, 72);
     }
 
     function test_PressureSignedDivisionRoundsTowardZero() public pure {
@@ -249,7 +251,7 @@ contract SequencerStateTest is SequencerTestBase {
     }
 
     function testFuzz_PackingRoundtrip(uint256 a, uint256 b) public pure {
-        (uint256 x, uint256 y) = S.encode(S.decode(a, b));
+        (uint256 x, uint256 y) = S.encode(S.decode(a, b & ((uint256(1) << 152) - 1)));
         assertEq(x, a & ((uint256(1) << 232) - 1));
         assertEq(y, b & ((uint256(1) << 152) - 1));
     }
@@ -269,18 +271,137 @@ contract SequencerStateTest is SequencerTestBase {
         s.intervalEma = uint32(seed >> 160);
         s.pressure = int32(int256(seed % 32001) - 16000);
         s.lastTs = uint40(seed >> 192);
+        // Half the runs exercise the non-whale path (a uniform uint128 is almost always a whale).
+        if (seed & 1 == 0) amount = amount % 100 ether;
         uint64 oldPattern = s.pattern;
         uint64 oldBass = s.bass;
         (S.State memory a, S.Mutation memory m) = change(s, S.Input(buy, amount, tick, n, ts));
-        assertGe(a.bpm, 90);
-        assertLe(a.bpm, 170);
+        assertGe(a.bpm, 72);
+        assertLe(a.bpm, 118);
         assertLe(a.mode, 3);
         assertLe(a.root, 11);
         assertLe(a.pressure, 16000);
         assertGe(a.pressure, -16000);
-        uint64 bit = uint64(1) << (uint256(m.track) * 16 + m.step);
-        assertEq((oldPattern ^ a.pattern) & ~bit, 0);
         assertEq((oldBass ^ a.bass) & ~(uint64(15) << (uint256(m.step) * 4)), 0);
-        assertEq((a.pattern & bit) != 0, buy);
+        if (amount < 100 ether) {
+            // Non-whale: at most one drum bit changes, and it ends equal to the side.
+            uint64 bit = uint64(1) << (uint256(m.track) * 16 + m.step);
+            assertEq((oldPattern ^ a.pattern) & ~bit, 0);
+            assertEq((a.pattern & bit) != 0, buy);
+            assertEq(m.dropMask, 0);
+        } else {
+            // Whale: only the dropped track's 16 bits may change; it ends equal to dropMask.
+            uint64 trackBits = uint64(0xffff) << (uint256(m.track) * 16);
+            assertEq((oldPattern ^ a.pattern) & ~trackBits, 0);
+            assertEq(uint16(a.pattern >> (uint256(m.track) * 16)), m.dropMask);
+            if (buy) {
+                uint256 hits;
+                for (uint256 i; i < 16; ++i) {
+                    hits += (m.dropMask >> i) & 1;
+                }
+                assertGe(hits, 3);
+                assertLe(hits, 8);
+            } else {
+                assertEq(m.dropMask, 0);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------- whale drop / fill (SPEC §3.3.8)
+
+    function _hash(uint32 count, int24 tick) internal pure returns (uint256) {
+        return uint256(keccak256(abi.encodePacked(count, tick, uint64(20_000_000))));
+    }
+
+    /// @dev Reference Euclidean mask straight from the SPEC formula (loop form).
+    function _euclid(uint256 k, uint256 rot) internal pure returns (uint16 mask) {
+        for (uint256 i; i < 16; ++i) {
+            if ((i * k) % 16 < k) mask |= uint16(1 << ((i + rot) % 16));
+        }
+    }
+
+    /// Finds a swapCount whose hash selects `track` (and optionally k/rot) for a whale at tick 0.
+    function _find(uint256 track, uint256 k, uint256 rot) internal pure returns (uint32 count) {
+        for (uint32 c = 1; c < 20_000; ++c) {
+            uint256 h = _hash(c, 0);
+            if ((h >> 16) % 4 != track) continue;
+            if (k != 0 && 3 + (h >> 24) % 6 != k) continue;
+            if (rot != 99 && (h >> 32) % 16 != rot) continue;
+            return c;
+        }
+        revert("no matching hash");
+    }
+
+    function _stateBefore(uint32 count) internal pure returns (S.State memory s) {
+        s = S.initial();
+        s.swapCount = count - 1;
+        s.pattern = type(uint64).max; // every drum bit on, so a wipe is visible on any track
+    }
+
+    function test_EuclidTableMatchesSpecLoop() public pure {
+        for (uint256 k = 3; k <= 8; ++k) {
+            uint16 base = uint16((S.EUCLID >> ((k - 3) * 16)) & 0xffff);
+            assertEq(base, _euclid(k, 0));
+            uint256 hits;
+            for (uint256 i; i < 16; ++i) {
+                hits += (base >> i) & 1;
+            }
+            assertEq(hits, k, "exact hit count");
+        }
+    }
+
+    function test_WhaleSellWipesEachTrackIncludingKick() public pure {
+        for (uint256 track; track < 4; ++track) {
+            uint32 c = _find(track, 0, 99);
+            (S.State memory a, S.Mutation memory m) = change(_stateBefore(c), input(false, 100 ether, 0));
+            assertTrue(m.whale);
+            assertEq(m.track, track);
+            assertEq(m.dropMask, 0);
+            assertEq(uint16(a.pattern >> (track * 16)), 0, "track wiped");
+            assertEq(a.pattern | (uint64(0xffff) << (track * 16)), type(uint64).max, "other tracks untouched");
+            assertEq(m.step, _hash(c, 0) % 16);
+        }
+    }
+
+    function test_WhaleBuyFillsEveryKWithRotation() public pure {
+        for (uint256 k = 3; k <= 8; ++k) {
+            uint32 c = _find(k % 4, k, 99);
+            uint256 h = _hash(c, 0);
+            (S.State memory a, S.Mutation memory m) = change(_stateBefore(c), input(true, 250 ether, 0));
+            uint16 expected = _euclid(k, (h >> 32) % 16);
+            assertEq(m.track, k % 4);
+            assertEq(m.dropMask, expected);
+            assertEq(uint16(a.pattern >> (uint256(m.track) * 16)), expected, "track replaced");
+            assertEq(a.pattern | (uint64(0xffff) << (uint256(m.track) * 16)), type(uint64).max, "others untouched");
+        }
+    }
+
+    function test_WhaleBuyRotationWraps() public pure {
+        // rot 15 wraps every hit except one past bit 15; rot 0 is the unrotated base.
+        for (uint256 rot = 0; rot < 16; rot += 15) {
+            uint32 c = _find(1, 0, rot);
+            uint256 h = _hash(c, 0);
+            uint256 k = 3 + (h >> 24) % 6;
+            (, S.Mutation memory m) = change(_stateBefore(c), input(true, 100 ether, 0));
+            assertEq(m.dropMask, _euclid(k, rot));
+        }
+    }
+
+    function test_WhaleBassStillUsesStepAndMovementUnchanged() public pure {
+        uint32 c = _find(2, 0, 99);
+        S.State memory s = _stateBefore(c);
+        (S.State memory a, S.Mutation memory m) = change(s, input(true, 100 ether, -600));
+        assertEq(m.step, _hash(c, -600) % 16);
+        assertEq(m.bassNote, 11); // 1 + (600 / 60) % 15
+        assertEq(uint8((a.bass >> (uint256(m.step) * 4)) & 15), 11);
+        assertEq(a.root, 4);
+        assertEq(m.movementPatternId, 1);
+    }
+
+    function test_NonWhaleHasNoDropMask() public pure {
+        (, S.Mutation memory m) = change(S.initial(), input(true, 100 ether - 1, 0));
+        assertFalse(m.whale);
+        assertEq(m.dropMask, 0);
+        assertEq(m.track, 0);
     }
 }

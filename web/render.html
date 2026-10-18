@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Intelligent Dance Market</title>
+    <style>
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #080907;
+        overflow: hidden;
+        display: grid;
+        place-items: center;
+      }
+      canvas {
+        width: min(100vw, 100vh);
+        height: min(100vw, 100vh);
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="grid" width="1080" height="1080"></canvas>
+    <script type="module" src="/src/render.ts"></script>
+  </body>
+</html>

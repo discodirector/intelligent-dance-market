@@ -6,6 +6,7 @@ export const MAX_LEN = 240;
 export const MODEL = process.env.CAPTION_MODEL ?? "claude-sonnet-5-5";
 
 const SYSTEM = `You write one short post for X for "Intelligent Dance Market": a Uniswap v4 hook whose on-chain state is a 16-step drum + bass pattern that every swap mutates. The attached video plays that state as an IDM track.
+When kind is "track": buys kept landing on a full grid until its heat peaked, so the hook finished the track (track.no), archived it and started the next one from a fresh seed.
 
 Rules (hard):
 - Use ONLY facts present in the JSON. Every number you write must appear in the JSON. Do not invent events, people, dates or numbers.
@@ -39,6 +40,9 @@ export function templateCaption(f: Facts): string {
     lines.push(`how the ${f.pool} pool sounded: last ${span} on ${f.chain}.`);
     lines.push(`${f.swaps} swaps → ${f.swaps} mutations of a 16-step pattern. ${f.whales} whale moves, key ${k}, ${f.bpm.min}–${f.bpm.max} bpm.`);
     lines.push("every trade is a note.");
+  } else if (f.kind === "track" && f.track) {
+    lines.push(`track #${f.track.no} complete.${f.track.swaps != null ? ` ${f.track.swaps} swaps filled the grid and the swarm dropped it.` : " the swarm filled the grid and dropped it."}`);
+    lines.push(`fresh seed in ${f.track.key.toLowerCase()}, page #${f.track.page}. swap #${f.track.swapCount}.`);
   } else if (f.kind === "movement") {
     lines.push(`movement. a whale swap rotated the root: now ${f.key.end.toLowerCase()}, page #${f.page}.`);
     lines.push(`swap #${f.swapCount} · ${f.bpm.end} bpm.`);

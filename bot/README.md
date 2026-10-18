@@ -32,12 +32,17 @@ and calls, deterministically:
 ```
 /opt/swarm-sequencer/
   .env                 # secrets (chmod 600), from bot/.env.example — DRY_RUN=true
-  packages/core/  bot/ # rsync of the repo dirs
+  packages/core/ packages/synth/ bot/ site/ web/src/timeline.ts contracts/deployments/  # rsync of the repo dirs
   out/                 # queue + scheduler state (volume)
 ```
 ```sh
-rsync -azR --delete --exclude node_modules --exclude out ./packages/core ./bot root@138.201.92.157:/opt/swarm-sequencer/
+rsync -azR --delete --exclude node_modules --exclude out --exclude dist --exclude screenshots \
+  ./packages/core ./packages/synth ./bot ./site ./web/src/timeline.ts ./contracts/deployments root@138.201.92.157:/opt/swarm-sequencer/
 ssh root@138.201.92.157 'cd /opt/swarm-sequencer/bot && docker compose up -d --build'
 ssh root@138.201.92.157 'docker logs -f swarm-sequencer-bot'
 ```
 Live mode turns on when `HOOK_ADDRESS` + `LIVE_RPC_URL` (Robinhood Chain 4663) are set in `.env`.
+`HOOK_RULES=v1|v2` (default v1, the deployed hook) picks how live slots are decoded. Under v2 the bot also reads
+`TrackComplete` (finished-track snapshot) and the scheduler posts `track` (shares the 1/h event gap with movements, beats them),
+rendering the finished track plus 24 swaps of the new one, subtitle `TRACK #N COMPLETE · K SWAPS`.
+`REPLAY_RULES=v2` (or `replay --rules v2`) re-simulates teaser replays under the v2 rules; default v1.

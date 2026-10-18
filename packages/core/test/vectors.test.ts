@@ -15,6 +15,13 @@ const bool = (v: unknown) => v === true || v === "true" || v === 1 || v === "1";
 
 suite.skipIf(!present)("spec/vectors.json", () => {
   it("has >= 40 cases", () => expect(cases.length).toBeGreaterThanOrEqual(40));
+  it("covers whale drop/fill (every k, sells)", () => {
+    const drops = cases.map((c) => c.event?.drop).filter(Boolean);
+    expect(drops.length).toBeGreaterThanOrEqual(12);
+    const ks = new Set(drops.filter((d: any) => d.fill).map((d: any) => Number(d.mask).toString(2).split("1").length - 1));
+    for (let k = 3; k <= 8; k++) expect(ks.has(k)).toBe(true);
+    expect(drops.some((d: any) => !d.fill)).toBe(true);
+  });
 
   cases.forEach((c, i) => {
     it(`vector #${i}${c.name ? ` ${c.name}` : ""}`, () => {
@@ -44,6 +51,14 @@ suite.skipIf(!present)("spec/vectors.json", () => {
         if (mv.root !== undefined) expect(event.movement!.root).toBe(Number(mv.root));
       }
       if (e.whale !== undefined) expect(event.whale).toBe(bool(e.whale));
+      if ("drop" in e) {
+        if (e.drop === null) expect(event.drop).toBeUndefined();
+        else {
+          expect(event.drop).toEqual({ track: Number(e.drop.track), fill: bool(e.drop.fill), mask: Number(e.drop.mask) });
+          // cross-field: mask is exactly the dropped track's resulting 16 bits
+          expect(Number((state.pattern >> BigInt(event.drop!.track * 16)) & 0xffffn)).toBe(event.drop!.mask);
+        }
+      }
     });
   });
 });

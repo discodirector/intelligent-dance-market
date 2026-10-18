@@ -1,0 +1,2974 @@
+{
+  "startedAt": "2026-10-14T19:19:40.869Z",
+  "finishedAt": "2026-10-14T19:36:05.057Z",
+  "profile": "smoke",
+  "seed": 2026,
+  "chainId": 11155111,
+  "hook": "0x26D6A29c1B1457c0CD36a5A0c1be2eD7a510F040",
+  "poolId": "0x4c9fdcff902e50f32d10cc4299f7f0fcb4bbf7f5b50f0cc1008e70051798648f",
+  "router": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+  "wallet": "0xd5450C26017f25E1EfB49996CE4cE59447328BaB",
+  "summary": {
+    "swaps": 66,
+    "matched": 66,
+    "mismatched": 0,
+    "errors": 0,
+    "whales": 7,
+    "pagesCrossed": 8,
+    "finalState": {
+      "pattern": "0x2283e140011a0195",
+      "bass": "0x90000990080009",
+      "swapCount": 68,
+      "lastTs": 1792006560,
+      "bpm": 118,
+      "root": 10,
+      "mode": 1,
+      "patternId": 8,
+      "lastTick": -68957,
+      "pressure": -5950,
+      "intervalEma": 12,
+      "releaseCount": 0
+    }
+  },
+  "swaps": [
+    {
+      "n": 1,
+      "profile": "calm",
+      "side": "buy",
+      "imdRequested": "0.29",
+      "txHash": "0xcd69c3e69714bdaa3c4bf438c01569bc8b272a4e122de665012c557a3f63e8e8",
+      "block": 11915306,
+      "timestamp": 1792005588,
+      "gasUsed": "187005",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 3,
+        "track": "hat",
+        "step": 15,
+        "on": true,
+        "bassNote": 12,
+        "isBuy": true,
+        "imdAmount": "0.29",
+        "tick": -69071
+      },
+      "state": {
+        "pattern": "0x800010100121",
+        "bass": "0xc000000000c00000",
+        "swapCount": 3,
+        "lastTs": 1792005588,
+        "bpm": 95,
+        "root": 9,
+        "mode": 0,
+        "patternId": 0,
+        "lastTick": -69071,
+        "pressure": 1059,
+        "intervalEma": 463,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x9005f006acfd5d400000003c000000000c000000000800010100121",
+        "slot1": "0x1cf00000423fef23100000000"
+      },
+      "actual": {
+        "slot0": "0x9005f006acfd5d400000003c000000000c000000000800010100121",
+        "slot1": "0x1cf00000423fef23100000000"
+      }
+    },
+    {
+      "n": 2,
+      "profile": "calm",
+      "side": "sell",
+      "imdRequested": "0.82",
+      "txHash": "0xf6f6a2ed281d0ac523344e4837148d000269c067817f0fe730b819c69f9ba3b8",
+      "block": 11915308,
+      "timestamp": 1792005612,
+      "gasUsed": "185906",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 4,
+        "track": "glitch",
+        "step": 11,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "0.82",
+        "tick": -69071
+      },
+      "state": {
+        "pattern": "0x800010100121",
+        "bass": "0xc000000000c00000",
+        "swapCount": 4,
+        "lastTs": 1792005612,
+        "bpm": 98,
+        "root": 9,
+        "mode": 1,
+        "patternId": 0,
+        "lastTick": -69071,
+        "pressure": -7,
+        "intervalEma": 408,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1090062006acfd5ec00000004c000000000c000000000800010100121",
+        "slot1": "0x198fffffff9fef23100000000"
+      },
+      "actual": {
+        "slot0": "0x1090062006acfd5ec00000004c000000000c000000000800010100121",
+        "slot1": "0x198fffffff9fef23100000000"
+      }
+    },
+    {
+      "n": 3,
+      "profile": "calm",
+      "side": "buy",
+      "imdRequested": "0.21",
+      "txHash": "0x2b0fd4b5857f52b0071e93eb1c8bfd921648434a3907aceb0772291eff6112c6",
+      "block": 11915310,
+      "timestamp": 1792005636,
+      "gasUsed": "187005",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 5,
+        "track": "hat",
+        "step": 12,
+        "on": true,
+        "bassNote": 12,
+        "isBuy": true,
+        "imdAmount": "0.21",
+        "tick": -69071
+      },
+      "state": {
+        "pattern": "0x900010100121",
+        "bass": "0xc00c000000c00000",
+        "swapCount": 5,
+        "lastTs": 1792005636,
+        "bpm": 100,
+        "root": 9,
+        "mode": 0,
+        "patternId": 0,
+        "lastTick": -69071,
+        "pressure": 993,
+        "intervalEma": 360,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x90064006acfd60400000005c00c000000c000000000900010100121",
+        "slot1": "0x168000003e1fef23100000000"
+      },
+      "actual": {
+        "slot0": "0x90064006acfd60400000005c00c000000c000000000900010100121",
+        "slot1": "0x168000003e1fef23100000000"
+      }
+    },
+    {
+      "n": 4,
+      "profile": "calm",
+      "side": "sell",
+      "imdRequested": "1.53",
+      "txHash": "0xa0a3985c5822252d54097f296923462dd27812e418df144c173d7bf27abaacf7",
+      "block": 11915313,
+      "timestamp": 1792005672,
+      "gasUsed": "185977",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 6,
+        "track": "glitch",
+        "step": 6,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "1.53",
+        "tick": -69071
+      },
+      "state": {
+        "pattern": "0x900010100121",
+        "bass": "0xc00c000000c00000",
+        "swapCount": 6,
+        "lastTs": 1792005672,
+        "bpm": 102,
+        "root": 9,
+        "mode": 1,
+        "patternId": 0,
+        "lastTick": -69071,
+        "pressure": -69,
+        "intervalEma": 319,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1090066006acfd62800000006c00c000000c000000000900010100121",
+        "slot1": "0x13fffffffbbfef23100000000"
+      },
+      "actual": {
+        "slot0": "0x1090066006acfd62800000006c00c000000c000000000900010100121",
+        "slot1": "0x13fffffffbbfef23100000000"
+      }
+    },
+    {
+      "n": 5,
+      "profile": "calm",
+      "side": "buy",
+      "imdRequested": "0.12",
+      "txHash": "0x6a7cac959c5be734933c6c575df8fa92f915ff208c37b77ac7111827ff6a165a",
+      "block": 11915315,
+      "timestamp": 1792005696,
+      "gasUsed": "187005",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 7,
+        "track": "hat",
+        "step": 8,
+        "on": true,
+        "bassNote": 12,
+        "isBuy": true,
+        "imdAmount": "0.12",
+        "tick": -69071
+      },
+      "state": {
+        "pattern": "0x910010100121",
+        "bass": "0xc00c000c00c00000",
+        "swapCount": 7,
+        "lastTs": 1792005696,
+        "bpm": 104,
+        "root": 9,
+        "mode": 0,
+        "patternId": 0,
+        "lastTick": -69071,
+        "pressure": 935,
+        "intervalEma": 282,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x90068006acfd64000000007c00c000c00c000000000910010100121",
+        "slot1": "0x11a000003a7fef23100000000"
+      },
+      "actual": {
+        "slot0": "0x90068006acfd64000000007c00c000c00c000000000910010100121",
+        "slot1": "0x11a000003a7fef23100000000"
+      }
+    },
+    {
+      "n": 6,
+      "profile": "calm",
+      "side": "buy",
+      "imdRequested": "0.82",
+      "txHash": "0x221cea2425f917eb491609d320a0bd481fa1d979ba387cabe318022a57d4b0f3",
+      "block": 11915319,
+      "timestamp": 1792005744,
+      "gasUsed": "187069",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 8,
+        "track": "glitch",
+        "step": 9,
+        "on": true,
+        "bassNote": 12,
+        "isBuy": true,
+        "imdAmount": "0.82",
+        "tick": -69071
+      },
+      "state": {
+        "pattern": "0x200910010100121",
+        "bass": "0xc00c00cc00c00000",
+        "swapCount": 8,
+        "lastTs": 1792005744,
+        "bpm": 106,
+        "root": 9,
+        "mode": 0,
+        "patternId": 0,
+        "lastTick": -69071,
+        "pressure": 1877,
+        "intervalEma": 252,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x9006a006acfd67000000008c00c00cc00c000000200910010100121",
+        "slot1": "0xfc00000755fef23100000000"
+      },
+      "actual": {
+        "slot0": "0x9006a006acfd67000000008c00c00cc00c000000200910010100121",
+        "slot1": "0xfc00000755fef23100000000"
+      }
+    },
+    {
+      "n": 7,
+      "profile": "busy",
+      "side": "sell",
+      "imdRequested": "3.82",
+      "txHash": "0xf6b34b3da47b8cd6be0c1c33198ebfb446766c2647b7ce4059255cd5827d6408",
+      "block": 11915324,
+      "timestamp": 1792005804,
+      "gasUsed": "185062",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 9,
+        "track": "glitch",
+        "step": 14,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "3.82",
+        "tick": -69072
+      },
+      "state": {
+        "pattern": "0x200910010100121",
+        "bass": "0xc00c00cc00c00000",
+        "swapCount": 9,
+        "lastTs": 1792005804,
+        "bpm": 107,
+        "root": 9,
+        "mode": 0,
+        "patternId": 0,
+        "lastTick": -69072,
+        "pressure": 760,
+        "intervalEma": 228,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x9006b006acfd6ac00000009c00c00cc00c000000200910010100121",
+        "slot1": "0xe4000002f8fef23000000000"
+      },
+      "actual": {
+        "slot0": "0x9006b006acfd6ac00000009c00c00cc00c000000200910010100121",
+        "slot1": "0xe4000002f8fef23000000000"
+      }
+    },
+    {
+      "n": 8,
+      "profile": "busy",
+      "side": "buy",
+      "imdRequested": "2.1",
+      "txHash": "0xe2daec6fb254c050a9c769eb6e809e3902a40ce676bb23280a92e9419850238f",
+      "block": 11915325,
+      "timestamp": 1792005816,
+      "gasUsed": "187069",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 10,
+        "track": "glitch",
+        "step": 7,
+        "on": true,
+        "bassNote": 12,
+        "isBuy": true,
+        "imdAmount": "2.1",
+        "tick": -69071
+      },
+      "state": {
+        "pattern": "0x280910010100121",
+        "bass": "0xc00c00ccc0c00000",
+        "swapCount": 10,
+        "lastTs": 1792005816,
+        "bpm": 108,
+        "root": 9,
+        "mode": 0,
+        "patternId": 0,
+        "lastTick": -69071,
+        "pressure": 1713,
+        "intervalEma": 201,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x9006c006acfd6b80000000ac00c00ccc0c000000280910010100121",
+        "slot1": "0xc9000006b1fef23100000000"
+      },
+      "actual": {
+        "slot0": "0x9006c006acfd6b80000000ac00c00ccc0c000000280910010100121",
+        "slot1": "0xc9000006b1fef23100000000"
+      }
+    },
+    {
+      "n": 9,
+      "profile": "busy",
+      "side": "buy",
+      "imdRequested": "2.41",
+      "txHash": "0x1bb39ccfef2e1311b27062c45fd71556af5d255946c56a6101e276f6783bc646",
+      "block": 11915326,
+      "timestamp": 1792005828,
+      "gasUsed": "187069",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 11,
+        "track": "glitch",
+        "step": 5,
+        "on": true,
+        "bassNote": 12,
+        "isBuy": true,
+        "imdAmount": "2.41",
+        "tick": -69071
+      },
+      "state": {
+        "pattern": "0x2a0910010100121",
+        "bass": "0xc00c00ccc0c00000",
+        "swapCount": 11,
+        "lastTs": 1792005828,
+        "bpm": 109,
+        "root": 9,
+        "mode": 0,
+        "patternId": 0,
+        "lastTick": -69071,
+        "pressure": 2606,
+        "intervalEma": 177,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x9006d006acfd6c40000000bc00c00ccc0c0000002a0910010100121",
+        "slot1": "0xb100000a2efef23100000000"
+      },
+      "actual": {
+        "slot0": "0x9006d006acfd6c40000000bc00c00ccc0c0000002a0910010100121",
+        "slot1": "0xb100000a2efef23100000000"
+      }
+    },
+    {
+      "n": 10,
+      "profile": "busy",
+      "side": "sell",
+      "imdRequested": "7.92",
+      "txHash": "0x59205cc2f83cfd69ce5a5446ec97438d713de0293f56cd59ab24946d3997a518",
+      "block": 11915327,
+      "timestamp": 1792005840,
+      "gasUsed": "185943",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 12,
+        "track": "snare",
+        "step": 7,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "7.92",
+        "tick": -69073
+      },
+      "state": {
+        "pattern": "0x2a0910010100121",
+        "bass": "0xc00c00cc00c00000",
+        "swapCount": 12,
+        "lastTs": 1792005840,
+        "bpm": 111,
+        "root": 9,
+        "mode": 0,
+        "patternId": 0,
+        "lastTick": -69073,
+        "pressure": 1444,
+        "intervalEma": 156,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x9006f006acfd6d00000000cc00c00cc00c0000002a0910010100121",
+        "slot1": "0x9c000005a4fef22f00000000"
+      },
+      "actual": {
+        "slot0": "0x9006f006acfd6d00000000cc00c00cc00c0000002a0910010100121",
+        "slot1": "0x9c000005a4fef22f00000000"
+      }
+    },
+    {
+      "n": 11,
+      "profile": "busy",
+      "side": "sell",
+      "imdRequested": "8.78",
+      "txHash": "0xe7f04e423abcc384c3b0565eb449e52e7401b37f2203ab7d52b6368899acf72f",
+      "block": 11915328,
+      "timestamp": 1792005852,
+      "gasUsed": "185971",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 13,
+        "track": "snare",
+        "step": 0,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "8.78",
+        "tick": -69074
+      },
+      "state": {
+        "pattern": "0x2a0910010100121",
+        "bass": "0xc00c00cc00c00000",
+        "swapCount": 13,
+        "lastTs": 1792005852,
+        "bpm": 111,
+        "root": 9,
+        "mode": 0,
+        "patternId": 0,
+        "lastTick": -69074,
+        "pressure": 354,
+        "intervalEma": 138,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x9006f006acfd6dc0000000dc00c00cc00c0000002a0910010100121",
+        "slot1": "0x8a00000162fef22e00000000"
+      },
+      "actual": {
+        "slot0": "0x9006f006acfd6dc0000000dc00c00cc00c0000002a0910010100121",
+        "slot1": "0x8a00000162fef22e00000000"
+      }
+    },
+    {
+      "n": 12,
+      "profile": "busy",
+      "side": "sell",
+      "imdRequested": "1.93",
+      "txHash": "0x813d9c68405a6a311034b3253ef98df6f8973b6b2045b43873c445ec61729875",
+      "block": 11915329,
+      "timestamp": 1792005864,
+      "gasUsed": "185878",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 14,
+        "track": "glitch",
+        "step": 1,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "1.93",
+        "tick": -69075
+      },
+      "state": {
+        "pattern": "0x2a0910010100121",
+        "bass": "0xc00c00cc00c00000",
+        "swapCount": 14,
+        "lastTs": 1792005864,
+        "bpm": 112,
+        "root": 9,
+        "mode": 1,
+        "patternId": 0,
+        "lastTick": -69075,
+        "pressure": -668,
+        "intervalEma": 122,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1090070006acfd6e80000000ec00c00cc00c0000002a0910010100121",
+        "slot1": "0x7afffffd64fef22d00000000"
+      },
+      "actual": {
+        "slot0": "0x1090070006acfd6e80000000ec00c00cc00c0000002a0910010100121",
+        "slot1": "0x7afffffd64fef22d00000000"
+      }
+    },
+    {
+      "n": 13,
+      "profile": "busy",
+      "side": "buy",
+      "imdRequested": "8.7",
+      "txHash": "0xc278198089bf66b5d8f16a558f473d8db57b30aa193af62d4e7d31862a192484",
+      "block": 11915330,
+      "timestamp": 1792005876,
+      "gasUsed": "187057",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 15,
+        "track": "snare",
+        "step": 3,
+        "on": true,
+        "bassNote": 12,
+        "isBuy": true,
+        "imdAmount": "8.7",
+        "tick": -69073
+      },
+      "state": {
+        "pattern": "0x2a0910010180121",
+        "bass": "0xc00c00cc00c0c000",
+        "swapCount": 15,
+        "lastTs": 1792005876,
+        "bpm": 113,
+        "root": 9,
+        "mode": 0,
+        "patternId": 0,
+        "lastTick": -69073,
+        "pressure": 373,
+        "intervalEma": 108,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x90071006acfd6f40000000fc00c00cc00c0c00002a0910010180121",
+        "slot1": "0x6c00000175fef22f00000000"
+      },
+      "actual": {
+        "slot0": "0x90071006acfd6f40000000fc00c00cc00c0c00002a0910010180121",
+        "slot1": "0x6c00000175fef22f00000000"
+      }
+    },
+    {
+      "n": 14,
+      "profile": "busy",
+      "side": "sell",
+      "imdRequested": "10.16",
+      "txHash": "0xff12479b4e926c32c5d5115c55dfa15d266afd5331388273c15e0f9eb6ef630f",
+      "block": 11915331,
+      "timestamp": 1792005888,
+      "gasUsed": "185922",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 16,
+        "track": "snare",
+        "step": 14,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "10.16",
+        "tick": -69075
+      },
+      "state": {
+        "pattern": "0x2a0910010180121",
+        "bass": "0xc00c00cc00c0c000",
+        "swapCount": 16,
+        "lastTs": 1792005888,
+        "bpm": 114,
+        "root": 9,
+        "mode": 1,
+        "patternId": 0,
+        "lastTick": -69075,
+        "pressure": -650,
+        "intervalEma": 96,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1090072006acfd70000000010c00c00cc00c0c00002a0910010180121",
+        "slot1": "0x60fffffd76fef22d00000000"
+      },
+      "actual": {
+        "slot0": "0x1090072006acfd70000000010c00c00cc00c0c00002a0910010180121",
+        "slot1": "0x60fffffd76fef22d00000000"
+      }
+    },
+    {
+      "n": 15,
+      "profile": "busy",
+      "side": "sell",
+      "imdRequested": "2.61",
+      "txHash": "0x28ddd9bd74dd3e0184e302b81389a835956aceab3c957054f4636989d0fc774b",
+      "block": 11915332,
+      "timestamp": 1792005900,
+      "gasUsed": "185949",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 17,
+        "track": "glitch",
+        "step": 11,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "2.61",
+        "tick": -69076
+      },
+      "state": {
+        "pattern": "0x2a0910010180121",
+        "bass": "0xc00c00cc00c0c000",
+        "swapCount": 17,
+        "lastTs": 1792005900,
+        "bpm": 114,
+        "root": 9,
+        "mode": 1,
+        "patternId": 0,
+        "lastTick": -69076,
+        "pressure": -1610,
+        "intervalEma": 85,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1090072006acfd70c00000011c00c00cc00c0c00002a0910010180121",
+        "slot1": "0x55fffff9b6fef22c00000000"
+      },
+      "actual": {
+        "slot0": "0x1090072006acfd70c00000011c00c00cc00c0c00002a0910010180121",
+        "slot1": "0x55fffff9b6fef22c00000000"
+      }
+    },
+    {
+      "n": 16,
+      "profile": "busy",
+      "side": "sell",
+      "imdRequested": "0.8",
+      "txHash": "0xbdcc72417e43f9866dcd979ab61e473a18cd3ac27b54f46cee30e052cf476515",
+      "block": 11915333,
+      "timestamp": 1792005912,
+      "gasUsed": "185949",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 18,
+        "track": "glitch",
+        "step": 15,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "0.8",
+        "tick": -69076
+      },
+      "state": {
+        "pattern": "0x2a0910010180121",
+        "bass": "0xc00cc00c0c000",
+        "swapCount": 18,
+        "lastTs": 1792005912,
+        "bpm": 115,
+        "root": 9,
+        "mode": 1,
+        "patternId": 0,
+        "lastTick": -69076,
+        "pressure": -2510,
+        "intervalEma": 75,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1090073006acfd71800000012000c00cc00c0c00002a0910010180121",
+        "slot1": "0x4bfffff632fef22c00000000"
+      },
+      "actual": {
+        "slot0": "0x1090073006acfd71800000012000c00cc00c0c00002a0910010180121",
+        "slot1": "0x4bfffff632fef22c00000000"
+      }
+    },
+    {
+      "n": 17,
+      "profile": "busy",
+      "side": "buy",
+      "imdRequested": "6.49",
+      "txHash": "0x7f428a4e8a968ca15861fc8a6093ceb10dcef2f2a4c4094272373e37fa31e152",
+      "block": 11915334,
+      "timestamp": 1792005924,
+      "gasUsed": "187107",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 19,
+        "track": "snare",
+        "step": 9,
+        "on": true,
+        "bassNote": 12,
+        "isBuy": true,
+        "imdAmount": "6.49",
+        "tick": -69074
+      },
+      "state": {
+        "pattern": "0x2a0910012180121",
+        "bass": "0xc00cc00c0c000",
+        "swapCount": 19,
+        "lastTs": 1792005924,
+        "bpm": 115,
+        "root": 9,
+        "mode": 1,
+        "patternId": 0,
+        "lastTick": -69074,
+        "pressure": -1354,
+        "intervalEma": 67,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1090073006acfd72400000013000c00cc00c0c00002a0910012180121",
+        "slot1": "0x43fffffab6fef22e00000000"
+      },
+      "actual": {
+        "slot0": "0x1090073006acfd72400000013000c00cc00c0c00002a0910012180121",
+        "slot1": "0x43fffffab6fef22e00000000"
+      }
+    },
+    {
+      "n": 18,
+      "profile": "busy",
+      "side": "buy",
+      "imdRequested": "8.08",
+      "txHash": "0x8b56182f62c558554bc74ef299cac0d2659ecc1e659444a77b364c1be0e80f50",
+      "block": 11915336,
+      "timestamp": 1792005948,
+      "gasUsed": "187079",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 20,
+        "track": "snare",
+        "step": 5,
+        "on": true,
+        "bassNote": 12,
+        "isBuy": true,
+        "imdAmount": "8.08",
+        "tick": -69073
+      },
+      "state": {
+        "pattern": "0x2a0910012380121",
+        "bass": "0xc00cc00c0c000",
+        "swapCount": 20,
+        "lastTs": 1792005948,
+        "bpm": 115,
+        "root": 9,
+        "mode": 1,
+        "patternId": 0,
+        "lastTick": -69073,
+        "pressure": -270,
+        "intervalEma": 61,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1090073006acfd73c00000014000c00cc00c0c00002a0910012380121",
+        "slot1": "0x3dfffffef2fef22f00000000"
+      },
+      "actual": {
+        "slot0": "0x1090073006acfd73c00000014000c00cc00c0c00002a0910012380121",
+        "slot1": "0x3dfffffef2fef22f00000000"
+      }
+    },
+    {
+      "n": 19,
+      "profile": "busy",
+      "side": "buy",
+      "imdRequested": "0.6",
+      "txHash": "0x8166c015785677054932c09676e081a09b901cdbdea2b52703ab659bcbab62ef",
+      "block": 11915338,
+      "timestamp": 1792005972,
+      "gasUsed": "187009",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 21,
+        "track": "glitch",
+        "step": 1,
+        "on": true,
+        "bassNote": 12,
+        "isBuy": true,
+        "imdAmount": "0.6",
+        "tick": -69073
+      },
+      "state": {
+        "pattern": "0x2a2910012380121",
+        "bass": "0xc00cc00c0c0c0",
+        "swapCount": 21,
+        "lastTs": 1792005972,
+        "bpm": 116,
+        "root": 9,
+        "mode": 0,
+        "patternId": 0,
+        "lastTick": -69073,
+        "pressure": 746,
+        "intervalEma": 56,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x90074006acfd75400000015000c00cc00c0c0c002a2910012380121",
+        "slot1": "0x38000002eafef22f00000000"
+      },
+      "actual": {
+        "slot0": "0x90074006acfd75400000015000c00cc00c0c0c002a2910012380121",
+        "slot1": "0x38000002eafef22f00000000"
+      }
+    },
+    {
+      "n": 20,
+      "profile": "busy",
+      "side": "buy",
+      "imdRequested": "0.43",
+      "txHash": "0xa6df5dd0d707c44f5cb252bba548fa715e45895409ce0edc1a4bdffdfbe3230e",
+      "block": 11915339,
+      "timestamp": 1792005984,
+      "gasUsed": "186945",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 22,
+        "track": "hat",
+        "step": 6,
+        "on": true,
+        "bassNote": 12,
+        "isBuy": true,
+        "imdAmount": "0.43",
+        "tick": -69073
+      },
+      "state": {
+        "pattern": "0x2a2914012380121",
+        "bass": "0xc00cc0cc0c0c0",
+        "swapCount": 22,
+        "lastTs": 1792005984,
+        "bpm": 116,
+        "root": 9,
+        "mode": 0,
+        "patternId": 0,
+        "lastTick": -69073,
+        "pressure": 1700,
+        "intervalEma": 50,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x90074006acfd76000000016000c00cc0cc0c0c002a2914012380121",
+        "slot1": "0x32000006a4fef22f00000000"
+      },
+      "actual": {
+        "slot0": "0x90074006acfd76000000016000c00cc0cc0c0c002a2914012380121",
+        "slot1": "0x32000006a4fef22f00000000"
+      }
+    },
+    {
+      "n": 21,
+      "profile": "busy",
+      "side": "buy",
+      "imdRequested": "0.25",
+      "txHash": "0x5352158b241d279d830398d84fbebcac3f56615d26ca14b216db6e11314676b4",
+      "block": 11915340,
+      "timestamp": 1792005996,
+      "gasUsed": "186945",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 23,
+        "track": "hat",
+        "step": 14,
+        "on": true,
+        "bassNote": 12,
+        "isBuy": true,
+        "imdAmount": "0.25",
+        "tick": -69073
+      },
+      "state": {
+        "pattern": "0x2a2d14012380121",
+        "bass": "0xc0c00cc0cc0c0c0",
+        "swapCount": 23,
+        "lastTs": 1792005996,
+        "bpm": 116,
+        "root": 9,
+        "mode": 0,
+        "patternId": 0,
+        "lastTick": -69073,
+        "pressure": 2594,
+        "intervalEma": 45,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x90074006acfd76c000000170c0c00cc0cc0c0c002a2d14012380121",
+        "slot1": "0x2d00000a22fef22f00000000"
+      },
+      "actual": {
+        "slot0": "0x90074006acfd76c000000170c0c00cc0cc0c0c002a2d14012380121",
+        "slot1": "0x2d00000a22fef22f00000000"
+      }
+    },
+    {
+      "n": 22,
+      "profile": "busy",
+      "side": "sell",
+      "imdRequested": "2.12",
+      "txHash": "0x4e3cf2e0e3b8f340c122bd419625e12aa17b15b3b0e11b77a44292cf23a5b3e9",
+      "block": 11915341,
+      "timestamp": 1792006008,
+      "gasUsed": "185895",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 24,
+        "track": "glitch",
+        "step": 6,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "2.12",
+        "tick": -69073
+      },
+      "state": {
+        "pattern": "0x2a2d14012380121",
+        "bass": "0xc0c00cc00c0c0c0",
+        "swapCount": 24,
+        "lastTs": 1792006008,
+        "bpm": 116,
+        "root": 9,
+        "mode": 0,
+        "patternId": 0,
+        "lastTick": -69073,
+        "pressure": 1432,
+        "intervalEma": 40,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x90074006acfd778000000180c0c00cc00c0c0c002a2d14012380121",
+        "slot1": "0x2800000598fef22f00000000"
+      },
+      "actual": {
+        "slot0": "0x90074006acfd778000000180c0c00cc00c0c0c002a2d14012380121",
+        "slot1": "0x2800000598fef22f00000000"
+      }
+    },
+    {
+      "n": 23,
+      "profile": "whale",
+      "side": "buy",
+      "imdRequested": "442.79",
+      "txHash": "0x42fa9c2f6dbd6a466279d982cddb7c9b482a202f59d1915330cffb21327bdd05",
+      "block": 11915342,
+      "timestamp": 1792006020,
+      "gasUsed": "189236",
+      "parity": "match",
+      "movement": {
+        "patternId": 1,
+        "root": 4,
+        "swapCount": 25
+      },
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 25,
+        "track": "kick",
+        "step": 1,
+        "on": true,
+        "bassNote": 10,
+        "isBuy": true,
+        "imdAmount": "442.79",
+        "tick": -68986
+      },
+      "state": {
+        "pattern": "0x2a2d14012380123",
+        "bass": "0xc0c00cc00c0c0a0",
+        "swapCount": 25,
+        "lastTs": 1792006020,
+        "bpm": 117,
+        "root": 4,
+        "mode": 0,
+        "patternId": 1,
+        "lastTick": -68986,
+        "pressure": 2343,
+        "intervalEma": 36,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x40075006acfd784000000190c0c00cc00c0c0a002a2d14012380123",
+        "slot1": "0x2400000927fef28600000001"
+      },
+      "actual": {
+        "slot0": "0x40075006acfd784000000190c0c00cc00c0c0a002a2d14012380123",
+        "slot1": "0x2400000927fef28600000001"
+      }
+    },
+    {
+      "n": 24,
+      "profile": "whale",
+      "side": "buy",
+      "imdRequested": "1.83",
+      "txHash": "0x0e0fffd650591ef522a8ac6ce1e90f991c940deda2fd3f21f4aeb0fd49302aed",
+      "block": 11915343,
+      "timestamp": 1792006032,
+      "gasUsed": "187037",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 26,
+        "track": "glitch",
+        "step": 6,
+        "on": true,
+        "bassNote": 10,
+        "isBuy": true,
+        "imdAmount": "1.83",
+        "tick": -68985
+      },
+      "state": {
+        "pattern": "0x2e2d14012380123",
+        "bass": "0xc0c00cc0ac0c0a0",
+        "swapCount": 26,
+        "lastTs": 1792006032,
+        "bpm": 117,
+        "root": 4,
+        "mode": 0,
+        "patternId": 1,
+        "lastTick": -68985,
+        "pressure": 3197,
+        "intervalEma": 33,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x40075006acfd7900000001a0c0c00cc0ac0c0a002e2d14012380123",
+        "slot1": "0x2100000c7dfef28700000001"
+      },
+      "actual": {
+        "slot0": "0x40075006acfd7900000001a0c0c00cc0ac0c0a002e2d14012380123",
+        "slot1": "0x2100000c7dfef28700000001"
+      }
+    },
+    {
+      "n": 25,
+      "profile": "whale",
+      "side": "buy",
+      "imdRequested": "432.14",
+      "txHash": "0x58e3b27542d883b3d61a68f17eeb94785c4aa82cf970487b91c712be38b22f97",
+      "block": 11915344,
+      "timestamp": 1792006044,
+      "gasUsed": "189184",
+      "parity": "match",
+      "movement": {
+        "patternId": 2,
+        "root": 11,
+        "swapCount": 27
+      },
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 27,
+        "track": "kick",
+        "step": 9,
+        "on": true,
+        "bassNote": 9,
+        "isBuy": true,
+        "imdAmount": "432.14",
+        "tick": -68901
+      },
+      "state": {
+        "pattern": "0x2e2d14012380323",
+        "bass": "0xc0c009c0ac0c0a0",
+        "swapCount": 27,
+        "lastTs": 1792006044,
+        "bpm": 117,
+        "root": 11,
+        "mode": 0,
+        "patternId": 2,
+        "lastTick": -68901,
+        "pressure": 3998,
+        "intervalEma": 30,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0xb0075006acfd79c0000001b0c0c009c0ac0c0a002e2d14012380323",
+        "slot1": "0x1e00000f9efef2db00000002"
+      },
+      "actual": {
+        "slot0": "0xb0075006acfd79c0000001b0c0c009c0ac0c0a002e2d14012380323",
+        "slot1": "0x1e00000f9efef2db00000002"
+      }
+    },
+    {
+      "n": 26,
+      "profile": "whale",
+      "side": "buy",
+      "imdRequested": "0.95",
+      "txHash": "0x23f8a54b783a3e56a8e8095aa12900b7dd57642745bf4a5be2fbbf5590715bb4",
+      "block": 11915345,
+      "timestamp": 1792006056,
+      "gasUsed": "186973",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 28,
+        "track": "glitch",
+        "step": 0,
+        "on": true,
+        "bassNote": 9,
+        "isBuy": true,
+        "imdAmount": "0.95",
+        "tick": -68900
+      },
+      "state": {
+        "pattern": "0x2e3d14012380323",
+        "bass": "0xc0c009c0ac0c0a9",
+        "swapCount": 28,
+        "lastTs": 1792006056,
+        "bpm": 117,
+        "root": 11,
+        "mode": 0,
+        "patternId": 2,
+        "lastTick": -68900,
+        "pressure": 4749,
+        "intervalEma": 27,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0xb0075006acfd7a80000001c0c0c009c0ac0c0a902e3d14012380323",
+        "slot1": "0x1b0000128dfef2dc00000002"
+      },
+      "actual": {
+        "slot0": "0xb0075006acfd7a80000001c0c0c009c0ac0c0a902e3d14012380323",
+        "slot1": "0x1b0000128dfef2dc00000002"
+      }
+    },
+    {
+      "n": 27,
+      "profile": "whale",
+      "side": "sell",
+      "imdRequested": "126.48",
+      "txHash": "0xd0a7d02d0ecd9d256f5073ef65e710759798c717a24a4ec6f6eaef08d66e7b5e",
+      "block": 11915346,
+      "timestamp": 1792006068,
+      "gasUsed": "188146",
+      "parity": "match",
+      "movement": {
+        "patternId": 3,
+        "root": 6,
+        "swapCount": 29
+      },
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 29,
+        "track": "kick",
+        "step": 11,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "126.48",
+        "tick": -68926
+      },
+      "state": {
+        "pattern": "0x2e3d14012380323",
+        "bass": "0xc0c009c0ac0c0a9",
+        "swapCount": 29,
+        "lastTs": 1792006068,
+        "bpm": 117,
+        "root": 6,
+        "mode": 0,
+        "patternId": 3,
+        "lastTick": -68926,
+        "pressure": 3453,
+        "intervalEma": 25,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x60075006acfd7b40000001d0c0c009c0ac0c0a902e3d14012380323",
+        "slot1": "0x1900000d7dfef2c200000003"
+      },
+      "actual": {
+        "slot0": "0x60075006acfd7b40000001d0c0c009c0ac0c0a902e3d14012380323",
+        "slot1": "0x1900000d7dfef2c200000003"
+      }
+    },
+    {
+      "n": 28,
+      "profile": "whale",
+      "side": "sell",
+      "imdRequested": "13.8",
+      "txHash": "0x3e1b1ee7e5d516569d0cd2abb1fa7875a5e3d0f69c354745a3144206a30ea2ea",
+      "block": 11915347,
+      "timestamp": 1792006080,
+      "gasUsed": "185875",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 30,
+        "track": "snare",
+        "step": 5,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "13.8",
+        "tick": -68928
+      },
+      "state": {
+        "pattern": "0x2e3d14012180323",
+        "bass": "0xc0c009c0a00c0a9",
+        "swapCount": 30,
+        "lastTs": 1792006080,
+        "bpm": 117,
+        "root": 6,
+        "mode": 0,
+        "patternId": 3,
+        "lastTick": -68928,
+        "pressure": 2238,
+        "intervalEma": 23,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x60075006acfd7c00000001e0c0c009c0a00c0a902e3d14012180323",
+        "slot1": "0x17000008befef2c000000003"
+      },
+      "actual": {
+        "slot0": "0x60075006acfd7c00000001e0c0c009c0a00c0a902e3d14012180323",
+        "slot1": "0x17000008befef2c000000003"
+      }
+    },
+    {
+      "n": 29,
+      "profile": "whale",
+      "side": "buy",
+      "imdRequested": "283.46",
+      "txHash": "0x0a798d96dcdca48f757664fb6399d9689348ab59b7400fb8c4a3a975d28ae990",
+      "block": 11915348,
+      "timestamp": 1792006092,
+      "gasUsed": "189148",
+      "parity": "match",
+      "movement": {
+        "patternId": 4,
+        "root": 1,
+        "swapCount": 31
+      },
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 31,
+        "track": "kick",
+        "step": 1,
+        "on": true,
+        "bassNote": 8,
+        "isBuy": true,
+        "imdAmount": "283.46",
+        "tick": -68873
+      },
+      "state": {
+        "pattern": "0x2e3d14012180323",
+        "bass": "0xc0c009c0a00c089",
+        "swapCount": 31,
+        "lastTs": 1792006092,
+        "bpm": 117,
+        "root": 1,
+        "mode": 0,
+        "patternId": 4,
+        "lastTick": -68873,
+        "pressure": 3099,
+        "intervalEma": 21,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x10075006acfd7cc0000001f0c0c009c0a00c08902e3d14012180323",
+        "slot1": "0x1500000c1bfef2f700000004"
+      },
+      "actual": {
+        "slot0": "0x10075006acfd7cc0000001f0c0c009c0a00c08902e3d14012180323",
+        "slot1": "0x1500000c1bfef2f700000004"
+      }
+    },
+    {
+      "n": 30,
+      "profile": "whale",
+      "side": "buy",
+      "imdRequested": "12",
+      "txHash": "0x1b6bd48fec69d132bc9378fc0070543b01b79a870ac81516db74beb3475dd70c",
+      "block": 11915349,
+      "timestamp": 1792006104,
+      "gasUsed": "187021",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 32,
+        "track": "snare",
+        "step": 1,
+        "on": true,
+        "bassNote": 8,
+        "isBuy": true,
+        "imdAmount": "12",
+        "tick": -68870
+      },
+      "state": {
+        "pattern": "0x2e3d140121a0323",
+        "bass": "0xc0c009c0a00c089",
+        "swapCount": 32,
+        "lastTs": 1792006104,
+        "bpm": 118,
+        "root": 1,
+        "mode": 0,
+        "patternId": 4,
+        "lastTick": -68870,
+        "pressure": 3906,
+        "intervalEma": 19,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x10076006acfd7d8000000200c0c009c0a00c08902e3d140121a0323",
+        "slot1": "0x1300000f42fef2fa00000004"
+      },
+      "actual": {
+        "slot0": "0x10076006acfd7d8000000200c0c009c0a00c08902e3d140121a0323",
+        "slot1": "0x1300000f42fef2fa00000004"
+      }
+    },
+    {
+      "n": 31,
+      "profile": "selloff",
+      "side": "sell",
+      "imdRequested": "74.56",
+      "txHash": "0xb94bef36d2cf9cb0398c95c0e7c13b8691c753f380487cf2a5be2fc43982f39a",
+      "block": 11915351,
+      "timestamp": 1792006128,
+      "gasUsed": "185365",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 33,
+        "track": "kick",
+        "step": 1,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "74.56",
+        "tick": -68885
+      },
+      "state": {
+        "pattern": "0x2e3d140121a0321",
+        "bass": "0xc0c009c0a00c009",
+        "swapCount": 33,
+        "lastTs": 1792006128,
+        "bpm": 118,
+        "root": 1,
+        "mode": 0,
+        "patternId": 4,
+        "lastTick": -68885,
+        "pressure": 2662,
+        "intervalEma": 19,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x10076006acfd7f0000000210c0c009c0a00c00902e3d140121a0321",
+        "slot1": "0x1300000a66fef2eb00000004"
+      },
+      "actual": {
+        "slot0": "0x10076006acfd7f0000000210c0c009c0a00c00902e3d140121a0321",
+        "slot1": "0x1300000a66fef2eb00000004"
+      }
+    },
+    {
+      "n": 32,
+      "profile": "selloff",
+      "side": "buy",
+      "imdRequested": "15",
+      "txHash": "0x5505a899aa65ce2d0720495a98c9eb3ee7467864e07caa311e0de37cc69c9914",
+      "block": 11915352,
+      "timestamp": 1792006140,
+      "gasUsed": "187021",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 34,
+        "track": "snare",
+        "step": 1,
+        "on": true,
+        "bassNote": 9,
+        "isBuy": true,
+        "imdAmount": "15",
+        "tick": -68882
+      },
+      "state": {
+        "pattern": "0x2e3d140121a0321",
+        "bass": "0xc0c009c0a00c099",
+        "swapCount": 34,
+        "lastTs": 1792006140,
+        "bpm": 118,
+        "root": 1,
+        "mode": 0,
+        "patternId": 4,
+        "lastTick": -68882,
+        "pressure": 3496,
+        "intervalEma": 18,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x10076006acfd7fc000000220c0c009c0a00c09902e3d140121a0321",
+        "slot1": "0x1200000da8fef2ee00000004"
+      },
+      "actual": {
+        "slot0": "0x10076006acfd7fc000000220c0c009c0a00c09902e3d140121a0321",
+        "slot1": "0x1200000da8fef2ee00000004"
+      }
+    },
+    {
+      "n": 33,
+      "profile": "selloff",
+      "side": "sell",
+      "imdRequested": "43.34",
+      "txHash": "0x8b435ad4b945cca6871a814b23309ec658d5a638d4991b16c7a8ad9ee6c09821",
+      "block": 11915353,
+      "timestamp": 1792006152,
+      "gasUsed": "185365",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 35,
+        "track": "kick",
+        "step": 11,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "43.34",
+        "tick": -68891
+      },
+      "state": {
+        "pattern": "0x2e3d140121a0321",
+        "bass": "0xc0c009c0a00c099",
+        "swapCount": 35,
+        "lastTs": 1792006152,
+        "bpm": 118,
+        "root": 1,
+        "mode": 0,
+        "patternId": 4,
+        "lastTick": -68891,
+        "pressure": 2278,
+        "intervalEma": 17,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x10076006acfd808000000230c0c009c0a00c09902e3d140121a0321",
+        "slot1": "0x11000008e6fef2e500000004"
+      },
+      "actual": {
+        "slot0": "0x10076006acfd808000000230c0c009c0a00c09902e3d140121a0321",
+        "slot1": "0x11000008e6fef2e500000004"
+      }
+    },
+    {
+      "n": 34,
+      "profile": "selloff",
+      "side": "buy",
+      "imdRequested": "79.29",
+      "txHash": "0xbe7931895114f7a7a05a007c367de4196c8a1e4ecee65cc9fd101c3f23f7264f",
+      "block": 11915354,
+      "timestamp": 1792006164,
+      "gasUsed": "187264",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 36,
+        "track": "kick",
+        "step": 7,
+        "on": true,
+        "bassNote": 8,
+        "isBuy": true,
+        "imdAmount": "79.29",
+        "tick": -68875
+      },
+      "state": {
+        "pattern": "0x2e3d140121a03a1",
+        "bass": "0xc0c009c8a00c099",
+        "swapCount": 36,
+        "lastTs": 1792006164,
+        "bpm": 118,
+        "root": 1,
+        "mode": 0,
+        "patternId": 4,
+        "lastTick": -68875,
+        "pressure": 3136,
+        "intervalEma": 16,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x10076006acfd814000000240c0c009c8a00c09902e3d140121a03a1",
+        "slot1": "0x1000000c40fef2f500000004"
+      },
+      "actual": {
+        "slot0": "0x10076006acfd814000000240c0c009c8a00c09902e3d140121a03a1",
+        "slot1": "0x1000000c40fef2f500000004"
+      }
+    },
+    {
+      "n": 35,
+      "profile": "selloff",
+      "side": "sell",
+      "imdRequested": "8.2",
+      "txHash": "0x482903aed9e574c53f32f633cc64cfe1ad6946dfe5a59e1236fd1de361ca9f43",
+      "block": 11915355,
+      "timestamp": 1792006176,
+      "gasUsed": "185911",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 37,
+        "track": "snare",
+        "step": 13,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "8.2",
+        "tick": -68877
+      },
+      "state": {
+        "pattern": "0x2e3d140121a03a1",
+        "bass": "0xc0c009c8a00c099",
+        "swapCount": 37,
+        "lastTs": 1792006176,
+        "bpm": 118,
+        "root": 1,
+        "mode": 0,
+        "patternId": 4,
+        "lastTick": -68877,
+        "pressure": 1940,
+        "intervalEma": 15,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x10076006acfd820000000250c0c009c8a00c09902e3d140121a03a1",
+        "slot1": "0xf00000794fef2f300000004"
+      },
+      "actual": {
+        "slot0": "0x10076006acfd820000000250c0c009c8a00c09902e3d140121a03a1",
+        "slot1": "0xf00000794fef2f300000004"
+      }
+    },
+    {
+      "n": 36,
+      "profile": "selloff",
+      "side": "sell",
+      "imdRequested": "40.3",
+      "txHash": "0x5ca02027c421adbc48fd22a80b9bc8d942e6e95ef3055e523c98e7557b8c2298",
+      "block": 11915356,
+      "timestamp": 1792006188,
+      "gasUsed": "185294",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 38,
+        "track": "kick",
+        "step": 4,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "40.3",
+        "tick": -68885
+      },
+      "state": {
+        "pattern": "0x2e3d140121a03a1",
+        "bass": "0xc0c009c8a00c099",
+        "swapCount": 38,
+        "lastTs": 1792006188,
+        "bpm": 118,
+        "root": 1,
+        "mode": 0,
+        "patternId": 4,
+        "lastTick": -68885,
+        "pressure": 819,
+        "intervalEma": 14,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x10076006acfd82c000000260c0c009c8a00c09902e3d140121a03a1",
+        "slot1": "0xe00000333fef2eb00000004"
+      },
+      "actual": {
+        "slot0": "0x10076006acfd82c000000260c0c009c8a00c09902e3d140121a03a1",
+        "slot1": "0xe00000333fef2eb00000004"
+      }
+    },
+    {
+      "n": 37,
+      "profile": "selloff",
+      "side": "sell",
+      "imdRequested": "4.12",
+      "txHash": "0x2836fa025f77004996a524e7e3d710cd6b189463073eab478ff1ccdd1323092b",
+      "block": 11915357,
+      "timestamp": 1792006200,
+      "gasUsed": "185885",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 39,
+        "track": "glitch",
+        "step": 11,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "4.12",
+        "tick": -68886
+      },
+      "state": {
+        "pattern": "0x2e3d140121a03a1",
+        "bass": "0xc0c009c8a00c099",
+        "swapCount": 39,
+        "lastTs": 1792006200,
+        "bpm": 118,
+        "root": 1,
+        "mode": 1,
+        "patternId": 4,
+        "lastTick": -68886,
+        "pressure": -232,
+        "intervalEma": 13,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1010076006acfd838000000270c0c009c8a00c09902e3d140121a03a1",
+        "slot1": "0xdffffff18fef2ea00000004"
+      },
+      "actual": {
+        "slot0": "0x1010076006acfd838000000270c0c009c8a00c09902e3d140121a03a1",
+        "slot1": "0xdffffff18fef2ea00000004"
+      }
+    },
+    {
+      "n": 38,
+      "profile": "selloff",
+      "side": "sell",
+      "imdRequested": "44.95",
+      "txHash": "0x0005f14d8248592de777cab71762909ce9e4c9834858e7f36237e02de5457348",
+      "block": 11915358,
+      "timestamp": 1792006212,
+      "gasUsed": "186181",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 40,
+        "track": "kick",
+        "step": 4,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "44.95",
+        "tick": -68895
+      },
+      "state": {
+        "pattern": "0x2e3d140121a03a1",
+        "bass": "0xc0c009c8a00c099",
+        "swapCount": 40,
+        "lastTs": 1792006212,
+        "bpm": 118,
+        "root": 1,
+        "mode": 1,
+        "patternId": 4,
+        "lastTick": -68895,
+        "pressure": -1218,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1010076006acfd844000000280c0c009c8a00c09902e3d140121a03a1",
+        "slot1": "0xcfffffb3efef2e100000004"
+      },
+      "actual": {
+        "slot0": "0x1010076006acfd844000000280c0c009c8a00c09902e3d140121a03a1",
+        "slot1": "0xcfffffb3efef2e100000004"
+      }
+    },
+    {
+      "n": 39,
+      "profile": "selloff",
+      "side": "sell",
+      "imdRequested": "8.74",
+      "txHash": "0x5e483b208339c552ad518859b9b0cf5f4b7b4f9e6f904213b34a13f12921bbab",
+      "block": 11915359,
+      "timestamp": 1792006224,
+      "gasUsed": "185132",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 41,
+        "track": "snare",
+        "step": 14,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "8.74",
+        "tick": -68896
+      },
+      "state": {
+        "pattern": "0x2e3d140121a03a1",
+        "bass": "0xc009c8a00c099",
+        "swapCount": 41,
+        "lastTs": 1792006224,
+        "bpm": 118,
+        "root": 1,
+        "mode": 1,
+        "patternId": 4,
+        "lastTick": -68896,
+        "pressure": -2142,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1010076006acfd85000000029000c009c8a00c09902e3d140121a03a1",
+        "slot1": "0xcfffff7a2fef2e000000004"
+      },
+      "actual": {
+        "slot0": "0x1010076006acfd85000000029000c009c8a00c09902e3d140121a03a1",
+        "slot1": "0xcfffff7a2fef2e000000004"
+      }
+    },
+    {
+      "n": 40,
+      "profile": "selloff",
+      "side": "sell",
+      "imdRequested": "38.85",
+      "txHash": "0x24a9094371bca8776910218e67cfa290e78ee529fee74faebf6548b94b632c90",
+      "block": 11915360,
+      "timestamp": 1792006236,
+      "gasUsed": "186113",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 42,
+        "track": "kick",
+        "step": 1,
+        "on": false,
+        "bassNote": 9,
+        "isBuy": false,
+        "imdAmount": "38.85",
+        "tick": -68904
+      },
+      "state": {
+        "pattern": "0x2e3d140121a03a1",
+        "bass": "0xc009c8a00c099",
+        "swapCount": 42,
+        "lastTs": 1792006236,
+        "bpm": 118,
+        "root": 1,
+        "mode": 1,
+        "patternId": 4,
+        "lastTick": -68904,
+        "pressure": -3009,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1010076006acfd85c0000002a000c009c8a00c09902e3d140121a03a1",
+        "slot1": "0xcfffff43ffef2d800000004"
+      },
+      "actual": {
+        "slot0": "0x1010076006acfd85c0000002a000c009c8a00c09902e3d140121a03a1",
+        "slot1": "0xcfffff43ffef2d800000004"
+      }
+    },
+    {
+      "n": 41,
+      "profile": "selloff",
+      "side": "sell",
+      "imdRequested": "3.5",
+      "txHash": "0x101b90376f7f3875f017d04303ddeb008668fb2e4508e4757ca77c1cefd1721a",
+      "block": 11915361,
+      "timestamp": 1792006248,
+      "gasUsed": "185885",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 43,
+        "track": "glitch",
+        "step": 14,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "3.5",
+        "tick": -68905
+      },
+      "state": {
+        "pattern": "0x2e3d140121a03a1",
+        "bass": "0xc009c8a00c099",
+        "swapCount": 43,
+        "lastTs": 1792006248,
+        "bpm": 118,
+        "root": 1,
+        "mode": 1,
+        "patternId": 4,
+        "lastTick": -68905,
+        "pressure": -3821,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1010076006acfd8680000002b000c009c8a00c09902e3d140121a03a1",
+        "slot1": "0xcfffff113fef2d700000004"
+      },
+      "actual": {
+        "slot0": "0x1010076006acfd8680000002b000c009c8a00c09902e3d140121a03a1",
+        "slot1": "0xcfffff113fef2d700000004"
+      }
+    },
+    {
+      "n": 42,
+      "profile": "selloff",
+      "side": "sell",
+      "imdRequested": "5.72",
+      "txHash": "0xcb2f31b30c3d40acf7582c1515c387cca429cfc7e3faea23f74742d43b147140",
+      "block": 11915362,
+      "timestamp": 1792006260,
+      "gasUsed": "185890",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 44,
+        "track": "snare",
+        "step": 5,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "5.72",
+        "tick": -68906
+      },
+      "state": {
+        "pattern": "0x2e3d140121a03a1",
+        "bass": "0xc009c8a00c099",
+        "swapCount": 44,
+        "lastTs": 1792006260,
+        "bpm": 118,
+        "root": 1,
+        "mode": 1,
+        "patternId": 4,
+        "lastTick": -68906,
+        "pressure": -4583,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1010076006acfd8740000002c000c009c8a00c09902e3d140121a03a1",
+        "slot1": "0xcffffee19fef2d600000004"
+      },
+      "actual": {
+        "slot0": "0x1010076006acfd8740000002c000c009c8a00c09902e3d140121a03a1",
+        "slot1": "0xcffffee19fef2d600000004"
+      }
+    },
+    {
+      "n": 43,
+      "profile": "selloff",
+      "side": "sell",
+      "imdRequested": "65.74",
+      "txHash": "0x8156745765f64ad6b80c59f90b18f7c1ee0f5c46e1d35be1f42943b790367cb4",
+      "block": 11915363,
+      "timestamp": 1792006272,
+      "gasUsed": "186181",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 45,
+        "track": "kick",
+        "step": 5,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "65.74",
+        "tick": -68919
+      },
+      "state": {
+        "pattern": "0x2e3d140121a0381",
+        "bass": "0xc009c8a00c099",
+        "swapCount": 45,
+        "lastTs": 1792006272,
+        "bpm": 118,
+        "root": 1,
+        "mode": 1,
+        "patternId": 4,
+        "lastTick": -68919,
+        "pressure": -5297,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1010076006acfd8800000002d000c009c8a00c09902e3d140121a0381",
+        "slot1": "0xcffffeb4ffef2c900000004"
+      },
+      "actual": {
+        "slot0": "0x1010076006acfd8800000002d000c009c8a00c09902e3d140121a0381",
+        "slot1": "0xcffffeb4ffef2c900000004"
+      }
+    },
+    {
+      "n": 44,
+      "profile": "selloff",
+      "side": "sell",
+      "imdRequested": "32.11",
+      "txHash": "0x52a82cbd734cf5942139c4a98d06dd6cc954a6df7750d39727b612ae42e3fb96",
+      "block": 11915364,
+      "timestamp": 1792006284,
+      "gasUsed": "186248",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 46,
+        "track": "kick",
+        "step": 9,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "32.11",
+        "tick": -68925
+      },
+      "state": {
+        "pattern": "0x2e3d140121a0181",
+        "bass": "0xc000c8a00c099",
+        "swapCount": 46,
+        "lastTs": 1792006284,
+        "bpm": 118,
+        "root": 1,
+        "mode": 1,
+        "patternId": 4,
+        "lastTick": -68925,
+        "pressure": -5966,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1010076006acfd88c0000002e000c000c8a00c09902e3d140121a0181",
+        "slot1": "0xcffffe8b2fef2c300000004"
+      },
+      "actual": {
+        "slot0": "0x1010076006acfd88c0000002e000c000c8a00c09902e3d140121a0181",
+        "slot1": "0xcffffe8b2fef2c300000004"
+      }
+    },
+    {
+      "n": 45,
+      "profile": "random",
+      "side": "sell",
+      "imdRequested": "11.84",
+      "txHash": "0x8f2ff4cd020cf3f73ebda378ad61f4fff56a954a746dfb4f897dec3a46634892",
+      "block": 11915365,
+      "timestamp": 1792006296,
+      "gasUsed": "186029",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 47,
+        "track": "snare",
+        "step": 5,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "11.84",
+        "tick": -68928
+      },
+      "state": {
+        "pattern": "0x2e3d140121a0181",
+        "bass": "0xc000c8a00c099",
+        "swapCount": 47,
+        "lastTs": 1792006296,
+        "bpm": 118,
+        "root": 1,
+        "mode": 1,
+        "patternId": 4,
+        "lastTick": -68928,
+        "pressure": -6594,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1010076006acfd8980000002f000c000c8a00c09902e3d140121a0181",
+        "slot1": "0xcffffe63efef2c000000004"
+      },
+      "actual": {
+        "slot0": "0x1010076006acfd8980000002f000c000c8a00c09902e3d140121a0181",
+        "slot1": "0xcffffe63efef2c000000004"
+      }
+    },
+    {
+      "n": 46,
+      "profile": "random",
+      "side": "buy",
+      "imdRequested": "63.01",
+      "txHash": "0x29c70ecc44b5fbcd42b2554b0987026b1b775cea52bf30586e4bb06fb370f731",
+      "block": 11915366,
+      "timestamp": 1792006308,
+      "gasUsed": "187318",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 48,
+        "track": "kick",
+        "step": 2,
+        "on": true,
+        "bassNote": 9,
+        "isBuy": true,
+        "imdAmount": "63.01",
+        "tick": -68915
+      },
+      "state": {
+        "pattern": "0x2e3d140121a0185",
+        "bass": "0xc000c8a00c999",
+        "swapCount": 48,
+        "lastTs": 1792006308,
+        "bpm": 118,
+        "root": 1,
+        "mode": 1,
+        "patternId": 4,
+        "lastTick": -68915,
+        "pressure": -5182,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1010076006acfd8a400000030000c000c8a00c99902e3d140121a0185",
+        "slot1": "0xcffffebc2fef2cd00000004"
+      },
+      "actual": {
+        "slot0": "0x1010076006acfd8a400000030000c000c8a00c99902e3d140121a0185",
+        "slot1": "0xcffffebc2fef2cd00000004"
+      }
+    },
+    {
+      "n": 47,
+      "profile": "random",
+      "side": "buy",
+      "imdRequested": "52.41",
+      "txHash": "0xe3ebf37773e920dd654477d6bcac942557065cb099b5d6a0860a4d4a75887492",
+      "block": 11915367,
+      "timestamp": 1792006320,
+      "gasUsed": "187286",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 49,
+        "track": "kick",
+        "step": 2,
+        "on": true,
+        "bassNote": 9,
+        "isBuy": true,
+        "imdAmount": "52.41",
+        "tick": -68905
+      },
+      "state": {
+        "pattern": "0x2e3d140121a0185",
+        "bass": "0xc000c8a00c999",
+        "swapCount": 49,
+        "lastTs": 1792006320,
+        "bpm": 118,
+        "root": 1,
+        "mode": 1,
+        "patternId": 4,
+        "lastTick": -68905,
+        "pressure": -3859,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1010076006acfd8b000000031000c000c8a00c99902e3d140121a0185",
+        "slot1": "0xcfffff0edfef2d700000004"
+      },
+      "actual": {
+        "slot0": "0x1010076006acfd8b000000031000c000c8a00c99902e3d140121a0185",
+        "slot1": "0xcfffff0edfef2d700000004"
+      }
+    },
+    {
+      "n": 48,
+      "profile": "random",
+      "side": "buy",
+      "imdRequested": "3.46",
+      "txHash": "0xbc95c6dfce2391c8ab181eda44f7b666cf815896881f93b5e8a061c8fa040602",
+      "block": 11915368,
+      "timestamp": 1792006332,
+      "gasUsed": "186995",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 50,
+        "track": "glitch",
+        "step": 13,
+        "on": true,
+        "bassNote": 9,
+        "isBuy": true,
+        "imdAmount": "3.46",
+        "tick": -68904
+      },
+      "state": {
+        "pattern": "0x22e3d140121a0185",
+        "bass": "0x9c000c8a00c999",
+        "swapCount": 50,
+        "lastTs": 1792006332,
+        "bpm": 118,
+        "root": 1,
+        "mode": 1,
+        "patternId": 4,
+        "lastTick": -68904,
+        "pressure": -2618,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1010076006acfd8bc00000032009c000c8a00c99922e3d140121a0185",
+        "slot1": "0xcfffff5c6fef2d800000004"
+      },
+      "actual": {
+        "slot0": "0x1010076006acfd8bc00000032009c000c8a00c99922e3d140121a0185",
+        "slot1": "0xcfffff5c6fef2d800000004"
+      }
+    },
+    {
+      "n": 49,
+      "profile": "random",
+      "side": "sell",
+      "imdRequested": "1.1",
+      "txHash": "0x73454b3d6415d3316183fc950eaf8d109405155a9aba3cc260876d5669eb66fe",
+      "block": 11915369,
+      "timestamp": 1792006344,
+      "gasUsed": "185814",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 51,
+        "track": "glitch",
+        "step": 3,
+        "on": false,
+        "bassNote": 12,
+        "isBuy": false,
+        "imdAmount": "1.1",
+        "tick": -68905
+      },
+      "state": {
+        "pattern": "0x22e3d140121a0185",
+        "bass": "0x9c000c8a00c999",
+        "swapCount": 51,
+        "lastTs": 1792006344,
+        "bpm": 118,
+        "root": 1,
+        "mode": 1,
+        "patternId": 4,
+        "lastTick": -68905,
+        "pressure": -3455,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1010076006acfd8c800000033009c000c8a00c99922e3d140121a0185",
+        "slot1": "0xcfffff281fef2d700000004"
+      },
+      "actual": {
+        "slot0": "0x1010076006acfd8c800000033009c000c8a00c99922e3d140121a0185",
+        "slot1": "0xcfffff281fef2d700000004"
+      }
+    },
+    {
+      "n": 50,
+      "profile": "random",
+      "side": "sell",
+      "imdRequested": "14.61",
+      "txHash": "0x9ee51e2eda07e19db3f216ec6598e000aa88e1908a4588389028f52384ea24d4",
+      "block": 11915370,
+      "timestamp": 1792006356,
+      "gasUsed": "185965",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 52,
+        "track": "snare",
+        "step": 12,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "14.61",
+        "tick": -68908
+      },
+      "state": {
+        "pattern": "0x22e3d140021a0185",
+        "bass": "0x90000c8a00c999",
+        "swapCount": 52,
+        "lastTs": 1792006356,
+        "bpm": 118,
+        "root": 1,
+        "mode": 1,
+        "patternId": 4,
+        "lastTick": -68908,
+        "pressure": -4240,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1010076006acfd8d4000000340090000c8a00c99922e3d140021a0185",
+        "slot1": "0xcffffef70fef2d400000004"
+      },
+      "actual": {
+        "slot0": "0x1010076006acfd8d4000000340090000c8a00c99922e3d140021a0185",
+        "slot1": "0xcffffef70fef2d400000004"
+      }
+    },
+    {
+      "n": 51,
+      "profile": "random",
+      "side": "buy",
+      "imdRequested": "228.37",
+      "txHash": "0x544ad81063426645fc49e0b362558265829f3390e446af62e0d007caf3f7dc21",
+      "block": 11915371,
+      "timestamp": 1792006368,
+      "gasUsed": "188405",
+      "parity": "match",
+      "movement": {
+        "patternId": 5,
+        "root": 8,
+        "swapCount": 53
+      },
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 53,
+        "track": "kick",
+        "step": 4,
+        "on": true,
+        "bassNote": 8,
+        "isBuy": true,
+        "imdAmount": "228.37",
+        "tick": -68863
+      },
+      "state": {
+        "pattern": "0x22e3d140021a0195",
+        "bass": "0x90000c8a08c999",
+        "swapCount": 53,
+        "lastTs": 1792006368,
+        "bpm": 118,
+        "root": 8,
+        "mode": 1,
+        "patternId": 5,
+        "lastTick": -68863,
+        "pressure": -2975,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1080076006acfd8e0000000350090000c8a08c99922e3d140021a0195",
+        "slot1": "0xcfffff461fef30100000005"
+      },
+      "actual": {
+        "slot0": "0x1080076006acfd8e0000000350090000c8a08c99922e3d140021a0195",
+        "slot1": "0xcfffff461fef30100000005"
+      }
+    },
+    {
+      "n": 52,
+      "profile": "random",
+      "side": "sell",
+      "imdRequested": "240.6",
+      "txHash": "0x3d2611da3cbdb843efacbc20b5c5a6585088510f64cde6891c684242b0aff4db",
+      "block": 11915372,
+      "timestamp": 1792006380,
+      "gasUsed": "188097",
+      "parity": "match",
+      "movement": {
+        "patternId": 6,
+        "root": 3,
+        "swapCount": 54
+      },
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 54,
+        "track": "kick",
+        "step": 11,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "240.6",
+        "tick": -68911
+      },
+      "state": {
+        "pattern": "0x22e3d140021a0195",
+        "bass": "0x90000c8a08c999",
+        "swapCount": 54,
+        "lastTs": 1792006380,
+        "bpm": 118,
+        "root": 3,
+        "mode": 1,
+        "patternId": 6,
+        "lastTick": -68911,
+        "pressure": -3790,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1030076006acfd8ec000000360090000c8a08c99922e3d140021a0195",
+        "slot1": "0xcfffff132fef2d100000006"
+      },
+      "actual": {
+        "slot0": "0x1030076006acfd8ec000000360090000c8a08c99922e3d140021a0195",
+        "slot1": "0xcfffff132fef2d100000006"
+      }
+    },
+    {
+      "n": 53,
+      "profile": "random",
+      "side": "sell",
+      "imdRequested": "10.39",
+      "txHash": "0x3b09944d1b8af6e7b723428e4f4cb41d57851eed411b901c629eb41c2bf33f64",
+      "block": 11915373,
+      "timestamp": 1792006392,
+      "gasUsed": "185061",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 55,
+        "track": "snare",
+        "step": 9,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "10.39",
+        "tick": -68913
+      },
+      "state": {
+        "pattern": "0x22e3d140001a0195",
+        "bass": "0x90000c8a08c999",
+        "swapCount": 55,
+        "lastTs": 1792006392,
+        "bpm": 118,
+        "root": 3,
+        "mode": 1,
+        "patternId": 6,
+        "lastTick": -68913,
+        "pressure": -4554,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1030076006acfd8f8000000370090000c8a08c99922e3d140001a0195",
+        "slot1": "0xcffffee36fef2cf00000006"
+      },
+      "actual": {
+        "slot0": "0x1030076006acfd8f8000000370090000c8a08c99922e3d140001a0195",
+        "slot1": "0xcffffee36fef2cf00000006"
+      }
+    },
+    {
+      "n": 54,
+      "profile": "random",
+      "side": "buy",
+      "imdRequested": "21.03",
+      "txHash": "0x51d13e976f7e980467c0114cb9348bddf78e6d6fcaa1501fc96c2e8b7a40bcf2",
+      "block": 11915374,
+      "timestamp": 1792006404,
+      "gasUsed": "187318",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 56,
+        "track": "snare",
+        "step": 8,
+        "on": true,
+        "bassNote": 9,
+        "isBuy": true,
+        "imdAmount": "21.03",
+        "tick": -68908
+      },
+      "state": {
+        "pattern": "0x22e3d140011a0195",
+        "bass": "0x9000098a08c999",
+        "swapCount": 56,
+        "lastTs": 1792006404,
+        "bpm": 118,
+        "root": 3,
+        "mode": 1,
+        "patternId": 6,
+        "lastTick": -68908,
+        "pressure": -3270,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1030076006acfd90400000038009000098a08c99922e3d140011a0195",
+        "slot1": "0xcfffff33afef2d400000006"
+      },
+      "actual": {
+        "slot0": "0x1030076006acfd90400000038009000098a08c99922e3d140011a0195",
+        "slot1": "0xcfffff33afef2d400000006"
+      }
+    },
+    {
+      "n": 55,
+      "profile": "random",
+      "side": "sell",
+      "imdRequested": "10.55",
+      "txHash": "0xc5675e67aec73c745a4ba4eebbb3a241d9f2ad64edc6dc7ff1fb526a2a4cb0d4",
+      "block": 11915375,
+      "timestamp": 1792006416,
+      "gasUsed": "185997",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 57,
+        "track": "snare",
+        "step": 11,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "10.55",
+        "tick": -68911
+      },
+      "state": {
+        "pattern": "0x22e3d140011a0195",
+        "bass": "0x9000098a08c999",
+        "swapCount": 57,
+        "lastTs": 1792006416,
+        "bpm": 118,
+        "root": 3,
+        "mode": 1,
+        "patternId": 6,
+        "lastTick": -68911,
+        "pressure": -4066,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1030076006acfd91000000039009000098a08c99922e3d140011a0195",
+        "slot1": "0xcfffff01efef2d100000006"
+      },
+      "actual": {
+        "slot0": "0x1030076006acfd91000000039009000098a08c99922e3d140011a0195",
+        "slot1": "0xcfffff01efef2d100000006"
+      }
+    },
+    {
+      "n": 56,
+      "profile": "random",
+      "side": "sell",
+      "imdRequested": "2.17",
+      "txHash": "0xac65c100d502af465488b7e5eabe6189ef641fdfe34c398e281ad8436bfe2933",
+      "block": 11915376,
+      "timestamp": 1792006428,
+      "gasUsed": "185945",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 58,
+        "track": "glitch",
+        "step": 5,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "2.17",
+        "tick": -68911
+      },
+      "state": {
+        "pattern": "0x22c3d140011a0195",
+        "bass": "0x9000098a08c999",
+        "swapCount": 58,
+        "lastTs": 1792006428,
+        "bpm": 118,
+        "root": 3,
+        "mode": 1,
+        "patternId": 6,
+        "lastTick": -68911,
+        "pressure": -4812,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1030076006acfd91c0000003a009000098a08c99922c3d140011a0195",
+        "slot1": "0xcffffed34fef2d100000006"
+      },
+      "actual": {
+        "slot0": "0x1030076006acfd91c0000003a009000098a08c99922c3d140011a0195",
+        "slot1": "0xcffffed34fef2d100000006"
+      }
+    },
+    {
+      "n": 57,
+      "profile": "random",
+      "side": "sell",
+      "imdRequested": "0.93",
+      "txHash": "0x5fe5ea1f161465aed608a1ac19aa719ccb0aa10710b4c87478f295e50d2192e3",
+      "block": 11915378,
+      "timestamp": 1792006452,
+      "gasUsed": "185945",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 59,
+        "track": "glitch",
+        "step": 6,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "0.93",
+        "tick": -68911
+      },
+      "state": {
+        "pattern": "0x2283d140011a0195",
+        "bass": "0x9000098008c999",
+        "swapCount": 59,
+        "lastTs": 1792006452,
+        "bpm": 118,
+        "root": 3,
+        "mode": 1,
+        "patternId": 6,
+        "lastTick": -68911,
+        "pressure": -5512,
+        "intervalEma": 13,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1030076006acfd9340000003b009000098008c9992283d140011a0195",
+        "slot1": "0xdffffea78fef2d100000006"
+      },
+      "actual": {
+        "slot0": "0x1030076006acfd9340000003b009000098008c9992283d140011a0195",
+        "slot1": "0xdffffea78fef2d100000006"
+      }
+    },
+    {
+      "n": 58,
+      "profile": "random",
+      "side": "buy",
+      "imdRequested": "22.22",
+      "txHash": "0x89f486320aa124ddc545a2e9e9d59bc00f705a7255709d02fb4ffb5459322979",
+      "block": 11915379,
+      "timestamp": 1792006464,
+      "gasUsed": "186489",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 60,
+        "track": "snare",
+        "step": 3,
+        "on": true,
+        "bassNote": 9,
+        "isBuy": true,
+        "imdAmount": "22.22",
+        "tick": -68907
+      },
+      "state": {
+        "pattern": "0x2283d140011a0195",
+        "bass": "0x90000980089999",
+        "swapCount": 60,
+        "lastTs": 1792006464,
+        "bpm": 118,
+        "root": 3,
+        "mode": 1,
+        "patternId": 6,
+        "lastTick": -68907,
+        "pressure": -4168,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1030076006acfd9400000003c00900009800899992283d140011a0195",
+        "slot1": "0xcffffefb8fef2d500000006"
+      },
+      "actual": {
+        "slot0": "0x1030076006acfd9400000003c00900009800899992283d140011a0195",
+        "slot1": "0xcffffefb8fef2d500000006"
+      }
+    },
+    {
+      "n": 59,
+      "profile": "random",
+      "side": "sell",
+      "imdRequested": "3.15",
+      "txHash": "0x58e03b2033e656d5c5ce012a71bbe56e46e8638fd3babd45967569a1a3c368bd",
+      "block": 11915380,
+      "timestamp": 1792006476,
+      "gasUsed": "185084",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 61,
+        "track": "glitch",
+        "step": 2,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "3.15",
+        "tick": -68907
+      },
+      "state": {
+        "pattern": "0x2283d140011a0195",
+        "bass": "0x90000980089099",
+        "swapCount": 61,
+        "lastTs": 1792006476,
+        "bpm": 118,
+        "root": 3,
+        "mode": 1,
+        "patternId": 6,
+        "lastTick": -68907,
+        "pressure": -4908,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1030076006acfd94c0000003d00900009800890992283d140011a0195",
+        "slot1": "0xcffffecd4fef2d500000006"
+      },
+      "actual": {
+        "slot0": "0x1030076006acfd94c0000003d00900009800890992283d140011a0195",
+        "slot1": "0xcffffecd4fef2d500000006"
+      }
+    },
+    {
+      "n": 60,
+      "profile": "random",
+      "side": "sell",
+      "imdRequested": "0.11",
+      "txHash": "0x09cfaeef70a4278fab92e2abdf00fcaa20796a2ebd4c7f214bfe092fe4cc4c4d",
+      "block": 11915381,
+      "timestamp": 1792006488,
+      "gasUsed": "185778",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 62,
+        "track": "hat",
+        "step": 12,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "0.11",
+        "tick": -68907
+      },
+      "state": {
+        "pattern": "0x2283c140011a0195",
+        "bass": "0x90000980089099",
+        "swapCount": 62,
+        "lastTs": 1792006488,
+        "bpm": 118,
+        "root": 3,
+        "mode": 1,
+        "patternId": 6,
+        "lastTick": -68907,
+        "pressure": -5602,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1030076006acfd9580000003e00900009800890992283c140011a0195",
+        "slot1": "0xcffffea1efef2d500000006"
+      },
+      "actual": {
+        "slot0": "0x1030076006acfd9580000003e00900009800890992283c140011a0195",
+        "slot1": "0xcffffea1efef2d500000006"
+      }
+    },
+    {
+      "n": 61,
+      "profile": "random",
+      "side": "buy",
+      "imdRequested": "52.57",
+      "txHash": "0xf9d8c4b5fee37292ad406571b3b21701871f6f49bfa23c6b64cab5073e039406",
+      "block": 11915382,
+      "timestamp": 1792006500,
+      "gasUsed": "187258",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 63,
+        "track": "kick",
+        "step": 7,
+        "on": true,
+        "bassNote": 9,
+        "isBuy": true,
+        "imdAmount": "52.57",
+        "tick": -68897
+      },
+      "state": {
+        "pattern": "0x2283c140011a0195",
+        "bass": "0x90000990089099",
+        "swapCount": 63,
+        "lastTs": 1792006500,
+        "bpm": 118,
+        "root": 3,
+        "mode": 1,
+        "patternId": 6,
+        "lastTick": -68897,
+        "pressure": -4252,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1030076006acfd9640000003f00900009900890992283c140011a0195",
+        "slot1": "0xcffffef64fef2df00000006"
+      },
+      "actual": {
+        "slot0": "0x1030076006acfd9640000003f00900009900890992283c140011a0195",
+        "slot1": "0xcffffef64fef2df00000006"
+      }
+    },
+    {
+      "n": 62,
+      "profile": "random",
+      "side": "buy",
+      "imdRequested": "0.11",
+      "txHash": "0xcfca9d6828144e0c471f9fcde670ccecdd0eb0d12fe88cdb2419f1585083c168",
+      "block": 11915383,
+      "timestamp": 1792006512,
+      "gasUsed": "186954",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 64,
+        "track": "hat",
+        "step": 13,
+        "on": true,
+        "bassNote": 9,
+        "isBuy": true,
+        "imdAmount": "0.11",
+        "tick": -68897
+      },
+      "state": {
+        "pattern": "0x2283e140011a0195",
+        "bass": "0x90000990089099",
+        "swapCount": 64,
+        "lastTs": 1792006512,
+        "bpm": 118,
+        "root": 3,
+        "mode": 1,
+        "patternId": 7,
+        "lastTick": -68897,
+        "pressure": -2987,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1030076006acfd9700000004000900009900890992283e140011a0195",
+        "slot1": "0xcfffff455fef2df00000007"
+      },
+      "actual": {
+        "slot0": "0x1030076006acfd9700000004000900009900890992283e140011a0195",
+        "slot1": "0xcfffff455fef2df00000007"
+      }
+    },
+    {
+      "n": 63,
+      "profile": "random",
+      "side": "sell",
+      "imdRequested": "17.74",
+      "txHash": "0xccd13d6065f088ad2e3046b018431d867834c0fb7f107736edf703e8f909690f",
+      "block": 11915384,
+      "timestamp": 1792006524,
+      "gasUsed": "185862",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 65,
+        "track": "snare",
+        "step": 11,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "17.74",
+        "tick": -68901
+      },
+      "state": {
+        "pattern": "0x2283e140011a0195",
+        "bass": "0x90000990089099",
+        "swapCount": 65,
+        "lastTs": 1792006524,
+        "bpm": 118,
+        "root": 3,
+        "mode": 1,
+        "patternId": 7,
+        "lastTick": -68901,
+        "pressure": -3801,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1030076006acfd97c0000004100900009900890992283e140011a0195",
+        "slot1": "0xcfffff127fef2db00000007"
+      },
+      "actual": {
+        "slot0": "0x1030076006acfd97c0000004100900009900890992283e140011a0195",
+        "slot1": "0xcfffff127fef2db00000007"
+      }
+    },
+    {
+      "n": 64,
+      "profile": "random",
+      "side": "sell",
+      "imdRequested": "4.8",
+      "txHash": "0x5fe017eed3f7a9639ea87bbb4c5346d3272cce4f9942a6b32ccb71eba9600634",
+      "block": 11915385,
+      "timestamp": 1792006536,
+      "gasUsed": "185084",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 66,
+        "track": "glitch",
+        "step": 3,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "4.8",
+        "tick": -68902
+      },
+      "state": {
+        "pattern": "0x2283e140011a0195",
+        "bass": "0x90000990080099",
+        "swapCount": 66,
+        "lastTs": 1792006536,
+        "bpm": 118,
+        "root": 3,
+        "mode": 1,
+        "patternId": 7,
+        "lastTick": -68902,
+        "pressure": -4564,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x1030076006acfd9880000004200900009900800992283e140011a0195",
+        "slot1": "0xcffffee2cfef2da00000007"
+      },
+      "actual": {
+        "slot0": "0x1030076006acfd9880000004200900009900800992283e140011a0195",
+        "slot1": "0xcffffee2cfef2da00000007"
+      }
+    },
+    {
+      "n": 65,
+      "profile": "random",
+      "side": "sell",
+      "imdRequested": "262.51",
+      "txHash": "0x5a1f702b5fdb37d9a60cb3c9950c9a95afcfd821709a987750273f7eab2ddb9f",
+      "block": 11915386,
+      "timestamp": 1792006548,
+      "gasUsed": "188136",
+      "parity": "match",
+      "movement": {
+        "patternId": 8,
+        "root": 10,
+        "swapCount": 67
+      },
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 67,
+        "track": "kick",
+        "step": 1,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "262.51",
+        "tick": -68954
+      },
+      "state": {
+        "pattern": "0x2283e140011a0195",
+        "bass": "0x90000990080009",
+        "swapCount": 67,
+        "lastTs": 1792006548,
+        "bpm": 118,
+        "root": 10,
+        "mode": 1,
+        "patternId": 8,
+        "lastTick": -68954,
+        "pressure": -5279,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x10a0076006acfd9940000004300900009900800092283e140011a0195",
+        "slot1": "0xcffffeb61fef2a600000008"
+      },
+      "actual": {
+        "slot0": "0x10a0076006acfd9940000004300900009900800092283e140011a0195",
+        "slot1": "0xcffffeb61fef2a600000008"
+      }
+    },
+    {
+      "n": 66,
+      "profile": "random",
+      "side": "sell",
+      "imdRequested": "15.64",
+      "txHash": "0x2e9dbca49c766d37f1be15991aa9714d319335b1312cfc75f335ac9242e2b473",
+      "block": 11915387,
+      "timestamp": 1792006560,
+      "gasUsed": "185061",
+      "parity": "match",
+      "event": {
+        "sender": "0x83422C34B61fEAacdf5A5401693Ffdcc2c17a3E3",
+        "swapCount": 68,
+        "track": "snare",
+        "step": 12,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "imdAmount": "15.64",
+        "tick": -68957
+      },
+      "state": {
+        "pattern": "0x2283e140011a0195",
+        "bass": "0x90000990080009",
+        "swapCount": 68,
+        "lastTs": 1792006560,
+        "bpm": 118,
+        "root": 10,
+        "mode": 1,
+        "patternId": 8,
+        "lastTick": -68957,
+        "pressure": -5950,
+        "intervalEma": 12,
+        "releaseCount": 0
+      },
+      "expected": {
+        "slot0": "0x10a0076006acfd9a00000004400900009900800092283e140011a0195",
+        "slot1": "0xcffffe8c2fef2a300000008"
+      },
+      "actual": {
+        "slot0": "0x10a0076006acfd9a00000004400900009900800092283e140011a0195",
+        "slot1": "0xcffffe8c2fef2a300000008"
+      }
+    }
+  ]
+}

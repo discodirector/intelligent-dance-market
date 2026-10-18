@@ -1,0 +1,480 @@
+import {
+  advanceIdle,
+  freshIdleMemory,
+  genreStep,
+  planSteps,
+  stepCharacter,
+  viewAt,
+  type DropCue,
+  type IdleMemory,
+  type StepHit,
+  type TimelinePoint,
+  type TransportView,
+} from "./clock.ts";
+import { ceilingCurve, MASTER_CEILING, MixChain, VoiceEngine } from "./engine.ts";
+import { FORM_BARS } from "./arrange.ts";
+import { crossfadeSeconds, epochOf, eraById, eraOf, type Era } from "./eras.ts";
+import { initialState, type SequencerState } from "./state.ts";
+
+export interface StepListenerEvent {
+  step: number;
+  time: number;
+  state: SequencerState;
+}
+
+export interface EraView {
+  epoch: number;
+  id: string;
+  name: string;
+  /** True while two era engines are still crossfading. */
+  fading: boolean;
+}
+
+export interface LivePlayer {
+  setState(state: SequencerState): void;
+  /** Next unscheduled step uses this era. `null` follows `eraOf(epochOf(state))`. */
+  setEraOverride(eraId: string | null): void;
+  /**
+   * Virtual unix clock for replay and render. `null` uses the wall clock,
+   * which is what live mode wants. Demo pins this to `lastTs` so a fake
+   * timestamp is not compared with the wall.
+   */
+  setClock(nowSec: number | null): void;
+  /** Whale drop. A buy waits for the next downbeat; a sell starts on the next step. */
+  noteDrop(drop: DropCue | null): void;
+  /**
+   * Heat -> drop prototype: the latest swap finished the track. Until the next downbeat the voices keep
+   * playing `held` (the finished track; omit to hold the state before the drop), then that bar lands as the drop.
+   */
+  noteTrackDrop(held?: SequencerState | null): void;
+  start(): void;
+  stop(): void;
+  readonly running: boolean;
+  getTransport(): TransportView;
+  getEra(): EraView;
+  onStep(listener: (event: StepListenerEvent) => void): () => void;
+}
+
+export interface RenderOptions {
+  /** Force one era for the whole render. Omit to follow the epoch of each state. */
+  eraId?: string;
+  /** First bar of the 32-bar song form (SPEC §4.4). Short clips start in the build. */
+  barOffset?: number;
+}
+
+interface Scheduled {
+  gridTime: number;
+  index: number;
+  /** Song-form bar (index / 16 plus the heat -> drop form shift). */
+  bar: number;
+  duration: number;
+  tempo: number;
+  state: SequencerState;
+}
+
+interface Slot {
+  era: Era;
+  engine: VoiceEngine;
+  gain: GainNode;
+  ramp: { t0: number; t1: number; from: number; to: number };
+  /** Time of the last setValueAtTime, not the end of a future ramp. */
+  lastSet: number;
+}
+
+const LOOKAHEAD_SEC = 0.16;
+const TICK_MS = 25;
+const SILENT = 0.0001;
+
+function stereo(node: AudioNode) {
+  node.channelCount = 2;
+  node.channelCountMode = "explicit";
+  node.channelInterpretation = "speakers";
+}
+
+/**
+ * One VoiceEngine per era. Their slot gains crossfade over one bar into a
+ * shared bus, then a soft-knee waveshaper. The shaper is the master limiter:
+ * DynamicsCompressorNode is not bit-exact in Chromium.
+ */
+class EraRig {
+  private readonly slots: Slot[] = [];
+  private incoming: Slot | null = null;
+  private eraId: string | null;
+  private readonly live: boolean;
+  private readonly sampleRate: number;
+  private readonly output: GainNode;
+  private readonly mix: MixChain;
+  private outLastSet = -1;
+  private outRamp = { t0: 0, t1: 0, from: 1, to: 1 };
+
+  constructor(
+    private readonly ctx: BaseAudioContext,
+    eraId: string | null,
+    liveFade: boolean,
+  ) {
+    this.eraId = eraId;
+    this.live = typeof AudioContext !== "undefined" && ctx instanceof AudioContext;
+    this.sampleRate = ctx.sampleRate || 44100;
+    const bus = ctx.createGain();
+    stereo(bus);
+    bus.gain.value = 1;
+    const shaper = ctx.createWaveShaper();
+    shaper.curve = new Float32Array(ceilingCurve(MASTER_CEILING));
+    shaper.oversample = "none";
+    this.output = ctx.createGain();
+    stereo(this.output);
+    const opened = liveFade ? SILENT : 1;
+    this.output.gain.value = opened;
+    this.outRamp = { t0: 0, t1: 0, from: opened, to: opened };
+    // Offline sums two at a time. Live connects straight through so a new era
+    // can join the bus without disconnecting the one already playing.
+    this.mix = new MixChain(ctx, bus, this.live);
+    bus.connect(shaper);
+    shaper.connect(this.output);
+  }
+
+  connect(destination: AudioNode) {
+    this.output.connect(destination);
+  }
+
+  setOverride(eraId: string | null) {
+    this.eraId = eraId;
+  }
+
+  get override(): string | null {
+    return this.eraId;
+  }
+
+  describe(state: SequencerState, time: number): EraView {
+    const era = this.eraFor(state);
+    const fading = this.slots.some(
+      (slot) => time < slot.ramp.t1 - 1e-4 && Math.abs(slot.ramp.to - slot.ramp.from) > 0.02,
+    );
+    return { epoch: epochOf(state), id: era.id, name: era.name, fading };
+  }
+
+  play(hit: StepHit) {
+    const era = this.eraFor(hit.state);
+    const slot = this.ensure(era, hit.time, hit.tempo);
+    slot.engine.trigger(hit, true);
+    for (const other of this.slots) {
+      if (other === slot) continue;
+      if (this.levelAt(other, hit.time) > 0.04) other.engine.trigger(hit, false);
+    }
+    this.prune(hit.time);
+  }
+
+  fadeOutput(to: number, time: number, seconds: number) {
+    const param = this.output.gain;
+    param.cancelScheduledValues(time);
+    let start = time;
+    if (this.outLastSet >= 0 && Math.abs(start - this.outLastSet) < 0.5 / this.sampleRate) {
+      start = this.outLastSet + 1 / this.sampleRate;
+    }
+    const from = Math.max(SILENT, this.outputLevel(start));
+    const dest = Math.max(SILENT, to);
+    const end = start + Math.max(seconds, 1 / this.sampleRate);
+    param.setValueAtTime(from, start);
+    param.linearRampToValueAtTime(dest, end);
+    this.outLastSet = start;
+    this.outRamp = { t0: start, t1: end, from, to: dest };
+  }
+
+  private eraFor(state: SequencerState): Era {
+    return this.eraId ? eraById(this.eraId) : eraOf(epochOf(state));
+  }
+
+  private levelAt(slot: Slot, time: number): number {
+    const { t0, t1, from, to } = slot.ramp;
+    if (time <= t0 || t1 <= t0) return time <= t0 ? from : to;
+    if (time >= t1) return to;
+    const u = (time - t0) / (t1 - t0);
+    return from + (to - from) * u;
+  }
+
+  private outputLevel(time: number): number {
+    const { t0, t1, from, to } = this.outRamp;
+    if (time <= t0 || t1 <= t0) return time <= t0 ? from : to;
+    if (time >= t1) return to;
+    const u = (time - t0) / (t1 - t0);
+    return from + (to - from) * u;
+  }
+
+  private ramp(slot: Slot, t0: number, to: number, dur: number) {
+    const param = slot.gain.gain;
+    param.cancelScheduledValues(t0);
+    let start = t0;
+    if (slot.lastSet >= 0 && Math.abs(start - slot.lastSet) < 0.5 / this.sampleRate) {
+      start = slot.lastSet + 1 / this.sampleRate;
+    }
+    const from = Math.max(SILENT, this.levelAt(slot, start));
+    const dest = Math.max(SILENT, to);
+    const end = start + Math.max(dur, 1 / this.sampleRate);
+    param.setValueAtTime(from, start);
+    param.linearRampToValueAtTime(dest, end);
+    // A faded-out genre is muted to exactly 0, not left at -80 dB. Its graph keeps running: when its delays and
+    // filters finish their tails, Chromium disables them at a moment that depends on the main thread, which moved
+    // offline renders by a few ULP. Times 0, that cannot reach the mix.
+    if (dest <= SILENT) param.setValueAtTime(0, end);
+    slot.lastSet = start;
+    slot.ramp = { t0: start, t1: end, from, to: dest };
+  }
+
+  private create(era: Era, time: number, level: number, schedule: boolean): Slot {
+    const engine = new VoiceEngine(this.ctx, era.index);
+    const gain = this.ctx.createGain();
+    stereo(gain);
+    const held = Math.max(SILENT, level);
+    if (schedule) gain.gain.setValueAtTime(held, Math.max(0, time));
+    else gain.gain.value = held;
+    engine.connect(gain);
+    this.mix.add(gain);
+    const slot: Slot = {
+      era,
+      engine,
+      gain,
+      ramp: { t0: time, t1: time, from: held, to: held },
+      lastSet: schedule ? Math.max(0, time) : -1,
+    };
+    this.slots.push(slot);
+    return slot;
+  }
+
+  private ensure(era: Era, time: number, bpm: number): Slot {
+    if (this.incoming && this.incoming.era.index === era.index) return this.incoming;
+    if (!this.incoming) {
+      const slot = this.create(era, time, 1, true);
+      this.incoming = slot;
+      return slot;
+    }
+    const next = this.create(era, time, SILENT, false);
+    const fade = crossfadeSeconds(bpm);
+    this.ramp(this.incoming, time, SILENT, fade);
+    this.ramp(next, time, 1, fade);
+    this.incoming = next;
+    return next;
+  }
+
+  /** Drop live engines after their fade and tails. Offline graphs stay put so the render stays identical. */
+  private prune(time: number) {
+    if (!this.live || this.slots.length < 8) return;
+    for (let i = this.slots.length - 1; i >= 0; i--) {
+      const slot = this.slots[i];
+      if (slot === this.incoming) continue;
+      if (time < slot.ramp.t1 + 2) continue;
+      if (this.levelAt(slot, time) > 0.02) continue;
+      slot.gain.disconnect();
+      this.slots.splice(i, 1);
+    }
+  }
+}
+
+/**
+ * Live scheduler. `setState` and `setEraOverride` apply on the next step that
+ * has not been scheduled yet, and neither rebuilds a playing graph.
+ */
+export function createLivePlayer(ctx: AudioContext): LivePlayer {
+  const rig = new EraRig(ctx, null, true);
+  rig.connect(ctx.destination);
+
+  let committed: SequencerState | null = null;
+  let pending: SequencerState | null = null;
+  let running = false;
+  let timer = 0;
+  let nextGrid = 0;
+  let stepIndex = 0;
+  let clockSec: number | null = null;
+  let pendingDrop: DropCue | null = null;
+  let trackHold: SequencerState | null = null;
+  let formShift = 0;
+  let idleMem: IdleMemory = freshIdleMemory();
+  const scheduled: Scheduled[] = [];
+  const listeners = new Set<(event: StepListenerEvent) => void>();
+
+  function arm(time: number) {
+    if (!committed) return;
+    let state = pending ?? committed;
+    if (pending) {
+      committed = pending;
+      pending = null;
+    }
+    const step = stepIndex % 16;
+    let trackDrop: true | undefined;
+    if (trackHold) {
+      if (step === 0) {
+        trackDrop = true;
+        trackHold = null;
+        formShift = (((16 - Math.floor(stepIndex / 16)) % FORM_BARS) + FORM_BARS) % FORM_BARS;
+      } else {
+        state = trackHold;
+      }
+    }
+    const { tempo, duration } = genreStep(state, rig.override);
+    const character = stepCharacter(state.patternId, step, rig.override);
+    const nowSec = clockSec != null ? clockSec : Date.now() / 1000;
+    const idleStep = advanceIdle(idleMem, state, nowSec, step);
+    idleMem = idleStep.mem;
+    let drop: StepHit["drop"];
+    if (pendingDrop && (!pendingDrop.fill || step % 4 === 0)) {
+      drop = { ...pendingDrop, land: true };
+      pendingDrop = null;
+    }
+    let when = nextGrid;
+    if (step % 2 === 1) when += (character.swing - 0.5) * duration;
+    when += character.micro;
+    if (when < time + 0.005) when = time + 0.005;
+    const hit: StepHit = {
+      gridTime: nextGrid,
+      time: when,
+      step,
+      bar: Math.floor(stepIndex / 16) + formShift,
+      duration,
+      tempo,
+      state,
+      nowSec,
+      idle: idleStep.idle,
+      recover: idleStep.recover || undefined,
+      drop,
+      ...(trackDrop ? { trackDrop } : {}),
+      ...character,
+    };
+    rig.play(hit);
+    scheduled.push({ gridTime: nextGrid, index: stepIndex, bar: hit.bar, duration, tempo, state });
+    while (scheduled.length > 32) scheduled.shift();
+    for (const listener of listeners) listener({ step, time: when, state });
+    nextGrid += duration;
+    stepIndex += 1;
+  }
+
+  function tick() {
+    if (!running || !committed) return;
+    const now = ctx.currentTime;
+    let guard = 0;
+    while (nextGrid < now + LOOKAHEAD_SEC && guard < 64) {
+      arm(now);
+      guard += 1;
+    }
+  }
+
+  const player: LivePlayer = {
+    setState(state) {
+      if (!running || !committed) committed = state;
+      else pending = state;
+    },
+    setEraOverride(eraId) {
+      rig.setOverride(eraId);
+    },
+    setClock(nowSec) {
+      clockSec = nowSec;
+    },
+    noteDrop(drop) {
+      if (drop) pendingDrop = drop;
+    },
+    noteTrackDrop(held) {
+      trackHold = held ?? committed ?? initialState();
+    },
+    start() {
+      if (running) return;
+      if (!committed) committed = initialState();
+      running = true;
+      stepIndex = 0;
+      formShift = 0;
+      trackHold = null;
+      idleMem = freshIdleMemory();
+      scheduled.length = 0;
+      nextGrid = ctx.currentTime + 0.05;
+      rig.fadeOutput(1, ctx.currentTime, 0.02);
+      tick();
+      timer = window.setInterval(tick, TICK_MS);
+    },
+    stop() {
+      if (!running) return;
+      running = false;
+      window.clearInterval(timer);
+      rig.fadeOutput(SILENT, ctx.currentTime, 0.03);
+    },
+    get running() {
+      return running;
+    },
+    getTransport() {
+      const fallback = committed ?? initialState();
+      if (!running) return { state: fallback, step: 0, bar: 0, phase: 0, time: 0, bpm: genreStep(fallback, rig.override).tempo };
+      const now = ctx.currentTime;
+      let current: Scheduled | null = null;
+      for (const item of scheduled) {
+        if (item.gridTime <= now) current = item;
+      }
+      if (!current) return { state: fallback, step: 0, bar: 0, phase: 0, time: now, bpm: genreStep(fallback, rig.override).tempo };
+      const phase = current.duration > 0 ? Math.min(0.999, Math.max(0, (now - current.gridTime) / current.duration)) : 0;
+      return {
+        state: current.state,
+        step: current.index % 16,
+        bar: current.bar,
+        phase,
+        time: now,
+        bpm: current.tempo,
+      };
+    },
+    getEra() {
+      const state = committed ?? pending ?? initialState();
+      return rig.describe(state, ctx.currentTime);
+    },
+    onStep(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+
+  return player;
+}
+
+const OFFLINE_RATE = 44100;
+
+export async function renderToBuffer(
+  state: SequencerState,
+  bars: number,
+  sampleRate = OFFLINE_RATE,
+  options?: RenderOptions,
+): Promise<AudioBuffer> {
+  const bpm = genreStep(state, options?.eraId).tempo;
+  const seconds = Math.max(0.05, bars * 4 * (60 / bpm));
+  return renderTimelineToBuffer([{ time: 0, state }], seconds, sampleRate, options);
+}
+
+/**
+ * Offline render of a timeline. Sample rate defaults to 44100.
+ * Same points, duration and era override produce the same buffer in a given
+ * browser: noise, metal, glitches, swing and era choice all come from the
+ * state, not Math.random.
+ */
+export async function renderTimelineToBuffer(
+  points: readonly TimelinePoint[],
+  seconds: number,
+  sampleRate = OFFLINE_RATE,
+  options?: RenderOptions,
+): Promise<AudioBuffer> {
+  if (typeof OfflineAudioContext !== "function") {
+    throw new Error("OfflineAudioContext is not available");
+  }
+  const length = Math.max(1, Math.ceil(sampleRate * Math.max(0.05, seconds)));
+  const ctx = new OfflineAudioContext({ numberOfChannels: 2, length, sampleRate });
+  const eraId = options?.eraId ?? null;
+  const rig = new EraRig(ctx, eraId, false);
+  rig.connect(ctx.destination);
+  const hits = planSteps(points, seconds, eraId, options?.barOffset ?? 0);
+  for (const hit of hits) {
+    if (hit.time < seconds) rig.play(hit);
+  }
+  return ctx.startRendering();
+}
+
+export function projectTimeline(
+  points: readonly TimelinePoint[],
+  seconds: number,
+  at: number,
+  eraId?: string | null,
+): TransportView {
+  const hits = planSteps(points, Math.max(seconds, at + 0.001), eraId);
+  const fallback = points[0]?.state ?? initialState();
+  return viewAt(hits, at, fallback);
+}

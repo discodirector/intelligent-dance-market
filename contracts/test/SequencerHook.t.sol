@@ -48,6 +48,9 @@ abstract contract SequencerHookTestBase is Test {
     bytes32 constant MUTATED =
         keccak256("Mutated(address,uint32,uint8,uint8,bool,uint8,bool,uint128,int24,uint256,uint256)");
     bytes32 constant MOVEMENT = keccak256("Movement(uint32,uint8,uint32)");
+    bytes32 constant COMPLETE = keccak256("TrackComplete(uint16,uint32,uint8,uint256,uint256,uint32,uint64)");
+    bytes32 constant ACCUMULATED = keccak256("Accumulated(uint32,uint8,uint8,bool,bool)");
+    bytes32 constant DROP = keccak256("Drop(uint32,uint8,bool,uint16)");
     PoolManager manager;
     SequencerHook hook;
     SequencerToken token;
@@ -142,12 +145,12 @@ abstract contract SequencerHookTestBase is Test {
         assertEq(hook.imd(), IMD);
         assertEq(hook.token(), address(token));
         (uint256 a, uint256 b) = hook.raw();
-        (uint256 x, uint256 y) = S.encode(S.initial());
+        (uint256 x, uint256 y) = S.encode(S.initialV2());
         assertEq(a, x);
         assertEq(b, y);
         assertEq(vm.load(address(hook), bytes32(0)), bytes32(a));
         assertEq(vm.load(address(hook), bytes32(uint256(1))), bytes32(b));
-        assertEq(abi.encode(hook.state()), abi.encode(S.initial()));
+        assertEq(abi.encode(hook.state()), abi.encode(S.initialV2()));
     }
 
     function _assertSwap(bool buy, int256 specified) internal returns (BalanceDelta d) {
@@ -164,7 +167,7 @@ abstract contract SequencerHookTestBase is Test {
         assertEq(int256(imd.balanceOf(address(this))) - int256(imdBefore), int256(imdDelta));
         uint128 amount = uint128(uint256(imdDelta < 0 ? -int256(imdDelta) : int256(imdDelta)));
         (, int24 tick,,) = IPoolManager(address(manager)).getSlot0(key.toId());
-        (S.State memory expected, S.Mutation memory m) = S.mutate(
+        (S.State memory expected, S.Mutation memory m) = S.mutateV2(
             before,
             S.Input(buy, amount, tick, uint64(block.number), uint40(block.timestamp)),
             S.Thresholds(0.5 ether, 5 ether, 25 ether, 100 ether)
@@ -175,13 +178,42 @@ abstract contract SequencerHookTestBase is Test {
         assertEq(b, y);
         uint256 mutations;
         uint256 movements;
+        uint256 drops;
+        uint256 completed;
+        uint256 accumulated;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(hook)) continue;
             if (logs[i].topics[0] == MOVEMENT) {
                 assertEq(mutations, 0);
                 ++movements;
                 assertEq(uint256(logs[i].topics[1]), m.movementPatternId);
-                assertEq(logs[i].data, abi.encode(expected.root, expected.swapCount));
+                assertEq(logs[i].data, abi.encode(m.movementRoot, expected.swapCount));
+            } else if (logs[i].topics[0] == DROP) {
+                assertEq(mutations, 0);
+                assertEq(movements, 1);
+                ++drops;
+                assertEq(uint256(logs[i].topics[1]), expected.swapCount);
+                assertEq(logs[i].data, abi.encode(m.track, buy, m.dropMask));
+            } else if (logs[i].topics[0] == ACCUMULATED) {
+                assertEq(mutations, 0);
+                ++accumulated;
+                assertEq(uint256(logs[i].topics[1]), expected.swapCount);
+                assertEq(logs[i].data, abi.encode(m.fromTrack, m.writeStep, m.promoted, m.noop));
+            } else if (logs[i].topics[0] == COMPLETE) {
+                assertEq(mutations, 0);
+                ++completed;
+                assertEq(uint256(logs[i].topics[1]), expected.trackNo);
+                assertEq(
+                    logs[i].data,
+                    abi.encode(
+                        expected.patternId,
+                        expected.root,
+                        m.snapshot0,
+                        m.snapshot1,
+                        expected.swapCount,
+                        expected.pattern
+                    )
+                );
             } else if (logs[i].topics[0] == MUTATED) {
                 ++mutations;
                 assertEq(logs[i].topics[1], bytes32(uint256(uint160(address(router)))));
@@ -191,9 +223,56 @@ abstract contract SequencerHookTestBase is Test {
         }
         assertEq(mutations, 1);
         assertEq(movements, m.whale ? 1 : 0);
+        assertEq(drops, m.whale ? 1 : 0);
+        assertEq(completed, m.completed ? 1 : 0);
+        assertEq(accumulated, !m.whale && (m.promoted || m.noop) ? 1 : 0);
         assertEq(token.balanceOf(address(hook)), 0);
         assertEq(imd.balanceOf(address(hook)), 0);
         assertEq(address(hook).balance, 0);
+    }
+
+    function _saturate(uint8 heat) internal {
+        S.State memory s = hook.state();
+        s.pattern = type(uint64).max;
+        s.bass = type(uint64).max;
+        s.heat = heat;
+        s.lastTs = uint40(block.timestamp);
+        s.swapCount = 63;
+        s.trackNo = type(uint16).max;
+        (uint256 a, uint256 b) = S.encode(s);
+        vm.store(address(hook), bytes32(0), bytes32(a));
+        vm.store(address(hook), bytes32(uint256(1)), bytes32(b));
+    }
+
+    function test_RealTrackCompleteSnapshotAndCompanionEvent() public {
+        _saturate(15);
+        _assertSwap(true, -1 ether);
+        assertEq(hook.state().trackNo, 0);
+        assertEq(hook.state().heat, 0);
+        assertEq(hook.state().patternId, 2); // page then track completion
+        assertEq(hook.state().root, 4);
+    }
+
+    function test_GasColdWorstNormal() public {
+        _saturate(14);
+        _gas(true, false, false, 40_000);
+    }
+
+    function test_GasColdScanSpill() public {
+        _saturate(14);
+        S.State memory s = hook.state();
+        uint256 step = uint256(keccak256(abi.encodePacked(uint32(64), int24(0), uint64(block.number)))) % 16;
+        // The last available hat cell in circular scan order, with every ladder rung occupied.
+        s.pattern ^= uint64(1) << (32 + ((step + 15) & 15));
+        (uint256 a, uint256 b) = S.encode(s);
+        vm.store(address(hook), bytes32(0), bytes32(a));
+        vm.store(address(hook), bytes32(uint256(1)), bytes32(b));
+        _gas(true, false, false, 40_000);
+    }
+
+    function test_GasColdTrackComplete() public {
+        _saturate(15);
+        _gas(true, false, false, 45_000);
     }
 
     function test_RealBuySellExactInput() public {
@@ -219,6 +298,30 @@ abstract contract SequencerHookTestBase is Test {
         assertEq(hook.state().patternId, 5);
     }
 
+    function test_RealWhaleBuyFillsAndWhaleSellDrops() public {
+        // Fill a known pattern, then whale buy (Euclidean fill) and whale sell (track wipe) through the real manager.
+        S.State memory s = hook.state();
+        s.pattern = type(uint64).max;
+        (uint256 a, uint256 b) = S.encode(s);
+        vm.store(address(hook), bytes32(0), bytes32(a));
+        vm.store(address(hook), bytes32(uint256(1)), bytes32(b));
+        for (uint256 i; i < 6; ++i) {
+            bool buy = i % 2 == 0;
+            S.State memory before = hook.state();
+            _assertSwap(buy, buy ? -150 ether : int256(150 ether));
+            S.State memory after_ = hook.state();
+            uint64 changed = before.pattern ^ after_.pattern;
+            // only one track's 16 bits may change
+            uint256 tracksTouched;
+            for (uint256 t; t < 4; ++t) {
+                if ((changed >> (t * 16)) & 0xffff != 0) ++tracksTouched;
+            }
+            assertLe(tracksTouched, 1);
+            vm.warp(block.timestamp + 12);
+            vm.roll(block.number + 1);
+        }
+    }
+
     function test_RealCountWrapDoesNotBlockSwaps() public {
         S.State memory s = hook.state();
         s.swapCount = type(uint32).max;
@@ -241,7 +344,7 @@ abstract contract SequencerHookTestBase is Test {
         assertLt(amount, 1e25);
         (, int24 tick,,) = IPoolManager(address(manager)).getSlot0(key.toId());
         assertTrue(tick != 0);
-        (S.State memory expected,) = S.mutate(
+        (S.State memory expected,) = S.mutateV2(
             before,
             S.Input(true, amount, tick, uint64(block.number), uint40(block.timestamp)),
             S.Thresholds(0.5 ether, 5 ether, 25 ether, 100 ether)
@@ -256,7 +359,7 @@ abstract contract SequencerHookTestBase is Test {
         assertEq(s.patternId, 1);
         assertEq(s.root, 9);
         assertEq(s.intervalEma, 0);
-        assertEq(s.bpm, 170);
+        assertEq(s.bpm, 118);
         assertEq(token.balanceOf(address(hook)), 0);
         assertEq(imd.balanceOf(address(hook)), 0);
     }
@@ -391,11 +494,13 @@ abstract contract SequencerHookTestBase is Test {
         s.intervalEma = 0;
         s.pressure = 0;
         s.lastTick = 0;
+        // Default v2 initialization keeps sizeLogEma nonzero; this is deliberately synthetic.
+        s.sizeLogEma = 0;
         (uint256 a, uint256 b) = S.encode(s);
         assertEq(b, 0);
         vm.store(address(hook), bytes32(0), bytes32(a));
         vm.store(address(hook), bytes32(uint256(1)), bytes32(b));
-        _gas(true, false, false, 50_000);
+        _gas(true, false, false, 52_000);
     }
 
     function test_GasColdFirstBuy() public {
@@ -403,19 +508,24 @@ abstract contract SequencerHookTestBase is Test {
     }
 
     function test_GasColdFirstSell() public {
-        _gas(false, false, false, 35_000);
+        _gas(false, false, false, 40_000);
     }
 
+    // Whale path budget (SPEC §3.3.8 drop/fill): <= 45k.
     function test_GasColdWhale() public {
-        _gas(true, true, false, 35_000);
+        _gas(true, true, false, 45_000);
+    }
+
+    function test_GasColdWhaleSell() public {
+        _gas(false, true, false, 45_000);
     }
 
     function test_GasColdWhaleBuyPage64() public {
-        _gas(true, true, true, 35_000);
+        _gas(true, true, true, 45_000);
     }
 
     function test_GasColdWhalePage64() public {
-        _gas(false, true, true, 35_000);
+        _gas(false, true, true, 45_000);
     }
 }
 

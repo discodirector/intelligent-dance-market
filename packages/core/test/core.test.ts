@@ -10,6 +10,8 @@ import {
   modeFor,
   bassAt,
   isOn,
+  euclidMask,
+  stepHash as hashOf,
   type State,
 } from "../src/index.ts";
 
@@ -20,7 +22,7 @@ suite("encode/decode", () => {
   it("initial state packs per SPEC §3.2", () => {
     const { slot0, slot1 } = encode(initialState());
     expect(slot0 & ((1n << 64n) - 1n)).toBe(0x10100101n);
-    expect((slot0 >> 200n) & 0xffffn).toBe(128n);
+    expect((slot0 >> 200n) & 0xffffn).toBe(96n);
     expect((slot0 >> 216n) & 0xffn).toBe(9n);
     expect((slot1 >> 88n) & 0xffffffffn).toBe(600n);
   });
@@ -90,7 +92,7 @@ suite("mutate", () => {
     expect(bassAt(state.bass, event.step)).toBe(1 + (10 % 15));
     expect(event.bassNote).toBe(11);
     expect(state.intervalEma).toBe(600);
-    expect(state.bpm).toBe(170 - Math.floor((600 * 80) / 3600));
+    expect(state.bpm).toBe(118 - Math.floor((600 * 46) / 900));
     expect(state.pressure).toBe(1000);
     expect(state.mode).toBe(0);
     expect(state.lastTs).toBe(base.timestamp);
@@ -114,12 +116,12 @@ suite("mutate", () => {
   });
 
   it("dt caps at EMA_CAP and bpm stays within bounds", () => {
-    let s: State = { ...initialState(), swapCount: 5, lastTs: 1000, intervalEma: 3600 };
+    let s: State = { ...initialState(), swapCount: 5, lastTs: 1000, intervalEma: 900 };
     const r = mutate(s, { isBuy: true, imdAmt: 1n, tick: 0, blockNumber: 1, timestamp: 10_000_000 });
-    expect(r.state.intervalEma).toBe(3600);
-    expect(r.state.bpm).toBe(90);
+    expect(r.state.intervalEma).toBe(900);
+    expect(r.state.bpm).toBe(72);
     s = { ...initialState(), swapCount: 5, lastTs: 1000, intervalEma: 0 };
-    expect(mutate(s, { isBuy: true, imdAmt: 1n, tick: 0, blockNumber: 1, timestamp: 1000 }).state.bpm).toBe(170);
+    expect(mutate(s, { isBuy: true, imdAmt: 1n, tick: 0, blockNumber: 1, timestamp: 1000 }).state.bpm).toBe(118);
   });
 
   it("first swap is swapCount==0 regardless of lastTs; backwards clock gives dt=0", () => {
@@ -143,6 +145,59 @@ suite("mutate", () => {
     expect(r.state.root).toBe((9 + 7) % 12);
     expect(r.state.patternId).toBe(1);
     expect(r.event.movement).toEqual({ patternId: 1, root: 4, swapCount: 1 });
+  });
+
+  // SPEC §3.3.8 whale drop / fill
+  const popcount = (m: number) => m.toString(2).split("1").length - 1;
+  const loopEuclid = (k: number, rot: number) => {
+    let m = 0;
+    for (let i = 0; i < 16; i++) if ((i * k) % 16 < k) m |= 1 << ((i + rot) % 16);
+    return m;
+  };
+  const findCount = (pred: (h: bigint) => boolean) => {
+    for (let c = 1; c < 50_000; c++) if (pred(hashOf(c, 0, base.blockNumber))) return c;
+    throw new Error("no hash");
+  };
+  const full = (c: number): State => ({ ...initialState(), swapCount: c - 1, pattern: (1n << 64n) - 1n });
+
+  it("euclidMask matches the SPEC loop for every k and rotation, with exactly k hits", () => {
+    for (let k = 3; k <= 8; k++)
+      for (let rot = 0; rot < 16; rot++) {
+        expect(euclidMask(k, rot)).toBe(loopEuclid(k, rot));
+        expect(popcount(euclidMask(k, rot))).toBe(k);
+      }
+  });
+
+  it("whale sell wipes dropTrack (incl. kick) and nothing else", () => {
+    for (let t = 0; t < 4; t++) {
+      const c = findCount((h) => Number((h >> 16n) % 4n) === t);
+      const { state, event } = mutate(full(c), { isBuy: false, imdAmt: 150n * E18, tick: 0, ...base });
+      expect(event.track).toBe(t);
+      expect(event.drop).toEqual({ track: t, fill: false, mask: 0 });
+      expect((state.pattern >> BigInt(t * 16)) & 0xffffn).toBe(0n);
+      expect(state.pattern | (0xffffn << BigInt(t * 16))).toBe((1n << 64n) - 1n);
+      expect(event.step).toBe(Number(hashOf(c, 0, base.blockNumber) % 16n));
+    }
+  });
+
+  it("whale buy writes a rotated Euclidean fill for every k", () => {
+    for (let k = 3; k <= 8; k++) {
+      const c = findCount((h) => 3 + Number((h >> 24n) % 6n) === k);
+      const h = hashOf(c, 0, base.blockNumber);
+      const { state, event } = mutate(full(c), { isBuy: true, imdAmt: 100n * E18, tick: 0, ...base });
+      const mask = loopEuclid(k, Number((h >> 32n) % 16n));
+      expect(event.drop).toEqual({ track: event.track, fill: true, mask });
+      expect(Number((state.pattern >> BigInt(event.track * 16)) & 0xffffn)).toBe(mask);
+      expect(event.movement).toBeDefined();
+    }
+  });
+
+  it("non-whale swaps change at most one drum bit and carry no drop", () => {
+    const s = full(5);
+    const r = mutate(s, { isBuy: false, imdAmt: 99n * E18, tick: 0, ...base });
+    expect(r.event.drop).toBeUndefined();
+    const diff = s.pattern ^ r.state.pattern;
+    expect(diff & (diff - 1n)).toBe(0n);
   });
 
   it("page turns every 64 swaps", () => {

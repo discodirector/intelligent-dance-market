@@ -1,11 +1,12 @@
 // bot/replay: real IMD pool swaps on Ethereum mainnet -> core.mutate -> timeline.json
-//   tsx src/replay/index.ts [--days 7] [--pools main|eth|<id,id>] [--out out/timeline.json]
+//   tsx src/replay/index.ts [--days 7] [--pools main|eth|<id,id>] [--out out/timeline.json] [--rules v1|v2]
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { parseAbiItem, getAddress } from "viem";
 import { getLogsChunked, makeClients, withRetry } from "./rpc.ts";
 import { IMD_TOKEN, MAIN_POOL_ID, POOL_MANAGER, V4_DEPLOY_BLOCK, type PoolKeyInfo } from "./pools.ts";
 import { buildTimeline, type RawSwap, type TimelineMeta } from "../lib/timeline.ts";
+import { isHookRules, replayRulesFromEnv, type HookRules } from "../lib/hookRules.ts";
 
 const SWAP = parseAbiItem(
   "event Swap(bytes32 indexed id, address indexed sender, int128 amount0, int128 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick, uint24 fee)",
@@ -91,7 +92,8 @@ export async function fetchSwaps(opts: FetchOpts) {
   return { swaps, head: Number(head), fromBlock: Number(fromBlock) };
 }
 
-export async function replay(opts: { days: number; pools: string; out: string }) {
+export async function replay(opts: { days: number; pools: string; out: string; rules?: HookRules }) {
+  const rules = opts.rules ?? replayRulesFromEnv();
   let poolIds: `0x${string}`[];
   const imdIsCurrency1: Record<string, boolean> = {};
   if (opts.pools === "main") poolIds = [MAIN_POOL_ID];
@@ -103,9 +105,10 @@ export async function replay(opts: { days: number; pools: string; out: string })
   } else poolIds = opts.pools.split(",") as `0x${string}`[];
 
   const { swaps, head, fromBlock } = await fetchSwaps({ days: opts.days, poolIds, imdIsCurrency1 });
-  const { entries, initial } = buildTimeline(swaps);
+  const { entries, initial } = buildTimeline(swaps, undefined, rules);
   const meta: TimelineMeta = {
     version: 1,
+    ...(rules === "v1" ? {} : { rules }),
     chainId: 1,
     source: `uniswap-v4 PoolManager Swap logs, last ${opts.days}d`,
     poolManager: getAddress(POOL_MANAGER),
@@ -128,5 +131,7 @@ export async function replay(opts: { days: number; pools: string; out: string })
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  await replay({ days: Number(arg("days", "7")), pools: arg("pools", "main")!, out: arg("out", "out/timeline.json")! });
+  const r = arg("rules");
+  if (r != null && !isHookRules(r)) throw new Error(`--rules must be v1 or v2`);
+  await replay({ days: Number(arg("days", "7")), pools: arg("pools", "main")!, out: arg("out", "out/timeline.json")!, rules: r });
 }

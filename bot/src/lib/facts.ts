@@ -3,7 +3,7 @@ import { MODE_NAMES, NOTE_NAMES, TRACK_NAMES } from "@swarm-sequencer/core";
 import type { TimelineEntry } from "./timeline.ts";
 
 export interface Facts {
-  kind: "teaser" | "snapshot" | "movement";
+  kind: "teaser" | "snapshot" | "movement" | "track";
   project: string;
   chain: string;
   pool: string;
@@ -22,6 +22,11 @@ export interface Facts {
   page: number;
   videoSeconds?: number;
   hook?: string;
+  /** Hook rules the state follows; absent = v1. */
+  rules?: "v2";
+  /** v2: tracks finished in the window, and the latest one (kind "track" posts about it). */
+  tracksCompleted?: number;
+  track?: { no: number; swaps?: number; swapCount: number; page: number; key: string };
 }
 
 const key = (root: number, mode: number) => `${NOTE_NAMES[root % 12]} ${MODE_NAMES[mode] ?? "?"}`;
@@ -36,6 +41,9 @@ export function factsFromTimeline(
   const counts = [0, 0, 0, 0];
   for (const e of entries) counts[e.track]++;
   const bpms = entries.map((e) => e.state.bpm);
+  const done = entries.filter((e) => e.trackComplete);
+  const tc = done.at(-1)?.trackComplete;
+  const v2 = entries.some((e) => e.rules === "v2");
   return {
     kind: o.kind,
     project: o.project ?? "Intelligent Dance Market",
@@ -56,5 +64,7 @@ export function factsFromTimeline(
     page: last.state.patternId,
     videoSeconds: o.videoSeconds,
     hook: o.hook,
+    ...(v2 ? { rules: "v2" as const, tracksCompleted: done.length } : {}),
+    ...(tc ? { track: { no: tc.trackNo, swaps: tc.swaps, swapCount: tc.swapCount, page: tc.patternId, key: key(tc.root, done.at(-1)!.state.mode) } } : {}),
   };
 }

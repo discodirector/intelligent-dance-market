@@ -1,0 +1,203 @@
+[sim] sepolia hook 0x26D6A29c1B1457c0CD36a5A0c1be2eD7a510F040 pool 0x4c9fdcff902e50f32d10cc4299f7f0fcb4bbf7f5b50f0cc1008e70051798648f
+[sim] wallet 0xd5450C26017f25E1EfB49996CE4cE59447328BaB · 0.049241406747277867 ETH
+[sim] profile smoke · 66 swaps · seed 2026
+[sim] start: bpm 92 · A Dorian · swap #2 · page #0 · pressure 62
+#  1 calm    buy     0.29 IMD  0xcd69c3e69714bdaa3c4bf438c01569bc8b272a4e122de665012c557a3f63e8e8
+      Mutated swap #3 hat[15] on bass 12 tick -69071
+      bpm 95 · A Dorian · swap #3 · page #0 · pressure 1059  parity: MATCH
+#  2 calm    sell    0.82 IMD  0xf6f6a2ed281d0ac523344e4837148d000269c067817f0fe730b819c69f9ba3b8
+      Mutated swap #4 glitch[11] off bass 0 tick -69071
+      bpm 98 · A Phrygian · swap #4 · page #0 · pressure -7  parity: MATCH
+#  3 calm    buy     0.21 IMD  0x2b0fd4b5857f52b0071e93eb1c8bfd921648434a3907aceb0772291eff6112c6
+      Mutated swap #5 hat[12] on bass 12 tick -69071
+      bpm 100 · A Dorian · swap #5 · page #0 · pressure 993  parity: MATCH
+#  4 calm    sell    1.53 IMD  0xa0a3985c5822252d54097f296923462dd27812e418df144c173d7bf27abaacf7
+      Mutated swap #6 glitch[6] off bass 0 tick -69071
+      bpm 102 · A Phrygian · swap #6 · page #0 · pressure -69  parity: MATCH
+#  5 calm    buy     0.12 IMD  0x6a7cac959c5be734933c6c575df8fa92f915ff208c37b77ac7111827ff6a165a
+      Mutated swap #7 hat[8] on bass 12 tick -69071
+      bpm 104 · A Dorian · swap #7 · page #0 · pressure 935  parity: MATCH
+#  6 calm    buy     0.82 IMD  0x221cea2425f917eb491609d320a0bd481fa1d979ba387cabe318022a57d4b0f3
+      Mutated swap #8 glitch[9] on bass 12 tick -69071
+      bpm 106 · A Dorian · swap #8 · page #0 · pressure 1877  parity: MATCH
+#  7 busy    sell    3.82 IMD  0xf6b34b3da47b8cd6be0c1c33198ebfb446766c2647b7ce4059255cd5827d6408
+      Mutated swap #9 glitch[14] off bass 0 tick -69072
+      bpm 107 · A Dorian · swap #9 · page #0 · pressure 760  parity: MATCH
+#  8 busy    buy      2.1 IMD  0xe2daec6fb254c050a9c769eb6e809e3902a40ce676bb23280a92e9419850238f
+      Mutated swap #10 glitch[7] on bass 12 tick -69071
+      bpm 108 · A Dorian · swap #10 · page #0 · pressure 1713  parity: MATCH
+#  9 busy    buy     2.41 IMD  0x1bb39ccfef2e1311b27062c45fd71556af5d255946c56a6101e276f6783bc646
+      Mutated swap #11 glitch[5] on bass 12 tick -69071
+      bpm 109 · A Dorian · swap #11 · page #0 · pressure 2606  parity: MATCH
+# 10 busy    sell    7.92 IMD  0x59205cc2f83cfd69ce5a5446ec97438d713de0293f56cd59ab24946d3997a518
+      Mutated swap #12 snare[7] off bass 0 tick -69073
+      bpm 111 · A Dorian · swap #12 · page #0 · pressure 1444  parity: MATCH
+# 11 busy    sell    8.78 IMD  0xe7f04e423abcc384c3b0565eb449e52e7401b37f2203ab7d52b6368899acf72f
+      Mutated swap #13 snare[0] off bass 0 tick -69074
+      bpm 111 · A Dorian · swap #13 · page #0 · pressure 354  parity: MATCH
+# 12 busy    sell    1.93 IMD  0x813d9c68405a6a311034b3253ef98df6f8973b6b2045b43873c445ec61729875
+      Mutated swap #14 glitch[1] off bass 0 tick -69075
+      bpm 112 · A Phrygian · swap #14 · page #0 · pressure -668  parity: MATCH
+# 13 busy    buy      8.7 IMD  0xc278198089bf66b5d8f16a558f473d8db57b30aa193af62d4e7d31862a192484
+      Mutated swap #15 snare[3] on bass 12 tick -69073
+      bpm 113 · A Dorian · swap #15 · page #0 · pressure 373  parity: MATCH
+# 14 busy    sell   10.16 IMD  0xff12479b4e926c32c5d5115c55dfa15d266afd5331388273c15e0f9eb6ef630f
+      Mutated swap #16 snare[14] off bass 0 tick -69075
+      bpm 114 · A Phrygian · swap #16 · page #0 · pressure -650  parity: MATCH
+# 15 busy    sell    2.61 IMD  0x28ddd9bd74dd3e0184e302b81389a835956aceab3c957054f4636989d0fc774b
+      Mutated swap #17 glitch[11] off bass 0 tick -69076
+      bpm 114 · A Phrygian · swap #17 · page #0 · pressure -1610  parity: MATCH
+# 16 busy    sell     0.8 IMD  0xbdcc72417e43f9866dcd979ab61e473a18cd3ac27b54f46cee30e052cf476515
+      Mutated swap #18 glitch[15] off bass 0 tick -69076
+      bpm 115 · A Phrygian · swap #18 · page #0 · pressure -2510  parity: MATCH
+# 17 busy    buy     6.49 IMD  0x7f428a4e8a968ca15861fc8a6093ceb10dcef2f2a4c4094272373e37fa31e152
+      Mutated swap #19 snare[9] on bass 12 tick -69074
+      bpm 115 · A Phrygian · swap #19 · page #0 · pressure -1354  parity: MATCH
+# 18 busy    buy     8.08 IMD  0x8b56182f62c558554bc74ef299cac0d2659ecc1e659444a77b364c1be0e80f50
+      Mutated swap #20 snare[5] on bass 12 tick -69073
+      bpm 115 · A Phrygian · swap #20 · page #0 · pressure -270  parity: MATCH
+# 19 busy    buy      0.6 IMD  0x8166c015785677054932c09676e081a09b901cdbdea2b52703ab659bcbab62ef
+      Mutated swap #21 glitch[1] on bass 12 tick -69073
+      bpm 116 · A Dorian · swap #21 · page #0 · pressure 746  parity: MATCH
+# 20 busy    buy     0.43 IMD  0xa6df5dd0d707c44f5cb252bba548fa715e45895409ce0edc1a4bdffdfbe3230e
+      Mutated swap #22 hat[6] on bass 12 tick -69073
+      bpm 116 · A Dorian · swap #22 · page #0 · pressure 1700  parity: MATCH
+# 21 busy    buy     0.25 IMD  0x5352158b241d279d830398d84fbebcac3f56615d26ca14b216db6e11314676b4
+      Mutated swap #23 hat[14] on bass 12 tick -69073
+      bpm 116 · A Dorian · swap #23 · page #0 · pressure 2594  parity: MATCH
+# 22 busy    sell    2.12 IMD  0x4e3cf2e0e3b8f340c122bd419625e12aa17b15b3b0e11b77a44292cf23a5b3e9
+      Mutated swap #24 glitch[6] off bass 0 tick -69073
+      bpm 116 · A Dorian · swap #24 · page #0 · pressure 1432  parity: MATCH
+# 23 whale   buy   442.79 IMD  0x42fa9c2f6dbd6a466279d982cddb7c9b482a202f59d1915330cffb21327bdd05
+      Mutated swap #25 kick[1] on bass 10 tick -68986  MOVEMENT root→E page #1
+      bpm 117 · E Dorian · swap #25 · page #1 · pressure 2343  parity: MATCH
+# 24 whale   buy     1.83 IMD  0x0e0fffd650591ef522a8ac6ce1e90f991c940deda2fd3f21f4aeb0fd49302aed
+      Mutated swap #26 glitch[6] on bass 10 tick -68985
+      bpm 117 · E Dorian · swap #26 · page #1 · pressure 3197  parity: MATCH
+# 25 whale   buy   432.14 IMD  0x58e3b27542d883b3d61a68f17eeb94785c4aa82cf970487b91c712be38b22f97
+      Mutated swap #27 kick[9] on bass 9 tick -68901  MOVEMENT root→B page #2
+      bpm 117 · B Dorian · swap #27 · page #2 · pressure 3998  parity: MATCH
+# 26 whale   buy     0.95 IMD  0x23f8a54b783a3e56a8e8095aa12900b7dd57642745bf4a5be2fbbf5590715bb4
+      Mutated swap #28 glitch[0] on bass 9 tick -68900
+      bpm 117 · B Dorian · swap #28 · page #2 · pressure 4749  parity: MATCH
+# 27 whale   sell  126.48 IMD  0xd0a7d02d0ecd9d256f5073ef65e710759798c717a24a4ec6f6eaef08d66e7b5e
+      Mutated swap #29 kick[11] off bass 0 tick -68926  MOVEMENT root→F# page #3
+      bpm 117 · F# Dorian · swap #29 · page #3 · pressure 3453  parity: MATCH
+# 28 whale   sell    13.8 IMD  0x3e1b1ee7e5d516569d0cd2abb1fa7875a5e3d0f69c354745a3144206a30ea2ea
+      Mutated swap #30 snare[5] off bass 0 tick -68928
+      bpm 117 · F# Dorian · swap #30 · page #3 · pressure 2238  parity: MATCH
+# 29 whale   buy   283.46 IMD  0x0a798d96dcdca48f757664fb6399d9689348ab59b7400fb8c4a3a975d28ae990
+      Mutated swap #31 kick[1] on bass 8 tick -68873  MOVEMENT root→C# page #4
+      bpm 117 · C# Dorian · swap #31 · page #4 · pressure 3099  parity: MATCH
+# 30 whale   buy       12 IMD  0x1b6bd48fec69d132bc9378fc0070543b01b79a870ac81516db74beb3475dd70c
+      Mutated swap #32 snare[1] on bass 8 tick -68870
+      bpm 118 · C# Dorian · swap #32 · page #4 · pressure 3906  parity: MATCH
+# 31 selloff sell   74.56 IMD  0xb94bef36d2cf9cb0398c95c0e7c13b8691c753f380487cf2a5be2fc43982f39a
+      Mutated swap #33 kick[1] off bass 0 tick -68885
+      bpm 118 · C# Dorian · swap #33 · page #4 · pressure 2662  parity: MATCH
+# 32 selloff buy       15 IMD  0x5505a899aa65ce2d0720495a98c9eb3ee7467864e07caa311e0de37cc69c9914
+      Mutated swap #34 snare[1] on bass 9 tick -68882
+      bpm 118 · C# Dorian · swap #34 · page #4 · pressure 3496  parity: MATCH
+# 33 selloff sell   43.34 IMD  0x8b435ad4b945cca6871a814b23309ec658d5a638d4991b16c7a8ad9ee6c09821
+      Mutated swap #35 kick[11] off bass 0 tick -68891
+      bpm 118 · C# Dorian · swap #35 · page #4 · pressure 2278  parity: MATCH
+# 34 selloff buy    79.29 IMD  0xbe7931895114f7a7a05a007c367de4196c8a1e4ecee65cc9fd101c3f23f7264f
+      Mutated swap #36 kick[7] on bass 8 tick -68875
+      bpm 118 · C# Dorian · swap #36 · page #4 · pressure 3136  parity: MATCH
+# 35 selloff sell     8.2 IMD  0x482903aed9e574c53f32f633cc64cfe1ad6946dfe5a59e1236fd1de361ca9f43
+      Mutated swap #37 snare[13] off bass 0 tick -68877
+      bpm 118 · C# Dorian · swap #37 · page #4 · pressure 1940  parity: MATCH
+# 36 selloff sell    40.3 IMD  0x5ca02027c421adbc48fd22a80b9bc8d942e6e95ef3055e523c98e7557b8c2298
+      Mutated swap #38 kick[4] off bass 0 tick -68885
+      bpm 118 · C# Dorian · swap #38 · page #4 · pressure 819  parity: MATCH
+# 37 selloff sell    4.12 IMD  0x2836fa025f77004996a524e7e3d710cd6b189463073eab478ff1ccdd1323092b
+      Mutated swap #39 glitch[11] off bass 0 tick -68886
+      bpm 118 · C# Phrygian · swap #39 · page #4 · pressure -232  parity: MATCH
+# 38 selloff sell   44.95 IMD  0x0005f14d8248592de777cab71762909ce9e4c9834858e7f36237e02de5457348
+      Mutated swap #40 kick[4] off bass 0 tick -68895
+      bpm 118 · C# Phrygian · swap #40 · page #4 · pressure -1218  parity: MATCH
+# 39 selloff sell    8.74 IMD  0x5e483b208339c552ad518859b9b0cf5f4b7b4f9e6f904213b34a13f12921bbab
+      Mutated swap #41 snare[14] off bass 0 tick -68896
+      bpm 118 · C# Phrygian · swap #41 · page #4 · pressure -2142  parity: MATCH
+# 40 selloff sell   38.85 IMD  0x24a9094371bca8776910218e67cfa290e78ee529fee74faebf6548b94b632c90
+      Mutated swap #42 kick[1] off bass 9 tick -68904
+      bpm 118 · C# Phrygian · swap #42 · page #4 · pressure -3009  parity: MATCH
+# 41 selloff sell     3.5 IMD  0x101b90376f7f3875f017d04303ddeb008668fb2e4508e4757ca77c1cefd1721a
+      Mutated swap #43 glitch[14] off bass 0 tick -68905
+      bpm 118 · C# Phrygian · swap #43 · page #4 · pressure -3821  parity: MATCH
+# 42 selloff sell    5.72 IMD  0xcb2f31b30c3d40acf7582c1515c387cca429cfc7e3faea23f74742d43b147140
+      Mutated swap #44 snare[5] off bass 0 tick -68906
+      bpm 118 · C# Phrygian · swap #44 · page #4 · pressure -4583  parity: MATCH
+# 43 selloff sell   65.74 IMD  0x8156745765f64ad6b80c59f90b18f7c1ee0f5c46e1d35be1f42943b790367cb4
+      Mutated swap #45 kick[5] off bass 0 tick -68919
+      bpm 118 · C# Phrygian · swap #45 · page #4 · pressure -5297  parity: MATCH
+# 44 selloff sell   32.11 IMD  0x52a82cbd734cf5942139c4a98d06dd6cc954a6df7750d39727b612ae42e3fb96
+      Mutated swap #46 kick[9] off bass 0 tick -68925
+      bpm 118 · C# Phrygian · swap #46 · page #4 · pressure -5966  parity: MATCH
+# 45 random  sell   11.84 IMD  0x8f2ff4cd020cf3f73ebda378ad61f4fff56a954a746dfb4f897dec3a46634892
+      Mutated swap #47 snare[5] off bass 0 tick -68928
+      bpm 118 · C# Phrygian · swap #47 · page #4 · pressure -6594  parity: MATCH
+# 46 random  buy    63.01 IMD  0x29c70ecc44b5fbcd42b2554b0987026b1b775cea52bf30586e4bb06fb370f731
+      Mutated swap #48 kick[2] on bass 9 tick -68915
+      bpm 118 · C# Phrygian · swap #48 · page #4 · pressure -5182  parity: MATCH
+# 47 random  buy    52.41 IMD  0xe3ebf37773e920dd654477d6bcac942557065cb099b5d6a0860a4d4a75887492
+      Mutated swap #49 kick[2] on bass 9 tick -68905
+      bpm 118 · C# Phrygian · swap #49 · page #4 · pressure -3859  parity: MATCH
+# 48 random  buy     3.46 IMD  0xbc95c6dfce2391c8ab181eda44f7b666cf815896881f93b5e8a061c8fa040602
+      Mutated swap #50 glitch[13] on bass 9 tick -68904
+      bpm 118 · C# Phrygian · swap #50 · page #4 · pressure -2618  parity: MATCH
+# 49 random  sell     1.1 IMD  0x73454b3d6415d3316183fc950eaf8d109405155a9aba3cc260876d5669eb66fe
+      Mutated swap #51 glitch[3] off bass 12 tick -68905
+      bpm 118 · C# Phrygian · swap #51 · page #4 · pressure -3455  parity: MATCH
+# 50 random  sell   14.61 IMD  0x9ee51e2eda07e19db3f216ec6598e000aa88e1908a4588389028f52384ea24d4
+      Mutated swap #52 snare[12] off bass 0 tick -68908
+      bpm 118 · C# Phrygian · swap #52 · page #4 · pressure -4240  parity: MATCH
+# 51 random  buy   228.37 IMD  0x544ad81063426645fc49e0b362558265829f3390e446af62e0d007caf3f7dc21
+      Mutated swap #53 kick[4] on bass 8 tick -68863  MOVEMENT root→G# page #5
+      bpm 118 · G# Phrygian · swap #53 · page #5 · pressure -2975  parity: MATCH
+# 52 random  sell   240.6 IMD  0x3d2611da3cbdb843efacbc20b5c5a6585088510f64cde6891c684242b0aff4db
+      Mutated swap #54 kick[11] off bass 0 tick -68911  MOVEMENT root→D# page #6
+      bpm 118 · D# Phrygian · swap #54 · page #6 · pressure -3790  parity: MATCH
+# 53 random  sell   10.39 IMD  0x3b09944d1b8af6e7b723428e4f4cb41d57851eed411b901c629eb41c2bf33f64
+      Mutated swap #55 snare[9] off bass 0 tick -68913
+      bpm 118 · D# Phrygian · swap #55 · page #6 · pressure -4554  parity: MATCH
+# 54 random  buy    21.03 IMD  0x51d13e976f7e980467c0114cb9348bddf78e6d6fcaa1501fc96c2e8b7a40bcf2
+      Mutated swap #56 snare[8] on bass 9 tick -68908
+      bpm 118 · D# Phrygian · swap #56 · page #6 · pressure -3270  parity: MATCH
+# 55 random  sell   10.55 IMD  0xc5675e67aec73c745a4ba4eebbb3a241d9f2ad64edc6dc7ff1fb526a2a4cb0d4
+      Mutated swap #57 snare[11] off bass 0 tick -68911
+      bpm 118 · D# Phrygian · swap #57 · page #6 · pressure -4066  parity: MATCH
+# 56 random  sell    2.17 IMD  0xac65c100d502af465488b7e5eabe6189ef641fdfe34c398e281ad8436bfe2933
+      Mutated swap #58 glitch[5] off bass 0 tick -68911
+      bpm 118 · D# Phrygian · swap #58 · page #6 · pressure -4812  parity: MATCH
+# 57 random  sell    0.93 IMD  0x5fe5ea1f161465aed608a1ac19aa719ccb0aa10710b4c87478f295e50d2192e3
+      Mutated swap #59 glitch[6] off bass 0 tick -68911
+      bpm 118 · D# Phrygian · swap #59 · page #6 · pressure -5512  parity: MATCH
+# 58 random  buy    22.22 IMD  0x89f486320aa124ddc545a2e9e9d59bc00f705a7255709d02fb4ffb5459322979
+      Mutated swap #60 snare[3] on bass 9 tick -68907
+      bpm 118 · D# Phrygian · swap #60 · page #6 · pressure -4168  parity: MATCH
+# 59 random  sell    3.15 IMD  0x58e03b2033e656d5c5ce012a71bbe56e46e8638fd3babd45967569a1a3c368bd
+      Mutated swap #61 glitch[2] off bass 0 tick -68907
+      bpm 118 · D# Phrygian · swap #61 · page #6 · pressure -4908  parity: MATCH
+# 60 random  sell    0.11 IMD  0x09cfaeef70a4278fab92e2abdf00fcaa20796a2ebd4c7f214bfe092fe4cc4c4d
+      Mutated swap #62 hat[12] off bass 0 tick -68907
+      bpm 118 · D# Phrygian · swap #62 · page #6 · pressure -5602  parity: MATCH
+# 61 random  buy    52.57 IMD  0xf9d8c4b5fee37292ad406571b3b21701871f6f49bfa23c6b64cab5073e039406
+      Mutated swap #63 kick[7] on bass 9 tick -68897
+      bpm 118 · D# Phrygian · swap #63 · page #6 · pressure -4252  parity: MATCH
+# 62 random  buy     0.11 IMD  0xcfca9d6828144e0c471f9fcde670ccecdd0eb0d12fe88cdb2419f1585083c168
+      Mutated swap #64 hat[13] on bass 9 tick -68897
+      bpm 118 · D# Phrygian · swap #64 · page #7 · pressure -2987  parity: MATCH
+# 63 random  sell   17.74 IMD  0xccd13d6065f088ad2e3046b018431d867834c0fb7f107736edf703e8f909690f
+      Mutated swap #65 snare[11] off bass 0 tick -68901
+      bpm 118 · D# Phrygian · swap #65 · page #7 · pressure -3801  parity: MATCH
+# 64 random  sell     4.8 IMD  0x5fe017eed3f7a9639ea87bbb4c5346d3272cce4f9942a6b32ccb71eba9600634
+      Mutated swap #66 glitch[3] off bass 0 tick -68902
+      bpm 118 · D# Phrygian · swap #66 · page #7 · pressure -4564  parity: MATCH
+# 65 random  sell  262.51 IMD  0x5a1f702b5fdb37d9a60cb3c9950c9a95afcfd821709a987750273f7eab2ddb9f
+      Mutated swap #67 kick[1] off bass 0 tick -68954  MOVEMENT root→A# page #8
+      bpm 118 · A# Phrygian · swap #67 · page #8 · pressure -5279  parity: MATCH
+# 66 random  sell   15.64 IMD  0x2e9dbca49c766d37f1be15991aa9714d319335b1312cfc75f335ac9242e2b473
+      Mutated swap #68 snare[12] off bass 0 tick -68957
+      bpm 118 · A# Phrygian · swap #68 · page #8 · pressure -5950  parity: MATCH
+[sim] done: 66 swaps, parity 66/66 matched -> /Users/0xdis/orca/projects/IMD_vibe/sim/runs/2026-10-14T19-19-40-869Z.json

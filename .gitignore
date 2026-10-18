@@ -8,3 +8,7 @@ contracts/broadcast/
 contracts/bin/
 Research.md
 Research_2.md
+contracts/.env*
+!contracts/.env.example
+design-ref/
+sim/stress/

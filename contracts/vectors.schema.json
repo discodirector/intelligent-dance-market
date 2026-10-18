@@ -99,7 +99,8 @@
           "tick",
           "slot0",
           "slot1",
-          "movement"
+          "movement",
+          "drop"
         ],
         "properties": {
           "sender": {
@@ -181,8 +182,115 @@
                 }
               }
             ]
+          },
+          "drop": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "track",
+                  "fill",
+                  "mask"
+                ],
+                "properties": {
+                  "track": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3
+                  },
+                  "fill": {
+                    "type": "boolean"
+                  },
+                  "mask": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 65535
+                  }
+                }
+              }
+            ]
+          },
+          "fromTrack": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "writeStep": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 15
+          },
+          "whale": {
+            "type": "boolean"
+          },
+          "promoted": {
+            "type": "boolean"
+          },
+          "noop": {
+            "type": "boolean"
+          },
+          "trackComplete": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "trackNo",
+                  "patternId",
+                  "root",
+                  "swapCount",
+                  "slot0",
+                  "slot1",
+                  "seed"
+                ],
+                "properties": {
+                  "trackNo": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 65535
+                  },
+                  "patternId": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295
+                  },
+                  "root": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 11
+                  },
+                  "swapCount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295
+                  },
+                  "slot0": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  },
+                  "slot1": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  },
+                  "seed": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$"
+                  }
+                }
+              }
+            ]
           }
         }
+      },
+      "name": {
+        "type": "string"
       }
     }
   }

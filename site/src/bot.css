@@ -1,0 +1,19 @@
+/* Bot render page: fixed viewport frame, no motion (frames are screenshots). */
+body.bot { margin: 0; width: 100vw; height: 100vh; overflow: hidden; background: var(--black); }
+body.bot *, body.bot *::before, body.bot *::after { animation: none !important; transition: none !important; }
+.bot .stage { box-sizing: border-box; width: 100vw; height: 100vh; padding: 3.2vmin; display: flex; flex-direction: column; gap: 2.4vmin; }
+.bot.wide .stage { flex-direction: row; }
+.bot .slot { position: relative; min-width: 0; min-height: 0; }
+.bot .slot-module { flex: 0 0 auto; height: 64%; display: flex; justify-content: center; align-items: flex-start; }
+.bot.wide .slot-module { height: auto; width: 66%; align-items: center; }
+.bot .module { width: 1060px; flex: none; transform-origin: top center; }
+.bot.wide .module { transform-origin: center center; }
+.bot .slot-console { flex: 1 1 auto; display: flex; }
+.bot .console { flex: 1; display: flex; flex-direction: column; min-height: 0; font-size: 1.6vmin; }
+.bot .console-head { font-size: 1.5vmin; }
+.bot .console-intro { font-size: 1.5vmin; }
+.bot .log { flex: 1; height: auto; overflow: hidden; font-size: 1.55vmin; display: flex; flex-direction: column; justify-content: flex-end; }
+.bot .bot-controls { grid-template-columns: minmax(0, 1.4fr) auto auto; }
+.bot.rules-v2 .bot-controls { grid-template-columns: minmax(0, 1.4fr) auto auto auto; }
+.bot .log li { flex: none; }
+.bot .console-intro span { color: #7d867f; }
