@@ -1,0 +1,93 @@
+{
+  "chainId": 11155111,
+  "network": "sepolia",
+  "rules": "v2",
+  "explorer": "https://sepolia.etherscan.io",
+  "poolManager": "0xE03A1074c86CFeDd5C142C4F04F1a1536e203543",
+  "token": "0x9E93348cb5A69e0bD52D17d6A55B8dC65D448Af7",
+  "tokenSymbol": "IDM",
+  "hook": "0x737c2a11f7eD9e420305Ef01717952986f243040",
+  "hookFlags": "0x3040",
+  "router": "0x865E2bEb3F25352DCA8B05919a76E16848b47903",
+  "quote": "0x0000000000000000000000000000000000000000",
+  "quoteSymbol": "ETH",
+  "deployer": "0xd5450C26017f25E1EfB49996CE4cE59447328BaB",
+  "factory": "0xd5450C26017f25E1EfB49996CE4cE59447328BaB",
+  "poolId": "0x6bf7da514615af7674676fc4338da9051282db243b11d1d65418795d1e190a83",
+  "poolKey": {
+    "currency0": "0x0000000000000000000000000000000000000000",
+    "currency1": "0x9E93348cb5A69e0bD52D17d6A55B8dC65D448Af7",
+    "fee": 12500,
+    "tickSpacing": 60,
+    "hooks": "0x737c2a11f7eD9e420305Ef01717952986f243040"
+  },
+  "idmIsCurrency0": false,
+  "thresholds": {
+    "hat": "1250000000000000",
+    "glitch": "12500000000000000",
+    "snare": "62500000000000000"
+  },
+  "whale": {
+    "rule": "K * sqrt(FDV wei) from the post-swap tick, clamped",
+    "k": "20000000",
+    "c": "632455532033675866399",
+    "min": "5000000000000000",
+    "max": "50000000000000000000"
+  },
+  "openingPrice": "1 IDM = 0.000000004 ETH (250,000,000 IDM per ETH, FDV 4 ETH, whale ~0.04 ETH)",
+  "liquidity": {
+    "range": "full (-887220..887220)",
+    "liquidity": "15811388300841896659994",
+    "approx": "1 ETH + 250,000,000 IDM"
+  },
+  "startBlock": 11942493,
+  "deployGas": "24056611",
+  "deployCostWei": "527774373",
+  "txs": [
+    {
+      "step": "create:SequencerToken",
+      "hash": "0xb559ebbf376a5deffb5bb58daa599e94fe6b7c6c793f5a5d4c196b12b9a2c8e3",
+      "block": 11942493
+    },
+    {
+      "step": "create:SequencerHook",
+      "hash": "0xf3c286f0b8f6e9e33cf258ca7712f9c283eb52f7b6bb54a088de3cbdd7830689",
+      "block": 11942494
+    },
+    {
+      "step": "create:SimRouter",
+      "hash": "0x7938e7d70eeb478ce98f0501542e3bb1be767e32348c3bbd1ff5c5df655b49b8",
+      "block": 11942495
+    },
+    {
+      "step": "SequencerToken:approve(address,uint256)",
+      "hash": "0x07220e1fc6050ffea432f450d9fa4b9cf593073d6223db27126fa4d3818f9cce",
+      "block": 11942496
+    },
+    {
+      "step": "0xe03a1074c86cfedd5c142c4f04f1a1536e203543:initialize((address,address,uint24,int24,address),uint160)",
+      "hash": "0x36b9f28af80b5ca2e1240d9a29d1d00afc7b551d3a6ca6e6326dd553cf0d1d0f",
+      "block": 11942498
+    },
+    {
+      "step": "SimRouter:addLiquidity((address,address,uint24,int24,address),int24,int24,int256)",
+      "hash": "0xb7a91cc3c2ef692c6dfba80f24e82198409aa07d90d205bef47c423630ed2d1b",
+      "block": 11942499
+    }
+  ],
+  "verification": {
+    "SequencerToken": {
+      "sourcify": "https://repo.sourcify.dev/11155111/0x9E93348cb5A69e0bD52D17d6A55B8dC65D448Af7",
+      "etherscan": "https://sepolia.etherscan.io/address/0x9E93348cb5A69e0bD52D17d6A55B8dC65D448Af7#code"
+    },
+    "SequencerHook": {
+      "sourcify": "https://repo.sourcify.dev/11155111/0x737c2a11f7eD9e420305Ef01717952986f243040",
+      "etherscan": "https://sepolia.etherscan.io/address/0x737c2a11f7eD9e420305Ef01717952986f243040#code"
+    },
+    "SimRouter": {
+      "sourcify": "https://repo.sourcify.dev/11155111/0x865E2bEb3F25352DCA8B05919a76E16848b47903",
+      "etherscan": "https://sepolia.etherscan.io/address/0x865E2bEb3F25352DCA8B05919a76E16848b47903#code"
+    }
+  },
+  "generatedAt": "2026-10-18T17:18:28.080Z"
+}

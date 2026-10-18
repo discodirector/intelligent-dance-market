@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-/// @dev Test double only, installed at IMD's specified address in the local EVM.
-contract MockIMD {
-    string public constant name = "Mock IMD";
-    string public constant symbol = "IMD";
+/// @dev Test double only: an ERC20 quote installed at a fixed address in the local EVM (the launch quote is native ETH).
+contract MockQuote {
+    string public constant name = "Mock Quote";
+    string public constant symbol = "QUOTE";
     uint8 public constant decimals = 18;
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;

@@ -7,6 +7,8 @@ export const MODEL = process.env.CAPTION_MODEL ?? "claude-sonnet-5-5";
 
 const SYSTEM = `You write one short post for X for "Intelligent Dance Market": a Uniswap v4 hook whose on-chain state is a 16-step drum + bass pattern that every swap mutates. The attached video plays that state as an IDM track.
 When kind is "track": buys kept landing on a full grid until its heat peaked, so the hook finished the track (track.no), archived it and started the next one from a fresh seed.
+If "pulses" is present: that many of the buys were treasury pulses, small automatic buys by the project's own immutable treasury contract after 15 minutes without trades, to keep the track playing. If you mention them, call them treasury pulses; never present them as outside demand or trading activity.
+When "release" is present, the video is the release: the whole track replayed from its seed to the drop at a fixed pace (release.swapsPerBar swaps per bar), release.seconds long; when release.clip is set the video is only its last release.clip.seconds (the climb into the drop) and the full track is a separate file. The whole release plays one genre and style, release.genre / release.style (where the track finished); release.chainGenres are only the genres live playback passed through while the track was built. "headline" is the post's title line; you may start with it verbatim.
 
 Rules (hard):
 - Use ONLY facts present in the JSON. Every number you write must appear in the JSON. Do not invent events, people, dates or numbers.
@@ -40,6 +42,11 @@ export function templateCaption(f: Facts): string {
     lines.push(`how the ${f.pool} pool sounded: last ${span} on ${f.chain}.`);
     lines.push(`${f.swaps} swaps → ${f.swaps} mutations of a 16-step pattern. ${f.whales} whale moves, key ${k}, ${f.bpm.min}–${f.bpm.max} bpm.`);
     lines.push("every trade is a note.");
+  } else if (f.kind === "track" && f.track && f.headline && f.release) {
+    const r = f.release;
+    lines.push(f.headline);
+    lines.push(`the whole track from its seed to the drop: ${r.seconds} s, ${r.bars} bars, all in ${r.genre.toLowerCase()} / ${r.style.toLowerCase()}.`);
+    lines.push(`fresh seed in ${f.track.key.toLowerCase()}, page #${f.track.page}.`);
   } else if (f.kind === "track" && f.track) {
     lines.push(`track #${f.track.no} complete.${f.track.swaps != null ? ` ${f.track.swaps} swaps filled the grid and the swarm dropped it.` : " the swarm filled the grid and dropped it."}`);
     lines.push(`fresh seed in ${f.track.key.toLowerCase()}, page #${f.track.page}. swap #${f.track.swapCount}.`);
@@ -50,6 +57,7 @@ export function templateCaption(f: Facts): string {
     lines.push(`state @ swap #${f.swapCount}: ${f.bpm.end} bpm, ${f.key.end.toLowerCase()}, page #${f.page}.`);
     lines.push(`last ${f.window.hours}h: ${f.swaps} swaps, ${f.whales} whales, busiest track: ${f.busiestTrack}.`);
   }
+  if (f.pulses) lines.push(`${f.pulses} buys were treasury pulses: the silence kept playing.`);
   let out = lines.join("\n");
   while ([...out].length > MAX_LEN && lines.length > 1) { lines.pop(); out = lines.join("\n"); }
   return [...out].slice(0, MAX_LEN).join("");

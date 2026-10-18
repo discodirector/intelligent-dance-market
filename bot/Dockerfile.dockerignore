@@ -1,5 +1,32 @@
+# Context = repo root; only what bot/Dockerfile COPYs is needed. Keep secrets and build output out.
+.git
 **/node_modules
 **/out
-**/.env
 **/dist
+**/.env
+**/.env.*
+!bot/.env.example
+**/*.log
+
+# Not used by the image
+sim
+spec
+swarm
+design-ref
+Research*.md
 site/screenshots
+site/scripts
+bot/test
+bot/scripts
+web/scripts
+web/public/stress
+
+# contracts/: only contracts/deployments is copied (site stage)
+contracts/out
+contracts/cache
+contracts/broadcast
+contracts/bin
+contracts/lib
+contracts/test
+contracts/script
+**/pulse.env

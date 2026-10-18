@@ -1,4 +1,6 @@
-// bot/replay: real IMD pool swaps on Ethereum mainnet -> core.mutate -> timeline.json
+// bot/replay: real IMD/ETH pool swaps on Ethereum mainnet -> core.mutate -> timeline.json
+// The hook pairs IDM with native ETH, so the tape reads the ETH side of the pool: amount = |ETH delta| (wei),
+// buy = the swapper received the pool token (IMD), mirroring "bought IDM with ETH".
 //   tsx src/replay/index.ts [--days 7] [--pools main|eth|<id,id>] [--out out/timeline.json] [--rules v1|v2]
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -37,7 +39,7 @@ export async function findImdPools(clients = makeClients()): Promise<PoolKeyInfo
 export interface FetchOpts {
   days: number;
   poolIds: `0x${string}`[];
-  /** For each pool: is IMD currency1? (true for ETH/IMD pools since address(0) sorts first) */
+  /** For each pool: is IMD currency1? (true for ETH/IMD pools since address(0) sorts first). The other side must be ETH. */
   imdIsCurrency1?: Record<string, boolean>;
 }
 
@@ -77,10 +79,11 @@ export async function fetchSwaps(opts: FetchOpts) {
     const imd1 = opts.imdIsCurrency1?.[l.args.id] ?? true;
     // Swap amounts are from the swapper's perspective: positive = received by the swapper.
     const imdDelta: bigint = imd1 ? l.args.amount1 : l.args.amount0;
+    const ethDelta: bigint = imd1 ? l.args.amount0 : l.args.amount1;
     if (imdDelta === 0n) continue;
     swaps.push({
       isBuy: imdDelta > 0n,
-      imdAmt: imdDelta < 0n ? -imdDelta : imdDelta,
+      quoteAmt: ethDelta < 0n ? -ethDelta : ethDelta,
       tick: Number(l.args.tick),
       blockNumber: l.blockNumber,
       timestamp: ts,
@@ -102,13 +105,17 @@ export async function replay(opts: { days: number; pools: string; out: string; r
     const eth = pools.filter((p) => BigInt(p.currency0) === 0n);
     poolIds = eth.map((p) => p.id);
     log(`found ${eth.length} ETH/IMD pools`);
-  } else poolIds = opts.pools.split(",") as `0x${string}`[];
+  } else {
+    poolIds = opts.pools.split(",") as `0x${string}`[];
+    log("explicit pool ids: amounts are read from the non-IMD side, which must be native ETH");
+  }
 
   const { swaps, head, fromBlock } = await fetchSwaps({ days: opts.days, poolIds, imdIsCurrency1 });
   const { entries, initial } = buildTimeline(swaps, undefined, rules);
   const meta: TimelineMeta = {
     version: 1,
     ...(rules === "v1" ? {} : { rules }),
+    quoteSymbol: "ETH",
     chainId: 1,
     source: `uniswap-v4 PoolManager Swap logs, last ${opts.days}d`,
     poolManager: getAddress(POOL_MANAGER),

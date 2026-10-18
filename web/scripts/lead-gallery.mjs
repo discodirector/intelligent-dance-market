@@ -18,11 +18,12 @@ const seconds = Number(process.argv[2] ?? 16);
 const results = await page.evaluate(async ({ root, seconds }) => {
   const synth = await import(`/@fs${root}/packages/synth/src/index.ts`);
   const core = await import(`/@fs${root}/packages/core/src/index.ts`);
-  const E = 10n ** 18n;
+  /** 1 IMD-equivalent at the ETH calibration (1/400): 0.0025 ETH in wei. */
+  const E = 10n ** 18n / 400n;
   let state = core.initialState();
   const sizes = [E / 4n, 2n * E, 10n * E, 40n * E];
   for (let i = 0; i < 60; i++) {
-    state = core.mutate(state, { isBuy: (i * 7) % 10 < 6, imdAmt: sizes[(i * 5) % 4], tick: 600 + ((i * 397) % 2400), blockNumber: 21000000n + BigInt(i), timestamp: 1760000000 + i * 6 }).state;
+    state = core.mutate(state, { isBuy: (i * 7) % 10 < 6, quoteAmt: sizes[(i * 5) % 4], tick: 600 + ((i * 397) % 2400), blockNumber: 21000000n + BigInt(i), timestamp: 1760000000 + i * 6 }).state;
   }
   const done = [];
   const seen = new Set();

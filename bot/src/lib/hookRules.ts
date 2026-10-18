@@ -17,6 +17,9 @@ function fromEnv(name: string): HookRules {
 export const liveRulesFromEnv = () => fromEnv("HOOK_RULES");
 export const replayRulesFromEnv = () => fromEnv("REPLAY_RULES");
 
+/** Quote currency of a live hook: the v1 hook (Sepolia rehearsal) was IMD-quoted; the v2 launch hook pairs with native ETH. */
+export const quoteSymbolForRules = (r: HookRules): "ETH" | "IMD" => (r === "v1" ? "IMD" : "ETH");
+
 export const mutateOptions = (r: HookRules): MutateOptions | undefined => (r === "v2" ? V2_RULES : undefined);
 export const slotOptions = (r: HookRules): SlotOptions | undefined => (r === "v2" ? V2_SLOTS : undefined);
 export const initialFor = (r: HookRules): State => (r === "v2" ? initialDropState(initialRelativeState()) : initialState());

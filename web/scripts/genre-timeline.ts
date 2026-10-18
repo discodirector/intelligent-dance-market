@@ -14,10 +14,9 @@ mkdirSync(outDir, { recursive: true });
 /** site/src/config.ts REPLAYS["imd-week"].speed: virtual seconds per audio second. */
 const SPEED = 840;
 const WINDOW_SEC = 30;
-const WHALE_WEI = 100n * 10n ** 18n;
 const HEAT_MAX = DEFAULT_DROP_RULES.heatMax;
 
-interface Row { ts: number; blockNumber: number; isBuy: boolean; imdAmt: string; tick: number }
+interface Row { ts: number; blockNumber: number; isBuy: boolean; quoteAmt: string; tick: number }
 const rows = JSON.parse(readFileSync(resolve(root, "site/public/timelines/imd-week.json"), "utf8")) as Row[];
 
 const json = (s: State) => ({
@@ -30,11 +29,11 @@ const json = (s: State) => ({
 
 let s: State = initialDropState(initialRelativeState());
 const events = rows.map((r) => {
-  const imdAmt = BigInt(r.imdAmt);
-  const { state, event } = mutate(s, { isBuy: r.isBuy, imdAmt, tick: r.tick, blockNumber: BigInt(r.blockNumber), timestamp: r.ts }, undefined, V2_RULES);
+  const quoteAmt = BigInt(r.quoteAmt);
+  const { state, event } = mutate(s, { isBuy: r.isBuy, quoteAmt, tick: r.tick, blockNumber: BigInt(r.blockNumber), timestamp: r.ts }, undefined, V2_RULES);
   s = state;
   const tc = event.trackComplete;
-  const whale = imdAmt >= WHALE_WEI;
+  const whale = event.whale; // the v2 hook's own verdict: FDV-scaled from the tape's tick
   return {
     ts: r.ts,
     isBuy: r.isBuy,

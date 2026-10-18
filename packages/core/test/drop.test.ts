@@ -22,14 +22,16 @@ import {
   stepHash,
   TRACK_NO_SHIFT,
   type DropRules,
+  INITIAL_SIZE_LOG_EMA,
   type MutateOptions,
   type State,
 } from "../src/index.ts";
 
-const E = 10n ** 18n;
+/** 1 IMD at the launch calibration (1/400): 0.0025 ETH in wei. Keeps every relative case identical. */
+const E = 10n ** 18n / 400n;
 const M168 = (1n << 168n) - 1n;
 const T0 = 1_760_000_000;
-const swap = (imdAmt: bigint, i = 0, isBuy = true, ts = T0 + i * 6) => ({ isBuy, imdAmt, tick: 600 + ((i * 397) % 2400), blockNumber: 21_000_000n + BigInt(i), timestamp: ts });
+const swap = (quoteAmt: bigint, i = 0, isBuy = true, ts = T0 + i * 6) => ({ isBuy, quoteAmt, tick: 600 + ((i * 397) % 2400), blockNumber: 21_000_000n + BigInt(i), timestamp: ts });
 const RULES: DropRules = { satBits: 56, heatMax: 16, coolSec: 120, sellCool: 1 };
 
 function rng(seed: number) {
@@ -48,7 +50,7 @@ function stream(seed: number, n: number, buyShare = 0.75) {
   const r = rng(seed);
   return Array.from({ length: n }, (_, i) => {
     const w = r() < 0.02;
-    const amt = w ? 150n * E : BigInt(Math.round(1e6 * 2 ** (6 * r() - 4))) * 10n ** 12n;
+    const amt = w ? 150n * E : BigInt(Math.round(1e6 * 2 ** (6 * r() - 4))) * (10n ** 12n / 400n);
     return swap(amt, i, r() < buyShare);
   });
 }
@@ -145,8 +147,8 @@ describe("drop: heat", () => {
   it("noopHeat: a buy that changes no bit heats even below satBits", () => {
     // Kick, snare and glitch rows full, hat row empty: a glitch-tier buy has nowhere to go (ladder + scan full).
     const p = 0xffffn | (0xffffn << 16n) | (0xffffn << 48n);
-    const s = hot(p, 2, { sizeLogEma: 993 });
-    const amt = 6n * E; // r = L(6) - 993 ≈ +4 → glitch
+    const s = hot(p, 2, { sizeLogEma: INITIAL_SIZE_LOG_EMA });
+    const amt = 6n * E; // r = L(6 IMD-eq) - 854 = +4 → glitch
     const off = mutate(s, swap(amt, 1), undefined, { relative: true, accumulate: true, drop: RULES });
     expect(off.event.noop).toBe(true);
     expect(off.state.heat).toBe(2);
@@ -317,7 +319,7 @@ describe("drop: silence cooling (default)", () => {
     let drops = 0;
     const r = rng(5);
     for (let i = 0; i < 400; i++) {
-      const res = mutate(s, swap(BigInt(Math.round(3e5 * 2 ** (2 * r() - 1))) * 10n ** 12n, i, r() < 0.8, T0 + i * 1800), undefined, { relative: true, accumulate: true, drop: true });
+      const res = mutate(s, swap(BigInt(Math.round(3e5 * 2 ** (2 * r() - 1))) * (10n ** 12n / 400n), i, r() < 0.8, T0 + i * 1800), undefined, { relative: true, accumulate: true, drop: true });
       s = res.state;
       if (res.event.trackComplete) drops++;
     }

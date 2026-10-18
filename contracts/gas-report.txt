@@ -1,213 +1,271 @@
-Compiling 1 files with Solc 0.8.26
-Solc 0.8.26 finished in 11.93s
+Compiling 2 files with Solc 0.8.26
+Solc 0.8.26 finished in 33.37s
 Compiler run successful with warnings:
 Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint64) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
-   --> src/SequencerState.sol:287:22:
+   --> src/SequencerState.sol:311:22:
     |
-287 |         uint64 bit = uint64(1) << (uint256(track) * 16 + step);
+311 |         uint64 bit = uint64(1) << (uint256(track) * 16 + step);
     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint64) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
-   --> src/SequencerState.sol:293:36:
+   --> src/SequencerState.sol:317:36:
     |
-293 |                 uint64 candidate = uint64(1) << (uint256(next) * 16 + step);
+317 |                 uint64 candidate = uint64(1) << (uint256(next) * 16 + step);
     |                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint64) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
-   --> src/SequencerState.sol:325:23:
+   --> src/SequencerState.sol:349:23:
     |
-325 |                 bit = uint64(1) << (uint256(track) * 16 + step);
+349 |                 bit = uint64(1) << (uint256(track) * 16 + step);
     |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Warning (3149): The result type of the shift operation is equal to the type of the first operand (uint64) ignoring the (larger) type of the second operand (uint256) which might be unexpected. Silence this warning by either converting the first or the second operand to the type of the other.
-   --> test/SequencerHook.t.sol:266:22:
+   --> test/SequencerHook.t.sol:309:22:
     |
-266 |         s.pattern ^= uint64(1) << (32 + ((step + 15) & 15));
+309 |         s.pattern ^= uint64(1) << (32 + ((step + 15) & 15));
     |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/SequencerHook.t.sol:171:5:
+    |
+171 |     function thresholdsAt(int24 tick) internal view returns (S.Thresholds memory) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
 
 
 Ran 1 test for test/SequencerGasV2.t.sol:SequencerGasV2Test
-[PASS] test_GasHeatDropIncrement() (gas: 1612857)
+[PASS] test_GasHeatDropIncrement() (gas: 1605885)
 Logs:
   heat/drop increment normal buy: 436
   heat/drop increment saturated buy: 496
   heat/drop increment sell: 338
 
-Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 549.42µs (310.75µs CPU time)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 5.54ms (1.11ms CPU time)
 
-Ran 6 tests for test/SequencerToken.t.sol:SequencerTokenTest
-[PASS] testFuzz_TransferConservesSupply(uint256) (runs: 512, μ: 67946, ~: 68153)
-[PASS] test_FactoryReceivesEntireFixedSupply() (gas: 28453)
-[PASS] test_InvalidTransfersRevert() (gas: 81362)
-[PASS] test_SelfTransferAndZeroTransferPreserveSupply() (gas: 67183)
-[PASS] test_TransferAndFiniteAllowance() (gas: 125489)
-[PASS] test_UnlimitedAllowancePreserved() (gas: 112218)
-Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 14.15ms (14.03ms CPU time)
-
-Ran 9 tests for test/SequencerV2.t.sol:SequencerV2Test
-[PASS] testFuzz_AccumulateAgainstLoop(uint64,uint8,uint8,bool) (runs: 512, μ: 2585, ~: 2295)
-[PASS] testFuzz_ArbitraryPackedStateNeverReverts(uint256,uint256,bool,uint128,int24,uint64,uint40) (runs: 512, μ: 7203, ~: 7177)
-[PASS] testFuzz_CodecV2(uint256,uint256) (runs: 512, μ: 1781, ~: 1781)
-[PASS] test_DropSnapshotBeforeResetAndCountersWrap() (gas: 12523)
-[PASS] test_LayoutV2() (gas: 7550)
-[PASS] test_Log2FixedKnownValues() (gas: 489)
-[PASS] test_SaturationUsesPostWritePopcount48() (gas: 7813)
-[PASS] test_SilenceBoundaryAndSellCooling() (gas: 32984)
-[PASS] test_WhaleLeavesHeatButSilenceStillResets() (gas: 25654)
-Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 20.55ms (43.16ms CPU time)
-
-Ran 27 tests for test/SequencerState.t.sol:SequencerStateTest
-[PASS] testFuzz_MutationBoundsAndOnlySelectedBits(uint256,bool,uint128,int24,uint64,uint40) (runs: 512, μ: 6788, ~: 6592)
-[PASS] testFuzz_PackingRoundtrip(uint256,uint256) (runs: 512, μ: 2241, ~: 2241)
-[PASS] test_BassDegreeNegativeTickAndMinInt24() (gas: 34325)
-[PASS] test_BuySetsAndSellClearsOnlySelectedBit() (gas: 10916)
-[PASS] test_CountsWrapWithoutRevert() (gas: 6080)
-[PASS] test_EmaSameBlockAndCap() (gas: 11078)
-[PASS] test_EmaUint32MaxDoesNotOverflowAndBpmClamps() (gas: 11556)
-[PASS] test_EuclidTableMatchesSpecLoop() (gas: 33056)
-[PASS] test_ExactBitLayoutAndSignedFields() (gas: 1750)
-[PASS] test_FirstSwapAtTimestampZero() (gas: 10466)
-[PASS] test_FirstSwapKeepsEmaEvenWithHugeTimestamp() (gas: 5420)
-[PASS] test_HashUsesFourThreeEightBytes() (gas: 6177)
-[PASS] test_InitialState() (gas: 1791)
-[PASS] test_ModeBoundaries() (gas: 46701)
-[PASS] test_NonWhaleHasNoDropMask() (gas: 5895)
-[PASS] test_PageAloneDoesNotEmitMovement() (gas: 5633)
-[PASS] test_PressureSignedDivisionRoundsTowardZero() (gas: 10843)
-[PASS] test_ReleaseCountPreserved() (gas: 5837)
-[PASS] test_SellBassBothHashBranches() (gas: 845716)
-[PASS] test_ThresholdEdges() (gas: 79118)
-[PASS] test_TimestampWrapUsesZeroInterval() (gas: 5922)
-[PASS] test_WhaleAndPageHaveSeparateIncrements() (gas: 5763)
-[PASS] test_WhaleBassStillUsesStepAndMovementUnchanged() (gas: 10393)
-[PASS] test_WhaleBuyFillsEveryKWithRotation() (gas: 129051)
-[PASS] test_WhaleBuyRotationWraps() (gas: 113988)
-[PASS] test_WhaleSellWipesEachTrackIncludingKick() (gas: 34695)
-[PASS] test_ZeroSlot1IsReachableAfter38Swaps() (gas: 216155)
-Suite result: ok. 27 passed; 0 failed; 0 skipped; finished in 20.59ms (33.26ms CPU time)
-
-Ran 26 tests for test/SequencerHook.t.sol:SequencerHookIMD1Test
-[PASS] test_CannotReinitializeOrUseAnotherPool() (gas: 77191)
-[PASS] test_ConstructorRejectsBadAddressesAndThresholds() (gas: 9188)
-[PASS] test_DisabledCallbacksRefuse() (gas: 109549)
-[PASS] test_EnabledCallbacksRejectNonManager() (gas: 81997)
-[PASS] test_FreshHookOnlyFactoryAndExactPairCanInitialize() (gas: 54507791)
-[PASS] test_GasColdFirstBuy() (gas: 439226)
+Ran 10 tests for test/SequencerHook.t.sol:SequencerHookERC20Quote0Test
+[PASS] test_GasColdFirstBuy() (gas: 440487)
 Logs:
-  afterSwap gas (IMD=currency1): 33344
+  afterSwap gas (ERC20 quote=currency0): 34243
 
-[PASS] test_GasColdFirstSell() (gas: 441781)
+[PASS] test_GasColdFirstSell() (gas: 443241)
 Logs:
-  afterSwap gas (IMD=currency1): 36283
+  afterSwap gas (ERC20 quote=currency0): 37171
 
-[PASS] test_GasColdPreviouslyZeroSlot1() (gas: 473553)
+[PASS] test_GasColdPreviouslyZeroSlot1() (gas: 474879)
 Logs:
-  afterSwap gas (IMD=currency1): 50606
+  afterSwap gas (ERC20 quote=currency0): 51505
 
-[PASS] test_GasColdScanSpill() (gas: 475297)
+[PASS] test_GasColdScanSpill() (gas: 476689)
 Logs:
-  afterSwap gas (IMD=currency1): 37659
+  afterSwap gas (ERC20 quote=currency0): 38558
 
-[PASS] test_GasColdTrackComplete() (gas: 464266)
+[PASS] test_GasColdTrackComplete() (gas: 465592)
 Logs:
-  afterSwap gas (IMD=currency1): 41435
+  afterSwap gas (ERC20 quote=currency0): 42334
 
-[PASS] test_GasColdWhale() (gas: 442335)
+[PASS] test_GasColdWhale() (gas: 460044)
 Logs:
-  afterSwap gas (IMD=currency1): 36463
+  afterSwap gas (ERC20 quote=currency0): 37389
 
-[PASS] test_GasColdWhaleBuyPage64() (gas: 458952)
+[PASS] test_GasColdWhaleBuyPage64() (gas: 474209)
 Logs:
-  afterSwap gas (IMD=currency1): 36618
+  afterSwap gas (ERC20 quote=currency0): 37544
 
-[PASS] test_GasColdWhalePage64() (gas: 458792)
+[PASS] test_GasColdWhalePage64() (gas: 474192)
 Logs:
-  afterSwap gas (IMD=currency1): 36392
+  afterSwap gas (ERC20 quote=currency0): 37307
 
-[PASS] test_GasColdWhaleSell() (gas: 441632)
+[PASS] test_GasColdWhaleSell() (gas: 459565)
 Logs:
-  afterSwap gas (IMD=currency1): 36166
+  afterSwap gas (ERC20 quote=currency0): 37081
 
-[PASS] test_GasColdWorstNormal() (gas: 459616)
+[PASS] test_GasColdWorstNormal() (gas: 460920)
 Logs:
-  afterSwap gas (IMD=currency1): 37267
+  afterSwap gas (ERC20 quote=currency0): 38166
 
-[PASS] test_LiquidityAddRemoveDoNotMutate() (gas: 285823)
-[PASS] test_PermissionsBindingsAndInitialState() (gas: 52887)
-[PASS] test_RealBuySellExactInput() (gas: 554055)
-[PASS] test_RealBuySellExactOutput() (gas: 544665)
-[PASS] test_RealCountWrapDoesNotBlockSwaps() (gas: 315638)
-[PASS] test_RealPageRolloverAfter64Swaps() (gas: 2448660)
-[PASS] test_RealPartialFillUsesActualDeltaAndPostSwapTick() (gas: 211055)
-[PASS] test_RealTrackCompleteSnapshotAndCompanionEvent() (gas: 346217)
-[PASS] test_RealWhaleAndPage64EventOrder() (gas: 305217)
-[PASS] test_RealWhaleBuyFillsAndWhaleSellDrops() (gas: 1809246)
-[PASS] test_ZeroSeqDeltaIsSellRegardlessOfDirectionAndMinImdDeltaSafe() (gas: 96027)
-Suite result: ok. 26 passed; 0 failed; 0 skipped; finished in 40.44ms (54.76ms CPU time)
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 15.95ms (2.62ms CPU time)
 
-Ran 26 tests for test/SequencerHook.t.sol:SequencerHookIMD0Test
-[PASS] test_CannotReinitializeOrUseAnotherPool() (gas: 77201)
-[PASS] test_ConstructorRejectsBadAddressesAndThresholds() (gas: 9180)
-[PASS] test_DisabledCallbacksRefuse() (gas: 109523)
-[PASS] test_EnabledCallbacksRejectNonManager() (gas: 82011)
-[PASS] test_FreshHookOnlyFactoryAndExactPairCanInitialize() (gas: 125359622)
-[PASS] test_GasColdFirstBuy() (gas: 439279)
+Ran 2 tests for test/PulseTreasury.t.sol:PulseTreasuryTest
+[PASS] test_GasPulse() (gas: 329205)
 Logs:
-  afterSwap gas (IMD=currency0): 33376
+  pulse() gas (cold, normal grid): 144084
 
-[PASS] test_GasColdFirstSell() (gas: 442015)
+[PASS] test_GasPulseSaturated() (gas: 212362)
 Logs:
-  afterSwap gas (IMD=currency0): 36315
+  pulse() gas (cold, saturated grid): 170401
 
-[PASS] test_GasColdPreviouslyZeroSlot1() (gas: 473598)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 16.61ms (842.92µs CPU time)
+
+Ran 10 tests for test/SequencerHook.t.sol:SequencerHookNativeEthLaunchFdvTest
+[PASS] test_GasColdFirstBuy() (gas: 440659)
 Logs:
-  afterSwap gas (IMD=currency0): 50638
+  afterSwap gas (native ETH=currency0): 34643
 
-[PASS] test_GasColdScanSpill() (gas: 475342)
+[PASS] test_GasColdFirstSell() (gas: 443576)
 Logs:
-  afterSwap gas (IMD=currency0): 37691
+  afterSwap gas (native ETH=currency0): 37571
 
-[PASS] test_GasColdTrackComplete() (gas: 464318)
+[PASS] test_GasColdPreviouslyZeroSlot1() (gas: 478195)
 Logs:
-  afterSwap gas (IMD=currency0): 41467
+  afterSwap gas (native ETH=currency0): 55056
 
-[PASS] test_GasColdWhale() (gas: 442388)
+[PASS] test_GasColdScanSpill() (gas: 476824)
 Logs:
-  afterSwap gas (IMD=currency0): 36495
+  afterSwap gas (native ETH=currency0): 38928
 
-[PASS] test_GasColdWhaleBuyPage64() (gas: 458989)
+[PASS] test_GasColdTrackComplete() (gas: 465763)
 Logs:
-  afterSwap gas (IMD=currency0): 36650
+  afterSwap gas (native ETH=currency0): 42733
 
-[PASS] test_GasColdWhalePage64() (gas: 458848)
+[PASS] test_GasColdWhale() (gas: 460667)
 Logs:
-  afterSwap gas (IMD=currency0): 36424
+  afterSwap gas (native ETH=currency0): 37857
 
-[PASS] test_GasColdWhaleSell() (gas: 441825)
+[PASS] test_GasColdWhaleBuyPage64() (gas: 474810)
 Logs:
-  afterSwap gas (IMD=currency0): 36198
+  afterSwap gas (native ETH=currency0): 38012
 
-[PASS] test_GasColdWorstNormal() (gas: 459656)
+[PASS] test_GasColdWhalePage64() (gas: 474786)
 Logs:
-  afterSwap gas (IMD=currency0): 37299
+  afterSwap gas (native ETH=currency0): 37775
 
-[PASS] test_LiquidityAddRemoveDoNotMutate() (gas: 285821)
-[PASS] test_PermissionsBindingsAndInitialState() (gas: 52879)
-[PASS] test_RealBuySellExactInput() (gas: 553467)
-[PASS] test_RealBuySellExactOutput() (gas: 549849)
-[PASS] test_RealCountWrapDoesNotBlockSwaps() (gas: 321387)
-[PASS] test_RealPageRolloverAfter64Swaps() (gas: 2458770)
-[PASS] test_RealPartialFillUsesActualDeltaAndPostSwapTick() (gas: 216536)
-[PASS] test_RealTrackCompleteSnapshotAndCompanionEvent() (gas: 352112)
-[PASS] test_RealWhaleAndPage64EventOrder() (gas: 310967)
-[PASS] test_RealWhaleBuyFillsAndWhaleSellDrops() (gas: 1811747)
-[PASS] test_ZeroSeqDeltaIsSellRegardlessOfDirectionAndMinImdDeltaSafe() (gas: 95995)
-Suite result: ok. 26 passed; 0 failed; 0 skipped; finished in 106.49ms (70.25ms CPU time)
+[PASS] test_GasColdWhaleSell() (gas: 460198)
+Logs:
+  afterSwap gas (native ETH=currency0): 37549
 
-Ran 2 tests for test/Vectors.t.sol:VectorsTest
-[PASS] test_GenerateVectors() (gas: 115862413)
-[PASS] test_GenerateVectorsV2() (gas: 134355019)
-Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 259.53ms (267.78ms CPU time)
+[PASS] test_GasColdWorstNormal() (gas: 461080)
+Logs:
+  afterSwap gas (native ETH=currency0): 38566
+
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 28.57ms (2.02ms CPU time)
+
+Ran 10 tests for test/SequencerHook.t.sol:SequencerHookNativeEthTest
+[PASS] test_GasColdFirstBuy() (gas: 440259)
+Logs:
+  afterSwap gas (native ETH=currency0): 34243
+
+[PASS] test_GasColdFirstSell() (gas: 443176)
+Logs:
+  afterSwap gas (native ETH=currency0): 37171
+
+[PASS] test_GasColdPreviouslyZeroSlot1() (gas: 474644)
+Logs:
+  afterSwap gas (native ETH=currency0): 51505
+
+[PASS] test_GasColdScanSpill() (gas: 476454)
+Logs:
+  afterSwap gas (native ETH=currency0): 38558
+
+[PASS] test_GasColdTrackComplete() (gas: 465364)
+Logs:
+  afterSwap gas (native ETH=currency0): 42334
+
+[PASS] test_GasColdWhale() (gas: 459820)
+Logs:
+  afterSwap gas (native ETH=currency0): 37389
+
+[PASS] test_GasColdWhaleBuyPage64() (gas: 473963)
+Logs:
+  afterSwap gas (native ETH=currency0): 37544
+
+[PASS] test_GasColdWhalePage64() (gas: 473938)
+Logs:
+  afterSwap gas (native ETH=currency0): 37307
+
+[PASS] test_GasColdWhaleSell() (gas: 459350)
+Logs:
+  afterSwap gas (native ETH=currency0): 37081
+
+[PASS] test_GasColdWorstNormal() (gas: 460680)
+Logs:
+  afterSwap gas (native ETH=currency0): 38166
+
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 29.14ms (1.84ms CPU time)
+
+Ran 10 tests for test/SequencerHook.t.sol:SequencerHookERC20Quote1Test
+[PASS] test_GasColdFirstBuy() (gas: 440603)
+Logs:
+  afterSwap gas (ERC20 quote=currency1): 34185
+
+[PASS] test_GasColdFirstSell() (gas: 442955)
+Logs:
+  afterSwap gas (ERC20 quote=currency1): 37113
+
+[PASS] test_GasColdPreviouslyZeroSlot1() (gas: 474995)
+Logs:
+  afterSwap gas (ERC20 quote=currency1): 51447
+
+[PASS] test_GasColdScanSpill() (gas: 476805)
+Logs:
+  afterSwap gas (ERC20 quote=currency1): 38500
+
+[PASS] test_GasColdTrackComplete() (gas: 465708)
+Logs:
+  afterSwap gas (ERC20 quote=currency1): 42276
+
+[PASS] test_GasColdWhale() (gas: 460182)
+Logs:
+  afterSwap gas (ERC20 quote=currency1): 37331
+
+[PASS] test_GasColdWhaleBuyPage64() (gas: 474345)
+Logs:
+  afterSwap gas (ERC20 quote=currency1): 37486
+
+[PASS] test_GasColdWhalePage64() (gas: 473881)
+Logs:
+  afterSwap gas (ERC20 quote=currency1): 37249
+
+[PASS] test_GasColdWhaleSell() (gas: 459205)
+Logs:
+  afterSwap gas (ERC20 quote=currency1): 37023
+
+[PASS] test_GasColdWorstNormal() (gas: 461036)
+Logs:
+  afterSwap gas (ERC20 quote=currency1): 38108
+
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 46.87ms (1.69ms CPU time)
+
+Ran 10 tests for test/SequencerHook.t.sol:SequencerHookERC20Quote1LaunchFdvTest
+[PASS] test_GasColdFirstBuy() (gas: 440996)
+Logs:
+  afterSwap gas (ERC20 quote=currency1): 34578
+
+[PASS] test_GasColdFirstSell() (gas: 443426)
+Logs:
+  afterSwap gas (ERC20 quote=currency1): 37584
+
+[PASS] test_GasColdPreviouslyZeroSlot1() (gas: 475388)
+Logs:
+  afterSwap gas (ERC20 quote=currency1): 51840
+
+[PASS] test_GasColdScanSpill() (gas: 477111)
+Logs:
+  afterSwap gas (ERC20 quote=currency1): 38806
+
+[PASS] test_GasColdTrackComplete() (gas: 466101)
+Logs:
+  afterSwap gas (ERC20 quote=currency1): 42669
+
+[PASS] test_GasColdWhale() (gas: 461023)
+Logs:
+  afterSwap gas (ERC20 quote=currency1): 37792
+
+[PASS] test_GasColdWhaleBuyPage64() (gas: 475186)
+Logs:
+  afterSwap gas (ERC20 quote=currency1): 37947
+
+[PASS] test_GasColdWhalePage64() (gas: 474658)
+Logs:
+  afterSwap gas (ERC20 quote=currency1): 37646
+
+[PASS] test_GasColdWhaleSell() (gas: 460124)
+Logs:
+  afterSwap gas (ERC20 quote=currency1): 37562
+
+[PASS] test_GasColdWorstNormal() (gas: 461429)
+Logs:
+  afterSwap gas (ERC20 quote=currency1): 38501
+
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 51.29ms (1.51ms CPU time)
 
 ╭------------------------------------------------------+-----------------+--------+--------+--------+---------╮
 | lib/v4-core/src/PoolManager.sol:PoolManager Contract |                 |        |        |        |         |
@@ -220,57 +278,47 @@ Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 259.53ms (267.78ms 
 |------------------------------------------------------+-----------------+--------+--------+--------+---------|
 | Function Name                                        | Min             | Avg    | Median | Max    | # Calls |
 |------------------------------------------------------+-----------------+--------+--------+--------+---------|
-| extsload                                             |             378 |    863 |    378 |   2378 |     206 |
+| extsload                                             |             378 |   2298 |   2378 |   2378 |      75 |
 |------------------------------------------------------+-----------------+--------+--------+--------+---------|
-| exttload                                             |             862 |    862 |    862 |    862 |     172 |
+| exttload                                             |             862 |    862 |    862 |    862 |     106 |
 |------------------------------------------------------+-----------------+--------+--------+--------+---------|
-| initialize                                           |          149587 | 149647 | 149647 | 149707 |      54 |
+| initialize                                           |          149606 | 149881 | 149846 | 150178 |      52 |
 ╰------------------------------------------------------+-----------------+--------+--------+--------+---------╯
+
+╭----------------------------------------------+-----------------+--------+--------+--------+---------╮
+| src/PulseTreasury.sol:PulseTreasury Contract |                 |        |        |        |         |
++=====================================================================================================+
+| Deployment Cost                              | Deployment Size |        |        |        |         |
+|----------------------------------------------+-----------------+--------+--------+--------+---------|
+|                                       951634 |            5205 |        |        |        |         |
+|----------------------------------------------+-----------------+--------+--------+--------+---------|
+|                                              |                 |        |        |        |         |
+|----------------------------------------------+-----------------+--------+--------+--------+---------|
+| Function Name                                | Min             | Avg    | Median | Max    | # Calls |
+|----------------------------------------------+-----------------+--------+--------+--------+---------|
+| pulse                                        |          141017 | 154175 | 154175 | 167334 |       2 |
+╰----------------------------------------------+-----------------+--------+--------+--------+---------╯
 
 ╭----------------------------------------------+-----------------+-------+--------+-------+---------╮
 | src/SequencerHook.sol:SequencerHook Contract |                 |       |        |       |         |
 +===================================================================================================+
 | Deployment Cost                              | Deployment Size |       |        |       |         |
 |----------------------------------------------+-----------------+-------+--------+-------+---------|
-|                                            0 |            9693 |       |        |       |         |
+|                                      1933097 |           10929 |       |        |       |         |
 |----------------------------------------------+-----------------+-------+--------+-------+---------|
 |                                              |                 |       |        |       |         |
 |----------------------------------------------+-----------------+-------+--------+-------+---------|
 | Function Name                                | Min             | Avg   | Median | Max   | # Calls |
 |----------------------------------------------+-----------------+-------+--------+-------+---------|
-| afterAddLiquidity                            |             739 |   739 |    739 |   739 |       2 |
+| poolId                                       |            2366 |  2366 |   2366 |  2366 |       2 |
 |----------------------------------------------+-----------------+-------+--------+-------+---------|
-| afterDonate                                  |             973 |   973 |    973 |   973 |       2 |
+| raw                                          |            4813 |  4813 |   4813 |  4813 |       2 |
 |----------------------------------------------+-----------------+-------+--------+-------+---------|
-| afterInitialize                              |           23758 | 25208 |  25904 | 25964 |       6 |
+| state                                        |            6499 |  6499 |   6499 |  6499 |      38 |
 |----------------------------------------------+-----------------+-------+--------+-------+---------|
-| afterRemoveLiquidity                         |             695 |   695 |    695 |   695 |       2 |
+| token                                        |             765 |   765 |    765 |   765 |       2 |
 |----------------------------------------------+-----------------+-------+--------+-------+---------|
-| afterSwap                                    |           25055 | 37323 |  29841 | 57091 |       6 |
-|----------------------------------------------+-----------------+-------+--------+-------+---------|
-| beforeAddLiquidity                           |             541 |   541 |    541 |   541 |       2 |
-|----------------------------------------------+-----------------+-------+--------+-------+---------|
-| beforeDonate                                 |             797 |   797 |    797 |   797 |       2 |
-|----------------------------------------------+-----------------+-------+--------+-------+---------|
-| beforeInitialize                             |             851 |  2946 |   3436 |  3681 |      10 |
-|----------------------------------------------+-----------------+-------+--------+-------+---------|
-| beforeRemoveLiquidity                        |             519 |   519 |    519 |   519 |       2 |
-|----------------------------------------------+-----------------+-------+--------+-------+---------|
-| beforeSwap                                   |             659 |   659 |    659 |   659 |       2 |
-|----------------------------------------------+-----------------+-------+--------+-------+---------|
-| factory                                      |             592 |   592 |    592 |   592 |       2 |
-|----------------------------------------------+-----------------+-------+--------+-------+---------|
-| getHookPermissions                           |            1393 |  1393 |   1393 |  1393 |       2 |
-|----------------------------------------------+-----------------+-------+--------+-------+---------|
-| imd                                          |             680 |   680 |    680 |   680 |       2 |
-|----------------------------------------------+-----------------+-------+--------+-------+---------|
-| initialized                                  |            2290 |  2290 |   2290 |  2290 |       2 |
-|----------------------------------------------+-----------------+-------+--------+-------+---------|
-| raw                                          |            4747 |  4747 |   4747 |  4747 |      32 |
-|----------------------------------------------+-----------------+-------+--------+-------+---------|
-| state                                        |            6433 |  6433 |   6433 |  6433 |      98 |
-|----------------------------------------------+-----------------+-------+--------+-------+---------|
-| token                                        |             721 |   721 |    721 |   721 |       2 |
+| whaleThreshold                               |           11191 | 11339 |  11217 | 11549 |      20 |
 ╰----------------------------------------------+-----------------+-------+--------+-------+---------╯
 
 ╭------------------------------------------------+-----------------+-------+--------+-------+---------╮
@@ -284,23 +332,9 @@ Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 259.53ms (267.78ms 
 |------------------------------------------------+-----------------+-------+--------+-------+---------|
 | Function Name                                  | Min             | Avg   | Median | Max   | # Calls |
 |------------------------------------------------+-----------------+-------+--------+-------+---------|
-| allowance                                      |            2738 |  2738 |   2738 |  2738 |       2 |
+| approve                                        |           46237 | 46237 |  46237 | 46237 |      52 |
 |------------------------------------------------+-----------------+-------+--------+-------+---------|
-| approve                                        |           45637 | 46221 |  46237 | 46237 |      54 |
-|------------------------------------------------+-----------------+-------+--------+-------+---------|
-| balanceOf                                      |             507 |  2326 |   2507 |  2507 |     730 |
-|------------------------------------------------+-----------------+-------+--------+-------+---------|
-| decimals                                       |             233 |   233 |    233 |   233 |       1 |
-|------------------------------------------------+-----------------+-------+--------+-------+---------|
-| name                                           |             374 |   374 |    374 |   374 |       1 |
-|------------------------------------------------+-----------------+-------+--------+-------+---------|
-| symbol                                         |             523 |   523 |    523 |   523 |       1 |
-|------------------------------------------------+-----------------+-------+--------+-------+---------|
-| totalSupply                                    |             189 |   189 |    189 |   189 |     259 |
-|------------------------------------------------+-----------------+-------+--------+-------+---------|
-| transfer                                       |           21825 | 50573 |  51126 | 51198 |     261 |
-|------------------------------------------------+-----------------+-------+--------+-------+---------|
-| transferFrom                                   |           24392 | 44992 |  53719 | 56865 |       3 |
+| balanceOf                                      |             507 |  1507 |   1507 |  2507 |     104 |
 ╰------------------------------------------------+-----------------+-------+--------+-------+---------╯
 
 ╭-------------------------------------------------------+-----------------+------+--------+-------+---------╮
@@ -308,13 +342,13 @@ Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 259.53ms (267.78ms 
 +===========================================================================================================+
 | Deployment Cost                                       | Deployment Size |      |        |       |         |
 |-------------------------------------------------------+-----------------+------+--------+-------+---------|
-|                                               1486260 |            6655 |      |        |       |         |
+|                                               1474761 |            6602 |      |        |       |         |
 |-------------------------------------------------------+-----------------+------+--------+-------+---------|
 |                                                       |                 |      |        |       |         |
 |-------------------------------------------------------+-----------------+------+--------+-------+---------|
 | Function Name                                         | Min             | Avg  | Median | Max   | # Calls |
 |-------------------------------------------------------+-----------------+------+--------+-------+---------|
-| measure                                               |            8242 | 9191 |   9198 | 10164 |       6 |
+| measure                                               |            8142 | 9091 |   9098 | 10064 |       6 |
 ╰-------------------------------------------------------+-----------------+------+--------+-------+---------╯
 
 ╭----------------------------------------------------+-----------------+-------+--------+-------+---------╮
@@ -328,40 +362,26 @@ Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 259.53ms (267.78ms 
 |----------------------------------------------------+-----------------+-------+--------+-------+---------|
 | Function Name                                      | Min             | Avg   | Median | Max   | # Calls |
 |----------------------------------------------------+-----------------+-------+--------+-------+---------|
-| measure                                            |           63021 | 67933 |  66257 | 80339 |      20 |
+| measure                                            |           63764 | 69084 |  67422 | 84577 |      50 |
 ╰----------------------------------------------------+-----------------+-------+--------+-------+---------╯
 
-╭-----------------------------------------+-----------------+-------+--------+-------+---------╮
-| test/Vectors.t.sol:VectorsTest Contract |                 |       |        |       |         |
-+==============================================================================================+
-| Deployment Cost                         | Deployment Size |       |        |       |         |
-|-----------------------------------------+-----------------+-------+--------+-------+---------|
-|                                 5389283 |           26745 |       |        |       |         |
-|-----------------------------------------+-----------------+-------+--------+-------+---------|
-|                                         |                 |       |        |       |         |
-|-----------------------------------------+-----------------+-------+--------+-------+---------|
-| Function Name                           | Min             | Avg   | Median | Max   | # Calls |
-|-----------------------------------------+-----------------+-------+--------+-------+---------|
-| vectorV2                                |           37917 | 39493 |  38593 | 48130 |     382 |
-╰-----------------------------------------+-----------------+-------+--------+-------+---------╯
-
-╭-------------------------------------------------+-----------------+---------+---------+---------+---------╮
-| test/helpers/PoolRouter.sol:PoolRouter Contract |                 |         |         |         |         |
-+===========================================================================================================+
-| Deployment Cost                                 | Deployment Size |         |         |         |         |
-|-------------------------------------------------+-----------------+---------+---------+---------+---------|
-|                                          740461 |            3361 |         |         |         |         |
-|-------------------------------------------------+-----------------+---------+---------+---------+---------|
-|                                                 |                 |         |         |         |         |
-|-------------------------------------------------+-----------------+---------+---------+---------+---------|
-| Function Name                                   | Min             | Avg     | Median  | Max     | # Calls |
-|-------------------------------------------------+-----------------+---------+---------+---------+---------|
-| batch                                           |         2410328 | 2415380 | 2415380 | 2420433 |       2 |
-|-------------------------------------------------+-----------------+---------+---------+---------+---------|
-| liquidity                                       |          120370 |  269744 |  280769 |  280781 |      56 |
-|-------------------------------------------------+-----------------+---------+---------+---------+---------|
-| swap                                            |          139144 |  153782 |  156254 |  167177 |      28 |
-╰-------------------------------------------------+-----------------+---------+---------+---------+---------╯
+╭-------------------------------------------------+-----------------+--------+--------+--------+---------╮
+| test/helpers/PoolRouter.sol:PoolRouter Contract |                 |        |        |        |         |
++========================================================================================================+
+| Deployment Cost                                 | Deployment Size |        |        |        |         |
+|-------------------------------------------------+-----------------+--------+--------+--------+---------|
+|                                          812474 |            3694 |        |        |        |         |
+|-------------------------------------------------+-----------------+--------+--------+--------+---------|
+|                                                 |                 |        |        |        |         |
+|-------------------------------------------------+-----------------+--------+--------+--------+---------|
+| Function Name                                   | Min             | Avg    | Median | Max    | # Calls |
+|-------------------------------------------------+-----------------+--------+--------+--------+---------|
+| liquidity                                       |          252265 | 252265 | 252265 | 252265 |       2 |
+|-------------------------------------------------+-----------------+--------+--------+--------+---------|
+| liquidityRange                                  |          252823 | 270358 | 281827 | 282389 |      50 |
+|-------------------------------------------------+-----------------+--------+--------+--------+---------|
+| swap                                            |          148367 | 148367 | 148367 | 148367 |       1 |
+╰-------------------------------------------------+-----------------+--------+--------+--------+---------╯
 
 
-Ran 7 test suites in 260.91ms (462.29ms CPU time): 97 tests passed, 0 failed, 0 skipped (97 total tests)
+Ran 7 test suites in 56.31ms (193.97ms CPU time): 53 tests passed, 0 failed, 0 skipped (53 total tests)

@@ -1,4 +1,5 @@
-// Builds contracts/deployments/sepolia.json from the forge broadcast of script/DeploySepolia.s.sol.
+// Builds contracts/deployments/sepolia.json (v1, IMD-quoted rehearsal) from a forge broadcast. The current
+// script/DeploySepolia.s.sol deploys the v2 IDM/ETH pair: use write-deployment-v2.ts for it.
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { createPublicClient, http, getAddress } from "viem";
 import { sepolia } from "viem/chains";

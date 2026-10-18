@@ -5,15 +5,15 @@
  */
 import { encodePacked, keccak256 } from "viem";
 import { bassAt, encode, type SequencerState } from "../../../packages/synth/src/state.ts";
+import { whaleWeiAtTick } from "../../../packages/core/src/index.ts";
 
 export type { SequencerState };
 export { initialState } from "../../../packages/synth/src/state.ts";
 
-const E18 = 10n ** 18n;
-const T_HAT = E18 / 2n;
-const T_GLITCH = 5n * E18;
-const T_SNARE = 25n * E18;
-const T_KICK = 100n * E18;
+// ETH thresholds (core ETH_THRESHOLDS): 0.00125 · 0.0125 · 0.0625 ETH; the whale scales with FDV (core whaleWeiAtTick).
+const T_HAT = 1_250_000_000_000_000n;
+const T_GLITCH = 12_500_000_000_000_000n;
+const T_SNARE = 62_500_000_000_000_000n;
 const BPM_MIN = 72;
 const BPM_MAX = 118;
 const EMA_CAP = 900;
@@ -24,8 +24,8 @@ const EUCLID = [0x0841n, 0x1111n, 0x2491n, 0x4949n, 0x54a9n, 0x5555n];
 
 export interface SwapInput {
   isBuy: boolean;
-  /** Absolute IMD amount, 18 decimals. */
-  imdAmt: bigint;
+  /** Absolute quote (native ETH) amount, wei. */
+  quoteAmt: bigint;
   /** Pool tick after the swap. */
   tick: number;
   blockNumber: bigint | number;
@@ -39,7 +39,7 @@ export interface Mutated {
   on: boolean;
   bassNote: number;
   isBuy: boolean;
-  imdAmount: bigint;
+  quoteAmount: bigint;
   tick: number;
   whale: boolean;
   slot0: bigint;
@@ -49,10 +49,10 @@ export interface Mutated {
   drop?: { track: number; fill: boolean; mask: number };
 }
 
-function trackFor(imdAmt: bigint): number {
-  if (imdAmt < T_HAT) return 2;
-  if (imdAmt < T_GLITCH) return 3;
-  if (imdAmt < T_SNARE) return 1;
+function trackFor(quoteAmt: bigint): number {
+  if (quoteAmt < T_HAT) return 2;
+  if (quoteAmt < T_GLITCH) return 3;
+  if (quoteAmt < T_SNARE) return 1;
   return 0;
 }
 
@@ -65,7 +65,7 @@ function modeFor(pressure: number): number {
 
 export function mutate(prev: SequencerState, input: SwapInput): { state: SequencerState; event: Mutated } {
   const s: SequencerState = { ...prev };
-  const { isBuy, imdAmt, tick } = input;
+  const { isBuy, quoteAmt, tick } = input;
   const now = Number(input.timestamp);
 
   s.swapCount = (s.swapCount + 1) >>> 0;
@@ -73,7 +73,7 @@ export function mutate(prev: SequencerState, input: SwapInput): { state: Sequenc
     keccak256(encodePacked(["uint32", "int24", "uint64"], [s.swapCount, tick, BigInt(input.blockNumber)])),
   );
 
-  const whale = imdAmt >= T_KICK;
+  const whale = quoteAmt >= whaleWeiAtTick(tick);
   const step = Number(h % 16n);
   let track: number;
   let drop: Mutated["drop"];
@@ -91,7 +91,7 @@ export function mutate(prev: SequencerState, input: SwapInput): { state: Sequenc
     }
     drop = { track, fill: isBuy, mask: Number(mask) };
   } else {
-    track = trackFor(imdAmt);
+    track = trackFor(quoteAmt);
     const bit = 1n << BigInt(track * 16 + step);
     s.pattern = isBuy ? s.pattern | bit : s.pattern & ~bit & M64;
   }
@@ -136,7 +136,7 @@ export function mutate(prev: SequencerState, input: SwapInput): { state: Sequenc
       on: isBuy,
       bassNote: bassAt(s.bass, step),
       isBuy,
-      imdAmount: imdAmt,
+      quoteAmount: quoteAmt,
       tick,
       whale,
       slot0,

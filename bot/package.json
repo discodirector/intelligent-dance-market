@@ -6,10 +6,12 @@
   "scripts": {
     "replay": "tsx src/replay/index.ts",
     "render": "tsx src/render/index.ts",
+    "release": "tsx src/release/index.ts",
     "caption": "tsx src/caption/index.ts",
     "post": "tsx src/post/index.ts",
     "teaser": "tsx src/pipeline.ts teaser",
     "scheduler": "tsx src/scheduler.ts",
+    "pulse": "tsx src/pulse.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

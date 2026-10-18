@@ -10,6 +10,7 @@ import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
+import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
@@ -17,7 +18,8 @@ import {BalanceDelta, toBalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {SwapParams, ModifyLiquidityParams} from "v4-core/src/types/PoolOperation.sol";
 import {HookMiner} from "v4-periphery/test/shared/HookMiner.sol";
 import {PoolRouter} from "./helpers/PoolRouter.sol";
-import {MockIMD} from "./helpers/MockIMD.sol";
+import {MockQuote} from "./helpers/MockQuote.sol";
+import {QuoteCalibration as Q} from "../src/QuoteCalibration.sol";
 
 /// @dev Nested call excludes Foundry isolation mode's transaction intrinsic/calldata gas.
 contract CallbackGasMeter {
@@ -44,7 +46,10 @@ contract CallbackGasMeter {
 abstract contract SequencerHookTestBase is Test {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
-    address constant IMD = 0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127;
+    /// @dev Fixed address for the ERC20-quote suites; the launch suite uses native ETH (address(0)).
+    address constant ERC20_QUOTE = 0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127;
+    /// @dev 1 IMD at the 1/400 ETH calibration: a non-whale swap.
+    uint128 constant UNIT = 0.0025 ether;
     bytes32 constant MUTATED =
         keccak256("Mutated(address,uint32,uint8,uint8,bool,uint8,bool,uint128,int24,uint256,uint256)");
     bytes32 constant MOVEMENT = keccak256("Movement(uint32,uint8,uint32)");
@@ -54,55 +59,83 @@ abstract contract SequencerHookTestBase is Test {
     PoolManager manager;
     SequencerHook hook;
     SequencerToken token;
-    MockIMD imd;
+    MockQuote erc20;
+    address QUOTE;
     PoolRouter router;
     PoolKey key;
     bytes32 hookSalt;
     function quote0() internal pure virtual returns (bool);
 
+    function nativeQuote() internal pure virtual returns (bool) {
+        return false;
+    }
+
+    /// @dev Pool start tick. 0 (price 1, FDV 1e9 quote: whale at the WHALE_MAX clamp) unless a suite overrides it.
+    function initTick() internal pure virtual returns (int24) {
+        return 0;
+    }
+
+    /// @dev Liquidity position around initTick: half-width in ticks and amount.
+    function liquidityShape() internal pure virtual returns (int24 halfWidth, int256 amount) {
+        return (600, 1e26);
+    }
+
+    /// @dev The tick of FDV 4 quote (launch, ~$10k): 1.0001^tick = 2.5e8 IDM per quote, signed by orientation.
+    function launchTick() internal pure returns (int24) {
+        return quote0() ? int24(193380) : int24(-193380);
+    }
+
+    /// @dev Comfortably above the whale threshold the swap will see (a buy raises the FDV and the threshold a bit).
+    function whaleAmount() internal view returns (uint128) {
+        return hook.whaleThreshold() * 5 / 4;
+    }
+
+    receive() external payable {}
+
+    /// @dev Native ETH is paid from the router's balance, so count both as the swapper's wallet.
+    function quoteBalance() internal view returns (uint256) {
+        return nativeQuote() ? address(this).balance + address(router).balance : erc20.balanceOf(address(this));
+    }
+
     function setUp() public {
         vm.warp(1_800_000_000);
         vm.roll(20_000_000);
         manager = new PoolManager(address(this));
+        QUOTE = nativeQuote() ? address(0) : ERC20_QUOTE;
         bytes32 tokenHash = keccak256(type(SequencerToken).creationCode);
         for (uint256 i;; ++i) {
             address predicted = address(
                 uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), bytes32(i), tokenHash))))
             );
-            if ((predicted > IMD) == quote0()) {
+            if ((predicted > QUOTE) == quote0()) {
                 token = new SequencerToken{salt: bytes32(i)}();
                 break;
             }
         }
-        vm.etch(IMD, address(new MockIMD()).code);
-        imd = MockIMD(IMD);
-        imd.mint(address(this), 1e30);
+        if (!nativeQuote()) {
+            vm.etch(ERC20_QUOTE, address(new MockQuote()).code);
+            erc20 = MockQuote(ERC20_QUOTE);
+            erc20.mint(address(this), 1e30);
+        }
         hook = _deploy();
         key = PoolKey(
-            Currency.wrap(quote0() ? IMD : address(token)),
-            Currency.wrap(quote0() ? address(token) : IMD),
+            Currency.wrap(quote0() ? QUOTE : address(token)),
+            Currency.wrap(quote0() ? address(token) : QUOTE),
             12500,
             60,
             IHooks(address(hook))
         );
         router = new PoolRouter(manager);
         token.approve(address(router), type(uint256).max);
-        imd.approve(address(router), type(uint256).max);
-        manager.initialize(key, uint160(1 << 96));
-        router.liquidity(key, 1e26);
+        if (nativeQuote()) vm.deal(address(router), 1e30);
+        else erc20.approve(address(router), type(uint256).max);
+        manager.initialize(key, TickMath.getSqrtPriceAtTick(initTick()));
+        (int24 halfWidth, int256 liq) = liquidityShape();
+        router.liquidityRange(key, initTick() - halfWidth, initTick() + halfWidth, liq);
     }
 
     function args() internal view returns (bytes memory) {
-        return abi.encode(
-            manager,
-            address(token),
-            address(this),
-            IMD,
-            uint128(0.5 ether),
-            uint128(5 ether),
-            uint128(25 ether),
-            uint128(100 ether)
-        );
+        return abi.encode(manager, address(token), address(this), QUOTE, Q.T_HAT, Q.T_GLITCH, Q.T_SNARE);
     }
 
     function _deploy() internal returns (SequencerHook deployed) {
@@ -120,7 +153,7 @@ abstract contract SequencerHookTestBase is Test {
                     )
                 );
                 deployed = new SequencerHook{salt: salt}(
-                    manager, address(token), address(this), IMD, 0.5 ether, 5 ether, 25 ether, 100 ether
+                    manager, address(token), address(this), QUOTE, Q.T_HAT, Q.T_GLITCH, Q.T_SNARE
                 );
                 assertEq(address(deployed), predicted);
                 return deployed;
@@ -131,7 +164,12 @@ abstract contract SequencerHookTestBase is Test {
 
     function params(bool buy, int256 amount) internal pure returns (SwapParams memory) {
         bool z = buy == quote0();
-        return SwapParams(z, amount, z ? uint160(1 << 95) : uint160(1 << 97));
+        // Open price limits: valid at any start price (exact amounts here never reach them).
+        return SwapParams(z, amount, z ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1);
+    }
+
+    function thresholdsAt(int24 tick) internal view returns (S.Thresholds memory) {
+        return S.Thresholds(Q.T_HAT, Q.T_GLITCH, Q.T_SNARE, S.whaleThreshold(tick, quote0()));
     }
 
     function test_PermissionsBindingsAndInitialState() public view {
@@ -142,7 +180,13 @@ abstract contract SequencerHookTestBase is Test {
         p.afterSwap = true;
         assertEq(abi.encode(hook.getHookPermissions()), abi.encode(p));
         assertEq(hook.factory(), address(this));
-        assertEq(hook.imd(), IMD);
+        assertEq(hook.quote(), QUOTE);
+        assertEq(hook.T_HAT(), Q.T_HAT);
+        assertEq(hook.quoteIs0(), quote0());
+        assertEq(hook.whaleThreshold(), S.whaleThreshold(initTick(), quote0()));
+        assertEq(hook.whaleThresholdAt(launchTick()), S.whaleThreshold(launchTick(), quote0()));
+        // FDV 4 quote -> 0.04 quote, within one tick (0.005%).
+        assertApproxEqRel(hook.whaleThresholdAt(launchTick()), 0.04 ether, 1e14);
         assertEq(hook.token(), address(token));
         (uint256 a, uint256 b) = hook.raw();
         (uint256 x, uint256 y) = S.encode(S.initialV2());
@@ -156,22 +200,21 @@ abstract contract SequencerHookTestBase is Test {
     function _assertSwap(bool buy, int256 specified) internal returns (BalanceDelta d) {
         S.State memory before = hook.state();
         uint256 seqBefore = token.balanceOf(address(this));
-        uint256 imdBefore = imd.balanceOf(address(this));
+        uint256 quoteBefore = quoteBalance();
         vm.recordLogs();
         d = router.swap(key, params(buy, specified));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         int128 seqDelta = quote0() ? d.amount1() : d.amount0();
-        int128 imdDelta = quote0() ? d.amount0() : d.amount1();
+        int128 quoteDelta = quote0() ? d.amount0() : d.amount1();
         assertEq(seqDelta > 0, buy);
         assertEq(int256(token.balanceOf(address(this))) - int256(seqBefore), int256(seqDelta));
-        assertEq(int256(imd.balanceOf(address(this))) - int256(imdBefore), int256(imdDelta));
-        uint128 amount = uint128(uint256(imdDelta < 0 ? -int256(imdDelta) : int256(imdDelta)));
+        assertEq(int256(quoteBalance()) - int256(quoteBefore), int256(quoteDelta));
+        uint128 amount = uint128(uint256(quoteDelta < 0 ? -int256(quoteDelta) : int256(quoteDelta)));
         (, int24 tick,,) = IPoolManager(address(manager)).getSlot0(key.toId());
         (S.State memory expected, S.Mutation memory m) = S.mutateV2(
-            before,
-            S.Input(buy, amount, tick, uint64(block.number), uint40(block.timestamp)),
-            S.Thresholds(0.5 ether, 5 ether, 25 ether, 100 ether)
+            before, S.Input(buy, amount, tick, uint64(block.number), uint40(block.timestamp)), thresholdsAt(tick)
         );
+        assertEq(m.whale, amount >= hook.whaleThresholdAt(tick));
         (uint256 a, uint256 b) = hook.raw();
         (uint256 x, uint256 y) = S.encode(expected);
         assertEq(a, x);
@@ -227,7 +270,7 @@ abstract contract SequencerHookTestBase is Test {
         assertEq(completed, m.completed ? 1 : 0);
         assertEq(accumulated, !m.whale && (m.promoted || m.noop) ? 1 : 0);
         assertEq(token.balanceOf(address(hook)), 0);
-        assertEq(imd.balanceOf(address(hook)), 0);
+        if (!nativeQuote()) assertEq(erc20.balanceOf(address(hook)), 0);
         assertEq(address(hook).balance, 0);
     }
 
@@ -246,7 +289,7 @@ abstract contract SequencerHookTestBase is Test {
 
     function test_RealTrackCompleteSnapshotAndCompanionEvent() public {
         _saturate(15);
-        _assertSwap(true, -1 ether);
+        _assertSwap(true, -int256(uint256(UNIT)));
         assertEq(hook.state().trackNo, 0);
         assertEq(hook.state().heat, 0);
         assertEq(hook.state().patternId, 2); // page then track completion
@@ -276,15 +319,15 @@ abstract contract SequencerHookTestBase is Test {
     }
 
     function test_RealBuySellExactInput() public {
-        _assertSwap(true, -10 ether);
+        _assertSwap(true, -0.01 ether);
         vm.warp(block.timestamp + 12);
         vm.roll(block.number + 1);
-        _assertSwap(false, -10 ether);
+        _assertSwap(false, -0.01 ether);
     }
 
     function test_RealBuySellExactOutput() public {
-        _assertSwap(true, 10 ether);
-        _assertSwap(false, 10 ether);
+        _assertSwap(true, 0.01 ether);
+        _assertSwap(false, 0.01 ether);
     }
 
     function test_RealWhaleAndPage64EventOrder() public {
@@ -294,7 +337,8 @@ abstract contract SequencerHookTestBase is Test {
         (uint256 a, uint256 b) = S.encode(s);
         vm.store(address(hook), bytes32(0), bytes32(a));
         vm.store(address(hook), bytes32(uint256(1)), bytes32(b));
-        _assertSwap(true, -100 ether);
+        _assertSwap(true, -int256(uint256(whaleAmount())));
+        assertTrue(hook.state().root != 9);
         assertEq(hook.state().patternId, 5);
     }
 
@@ -308,7 +352,9 @@ abstract contract SequencerHookTestBase is Test {
         for (uint256 i; i < 6; ++i) {
             bool buy = i % 2 == 0;
             S.State memory before = hook.state();
-            _assertSwap(buy, buy ? -150 ether : int256(150 ether));
+            int256 w = int256(uint256(whaleAmount()));
+            _assertSwap(buy, buy ? -w : w);
+            assertEq(hook.state().patternId, before.patternId + 1); // whale movement
             S.State memory after_ = hook.state();
             uint64 changed = before.pattern ^ after_.pattern;
             // only one track's 16 bits may change
@@ -329,7 +375,7 @@ abstract contract SequencerHookTestBase is Test {
         (uint256 a, uint256 b) = S.encode(s);
         vm.store(address(hook), bytes32(0), bytes32(a));
         vm.store(address(hook), bytes32(uint256(1)), bytes32(b));
-        _assertSwap(true, -100 ether);
+        _assertSwap(true, -int256(uint256(whaleAmount())));
         assertEq(hook.state().swapCount, 0);
         assertEq(hook.state().patternId, 1);
     }
@@ -337,23 +383,22 @@ abstract contract SequencerHookTestBase is Test {
     function test_RealPartialFillUsesActualDeltaAndPostSwapTick() public {
         S.State memory before = hook.state();
         SwapParams memory p = params(true, -1e25);
-        p.sqrtPriceLimitX96 = p.zeroForOne ? uint160((uint256(1) << 96) - 1e25) : uint160((uint256(1) << 96) + 1e25);
+        (uint160 price,,,) = IPoolManager(address(manager)).getSlot0(key.toId());
+        p.sqrtPriceLimitX96 = p.zeroForOne ? price - price / 8000 : price + price / 8000;
         BalanceDelta d = router.swap(key, p);
         int128 q = quote0() ? d.amount0() : d.amount1();
         uint128 amount = uint128(uint256(-int256(q)));
         assertLt(amount, 1e25);
         (, int24 tick,,) = IPoolManager(address(manager)).getSlot0(key.toId());
-        assertTrue(tick != 0);
+        assertTrue(tick != initTick());
         (S.State memory expected,) = S.mutateV2(
-            before,
-            S.Input(true, amount, tick, uint64(block.number), uint40(block.timestamp)),
-            S.Thresholds(0.5 ether, 5 ether, 25 ether, 100 ether)
+            before, S.Input(true, amount, tick, uint64(block.number), uint40(block.timestamp)), thresholdsAt(tick)
         );
         assertEq(abi.encode(hook.state()), abi.encode(expected));
     }
 
     function test_RealPageRolloverAfter64Swaps() public {
-        router.batch(key, params(true, -1 ether), 64, true);
+        router.batch(key, params(true, -int256(uint256(UNIT))), 64, true);
         S.State memory s = hook.state();
         assertEq(s.swapCount, 64);
         assertEq(s.patternId, 1);
@@ -361,7 +406,8 @@ abstract contract SequencerHookTestBase is Test {
         assertEq(s.intervalEma, 0);
         assertEq(s.bpm, 118);
         assertEq(token.balanceOf(address(hook)), 0);
-        assertEq(imd.balanceOf(address(hook)), 0);
+        if (!nativeQuote()) assertEq(erc20.balanceOf(address(hook)), 0);
+        assertEq(address(hook).balance, 0);
     }
 
     function test_LiquidityAddRemoveDoNotMutate() public {
@@ -424,15 +470,44 @@ abstract contract SequencerHookTestBase is Test {
 
     function test_ConstructorRejectsBadAddressesAndThresholds() public {
         vm.expectRevert(SequencerHook.InvalidConfiguration.selector);
-        new SequencerHook(manager, address(token), address(this), IMD, 0, 5 ether, 25 ether, 100 ether);
+        new SequencerHook(manager, address(token), address(this), QUOTE, 0, Q.T_GLITCH, Q.T_SNARE);
         vm.expectRevert(SequencerHook.InvalidConfiguration.selector);
-        new SequencerHook(manager, address(token), address(this), IMD, 5 ether, 5 ether, 25 ether, 100 ether);
+        new SequencerHook(manager, address(token), address(this), QUOTE, Q.T_GLITCH, Q.T_GLITCH, Q.T_SNARE);
         vm.expectRevert(SequencerHook.InvalidConfiguration.selector);
-        new SequencerHook(manager, IMD, address(this), IMD, 0.5 ether, 5 ether, 25 ether, 100 ether);
+        new SequencerHook(manager, QUOTE, address(this), QUOTE, Q.T_HAT, Q.T_GLITCH, Q.T_SNARE);
+        // The token must be a real ERC20 even when the quote is native ETH.
+        vm.expectRevert(SequencerHook.InvalidConfiguration.selector);
+        new SequencerHook(manager, address(0), address(this), address(0), Q.T_HAT, Q.T_GLITCH, Q.T_SNARE);
+        vm.expectRevert(SequencerHook.InvalidConfiguration.selector);
+        new SequencerHook(manager, address(0), address(this), ERC20_QUOTE, Q.T_HAT, Q.T_GLITCH, Q.T_SNARE);
         vm.expectRevert(SequencerHook.InvalidConfiguration.selector);
         new SequencerHook(
-            IPoolManager(address(0)), address(token), address(this), IMD, 0.5 ether, 5 ether, 25 ether, 100 ether
+            IPoolManager(address(0)), address(token), address(this), QUOTE, Q.T_HAT, Q.T_GLITCH, Q.T_SNARE
         );
+        vm.expectRevert(SequencerHook.InvalidConfiguration.selector);
+        new SequencerHook(manager, address(token), address(0), QUOTE, Q.T_HAT, Q.T_GLITCH, Q.T_SNARE);
+    }
+
+    function test_RejectsPoolWithTheOtherQuoteKind() public {
+        SequencerHook fresh = _deploy();
+        // Native hook: an ERC20-quoted pool is not its pair. ERC20 hook: the native ETH pool is not its pair.
+        address other = nativeQuote() ? ERC20_QUOTE : address(0);
+        bool otherFirst = other < address(token);
+        PoolKey memory k = PoolKey(
+            Currency.wrap(otherFirst ? other : address(token)),
+            Currency.wrap(otherFirst ? address(token) : other),
+            12500,
+            60,
+            IHooks(address(fresh))
+        );
+        vm.prank(address(manager));
+        vm.expectRevert(SequencerHook.InvalidPool.selector);
+        fresh.beforeInitialize(address(this), k, 1);
+        // Unsorted currencies with the right pair are rejected too.
+        PoolKey memory swapped = PoolKey(key.currency1, key.currency0, 12500, 60, IHooks(address(fresh)));
+        vm.prank(address(manager));
+        vm.expectRevert(SequencerHook.InvalidPool.selector);
+        fresh.beforeInitialize(address(this), swapped, 1);
     }
 
     function test_DisabledCallbacksRefuse() public {
@@ -454,7 +529,7 @@ abstract contract SequencerHookTestBase is Test {
         hook.afterDonate(address(this), key, 0, 0, "");
     }
 
-    function test_ZeroSeqDeltaIsSellRegardlessOfDirectionAndMinImdDeltaSafe() public {
+    function test_ZeroSeqDeltaIsSellRegardlessOfDirectionAndMinQuoteDeltaSafe() public {
         BalanceDelta d = quote0() ? toBalanceDelta(type(int128).min, 0) : toBalanceDelta(0, type(int128).min);
         vm.prank(address(manager));
         (bytes4 selector, int128 delta) = hook.afterSwap(address(router), key, params(true, -1), d, "");
@@ -472,7 +547,7 @@ abstract contract SequencerHookTestBase is Test {
             vm.store(address(hook), bytes32(0), bytes32(a));
             vm.store(address(hook), bytes32(uint256(1)), bytes32(b));
         }
-        int128 amount = whale ? int128(100 ether) : int128(1 ether);
+        int128 amount = whale ? int128(hook.whaleThreshold()) : int128(UNIT);
         BalanceDelta d = quote0()
             ? toBalanceDelta(buy ? -amount : amount, buy ? amount : -amount)
             : toBalanceDelta(buy ? amount : -amount, buy ? -amount : amount);
@@ -484,7 +559,12 @@ abstract contract SequencerHookTestBase is Test {
         address pm = address(manager);
         CallbackGasMeter meter = new CallbackGasMeter();
         uint256 gasUsed = meter.measure(target, pm, sender, k, p, d);
-        emit log_named_uint(quote0() ? "afterSwap gas (IMD=currency0)" : "afterSwap gas (IMD=currency1)", gasUsed);
+        emit log_named_uint(
+            nativeQuote()
+                ? "afterSwap gas (native ETH=currency0)"
+                : quote0() ? "afterSwap gas (ERC20 quote=currency0)" : "afterSwap gas (ERC20 quote=currency1)",
+            gasUsed
+        );
         assertLe(gasUsed, ceiling);
     }
 
@@ -500,7 +580,8 @@ abstract contract SequencerHookTestBase is Test {
         assertEq(b, 0);
         vm.store(address(hook), bytes32(0), bytes32(a));
         vm.store(address(hook), bytes32(uint256(1)), bytes32(b));
-        _gas(true, false, false, 52_000);
+        // At the launch tick the hash lands on the occupied kick step: scan + Accumulated event (~55.1k).
+        _gas(true, false, false, 56_000);
     }
 
     function test_GasColdFirstBuy() public {
@@ -529,14 +610,72 @@ abstract contract SequencerHookTestBase is Test {
     }
 }
 
-contract SequencerHookIMD0Test is SequencerHookTestBase {
+/// @dev Launch configuration: IDM/ETH with native ETH (address(0), always currency0).
+contract SequencerHookNativeEthTest is SequencerHookTestBase {
+    function quote0() internal pure override returns (bool) {
+        return true;
+    }
+
+    function nativeQuote() internal pure override returns (bool) {
+        return true;
+    }
+}
+
+contract SequencerHookERC20Quote0Test is SequencerHookTestBase {
     function quote0() internal pure override returns (bool) {
         return true;
     }
 }
 
-contract SequencerHookIMD1Test is SequencerHookTestBase {
+contract SequencerHookERC20Quote1Test is SequencerHookTestBase {
     function quote0() internal pure override returns (bool) {
         return false;
+    }
+}
+
+/// @dev Launch configuration at the launch price: FDV 4 ETH (tick 193380), ~1.8 ETH and ~4.5e8 IDM of liquidity.
+contract SequencerHookNativeEthLaunchFdvTest is SequencerHookTestBase {
+    function quote0() internal pure override returns (bool) {
+        return true;
+    }
+
+    function nativeQuote() internal pure override returns (bool) {
+        return true;
+    }
+
+    function initTick() internal pure override returns (int24) {
+        return launchTick();
+    }
+
+    function liquidityShape() internal pure override returns (int24, int256) {
+        return (60_000, 3e22);
+    }
+
+    /// @dev Real swaps around 0.04 ETH: the post-swap tick decides, bit-exact with the library.
+    function test_RealWhaleBoundaryAtLaunchFdv() public {
+        uint128 t = hook.whaleThreshold();
+        assertApproxEqRel(t, 0.04 ether, 1e14);
+        _assertSwap(true, -int256(uint256(t * 9 / 10)));
+        assertEq(hook.state().patternId, 0); // not a whale
+        _assertSwap(true, -int256(uint256(t * 11 / 10)));
+        assertEq(hook.state().patternId, 1); // whale (buys raise the threshold by well under 10%)
+        // A sell of the same size lowers FDV and the threshold: still a whale.
+        _assertSwap(false, int256(uint256(t * 11 / 10)));
+        assertEq(hook.state().patternId, 2);
+    }
+}
+
+/// @dev ERC20 quote sorted above IDM (quote = currency1) at FDV 4 quote: the tick reads the other way (-193380).
+contract SequencerHookERC20Quote1LaunchFdvTest is SequencerHookTestBase {
+    function quote0() internal pure override returns (bool) {
+        return false;
+    }
+
+    function initTick() internal pure override returns (int24) {
+        return launchTick();
+    }
+
+    function liquidityShape() internal pure override returns (int24, int256) {
+        return (60_000, 3e22);
     }
 }

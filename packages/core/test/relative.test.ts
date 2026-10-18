@@ -12,10 +12,17 @@ import {
   TRACK_GLITCH,
   TRACK_HAT,
   TRACK_KICK,
+  ETH_EMA_FLOOR,
+  ETH_THRESHOLDS,
+  ETH_INITIAL_SIZE,
+  WHALE_MAX_WEI,
+  WHALE_MIN_WEI,
+  whaleWeiAtTick,
 } from "../src/index.ts";
 
-const E = 10n ** 18n;
-const swap = (imdAmt: bigint, i = 0, isBuy = true) => ({ isBuy, imdAmt, tick: 600, blockNumber: 21_000_000n + BigInt(i), timestamp: 1_760_000_000 + i * 6 });
+/** 1 IMD at the launch calibration (1/400): 0.0025 ETH in wei. Keeps every relative case identical. */
+const E = 10n ** 18n / 400n;
+const swap = (quoteAmt: bigint, i = 0, isBuy = true) => ({ isBuy, quoteAmt, tick: 600, blockNumber: 21_000_000n + BigInt(i), timestamp: 1_760_000_000 + i * 6 });
 
 describe("relative tiers (prototype)", () => {
   it("log2Fixed is msb*16 + 4 mantissa bits", () => {
@@ -25,8 +32,15 @@ describe("relative tiers (prototype)", () => {
     expect(log2Fixed(16n)).toBe(64);
     expect(log2Fixed(31n)).toBe(64 + 15);
     expect(msb(2n ** 255n)).toBe(255);
-    expect(INITIAL_SIZE_LOG_EMA).toBe(993);
-    expect(log2Fixed(100n * E)).toBe(1061);
+    expect(INITIAL_SIZE_LOG_EMA).toBe(854); // L(0.0125 ETH); was L(5 IMD) = 993
+    expect(INITIAL_SIZE_LOG_EMA).toBe(log2Fixed(ETH_INITIAL_SIZE));
+    expect(log2Fixed(ETH_EMA_FLOOR)).toBe(710); // was L(0.01 IMD) = 849, same 144 gap below the start
+    // v1-rules replays keep 0.2 ETH; the launch hook's whale scales with FDV (whale.test.ts).
+    expect(ETH_THRESHOLDS.kick).toBe(200_000_000_000_000_000n);
+    expect(log2Fixed(WHALE_MAX_WEI)).toBe(1045); // highest possible EMA upper clamp
+    expect(log2Fixed(WHALE_MIN_WEI)).toBe(833); // lowest
+    expect(log2Fixed(whaleWeiAtTick(193380))).toBe(881); // FDV 4 ETH (launch): L(~0.04 ETH)
+    expect(log2Fixed(5n * 10n ** 18n)).toBe(993);
     for (let k = 0; k < 200; k++) expect(log2Fixed(1n << BigInt(k))).toBe(k * 16);
   });
 
@@ -41,7 +55,7 @@ describe("relative tiers (prototype)", () => {
     const big = mutate(s, swap(30n * E), undefined, { relative: true });
     expect(big.event.track).toBe(TRACK_KICK); // 6x the 5 IMD prior
     expect(big.event.whale).toBe(false);
-    expect(big.state.sizeLogEma).toBe(nextSizeLogEma(993, 30n * E));
+    expect(big.state.sizeLogEma).toBe(nextSizeLogEma(INITIAL_SIZE_LOG_EMA, 30n * E));
     expect(mutate(s, swap(5n * E), undefined, { relative: true }).event.track).toBe(TRACK_GLITCH);
     expect(mutate(s, swap(E), undefined, { relative: true }).event.track).toBe(TRACK_HAT);
     expect(mutate(s, swap(150n * E), undefined, { relative: true }).event.whale).toBe(true);

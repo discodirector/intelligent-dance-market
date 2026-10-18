@@ -23,14 +23,13 @@ import {
   type StepHit,
   type TimelinePoint,
 } from "@swarm-sequencer/synth";
-import { normalizeTimeline, type RawTimelineEvent } from "../../web/src/timeline";
+import { formatQuote, normalizeTimeline, quoteOf, quoteSymbolOf, type RawTimelineEvent } from "../../web/src/timeline";
 import { sevenSeg } from "./sevenseg";
 import { drawGrid, drawScope, drawSpectrum, Surface, type Flash } from "./visuals";
 
 interface Entry extends RawTimelineEvent {
   ts?: number;
   blockNumber?: number;
-  imd?: number;
   /** bot/src/lib/timeline.ts: absent = v1. */
   rules?: "v1" | "v2";
   /** v2: this swap finished a track; slots = the finished track before the reset. */
@@ -186,11 +185,11 @@ function logLines(upto: number) {
     if (tc) rows.push(`<li class="sys track"><span class="p">#</span> TRACK #${tc.trackNo} COMPLETE${tc.swaps != null ? ` · ${tc.swaps} SWAPS` : ""}</li>`);
     const whale = Boolean(points[i].drop);
     const cls = whale ? "whale" : e.isBuy ? "buy" : "sell";
-    const amt = (e.imd ?? 0).toFixed(2).padStart(8, " ");
+    const amt = formatQuote(quoteOf(e)).padStart(8, " ");
     const tag = whale ? ` <span class="tag">${e.isBuy ? "FILL" : "DROP"}</span>` : "";
     const trk = TRACKS[(e.track ?? 0) & 3].padEnd(6, " ");
     rows.push(
-      `<li class="${cls}"><span class="p">&gt;</span> <span class="t">${hhmm(e.ts ?? 0)}</span>  <span class="sd">${e.isBuy ? "BUY " : "SELL"}</span> ${amt} IMD  ` +
+      `<li class="${cls}"><span class="p">&gt;</span> <span class="t">${hhmm(e.ts ?? 0)}</span>  <span class="sd">${e.isBuy ? "BUY " : "SELL"}</span> ${amt} ${quoteSymbolOf(e)}  ` +
         `<span class="trk">${trk}</span> s${String((e.step ?? 0) + 1).padStart(2, "0")}${tag}</li>`,
     );
   }

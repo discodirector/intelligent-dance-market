@@ -11,10 +11,11 @@ import {
   type TimelinePoint,
   type TransportView,
 } from "./clock.ts";
-import { ceilingCurve, MASTER_CEILING, MixChain, VoiceEngine } from "./engine.ts";
+import { ceilingCurve, MASTER_CEILING, MixChain, OfflineReaper, setOfflineReaper, VoiceEngine } from "./engine.ts";
 import { FORM_BARS } from "./arrange.ts";
 import { crossfadeSeconds, epochOf, eraById, eraOf, type Era } from "./eras.ts";
 import { initialState, type SequencerState } from "./state.ts";
+import type { ReleasePlan } from "./release.ts";
 
 export interface StepListenerEvent {
   step: number;
@@ -111,6 +112,8 @@ class EraRig {
     private readonly ctx: BaseAudioContext,
     eraId: string | null,
     liveFade: boolean,
+    /** With `eraId`: every engine plays this genre instance (epoch), whatever the states' epochs. Releases only. */
+    private readonly instance: number | null = null,
   ) {
     this.eraId = eraId;
     this.live = typeof AudioContext !== "undefined" && ctx instanceof AudioContext;
@@ -180,6 +183,15 @@ class EraRig {
     this.outRamp = { t0: start, t1: end, from, to: dest };
   }
 
+  /** Release outro: an equal-power fade of the whole output to silence over [time, time + seconds]. Offline only. */
+  fadeOutCurve(time: number, seconds: number) {
+    const n = 256;
+    const curve = new Float32Array(n);
+    for (let i = 0; i < n; i++) curve[i] = Math.cos((i / (n - 1)) * (Math.PI / 2));
+    curve[n - 1] = 0;
+    this.output.gain.setValueCurveAtTime(curve, Math.max(0, time), Math.max(1 / this.sampleRate, seconds));
+  }
+
   private eraFor(state: SequencerState): Era {
     return this.eraId ? eraById(this.eraId) : eraOf(epochOf(state));
   }
@@ -221,7 +233,7 @@ class EraRig {
   }
 
   private create(era: Era, time: number, level: number, schedule: boolean): Slot {
-    const engine = new VoiceEngine(this.ctx, era.index);
+    const engine = new VoiceEngine(this.ctx, era.index, this.instance);
     const gain = this.ctx.createGain();
     stereo(gain);
     const held = Math.max(SILENT, level);
@@ -464,6 +476,58 @@ export async function renderTimelineToBuffer(
   const hits = planSteps(points, seconds, eraId, options?.barOffset ?? 0);
   for (const hit of hits) {
     if (hit.time < seconds) rig.play(hit);
+  }
+  return ctx.startRendering();
+}
+
+/** Release renders schedule hits this far ahead and prune finished voices this often. */
+const RELEASE_WINDOW_SEC = 2;
+
+/**
+ * Offline render of a track release (release.ts planRelease): plays the plan's hits, fades the output out over the
+ * outro's last bars, and is exactly `plan.seconds` long. Same plan → same buffer in a given browser.
+ */
+/** Release output trim (dB), after the master ceiling. Live, replay and clips are untouched. */
+export const RELEASE_TRIM_DB = -1.2;
+
+export async function renderReleaseToBuffer(plan: ReleasePlan, sampleRate = OFFLINE_RATE): Promise<AudioBuffer> {
+  if (typeof OfflineAudioContext !== "function") {
+    throw new Error("OfflineAudioContext is not available");
+  }
+  const seconds = Math.max(0.05, plan.seconds);
+  const length = Math.max(1, Math.ceil(sampleRate * seconds));
+  const ctx = new OfflineAudioContext({ numberOfChannels: 2, length, sampleRate });
+  // One genre instance for the whole release: the genre, style and tonic the track finished in (SPEC §4.6).
+  const rig = new EraRig(ctx, plan.genre.era, false, plan.genre.epoch);
+  // Release master trim, after the ceiling: full-heat releases measured ~1 dB over the genres' loudest-3s target.
+  const trim = ctx.createGain();
+  trim.gain.value = 10 ** (RELEASE_TRIM_DB / 20);
+  rig.connect(trim);
+  trim.connect(ctx.destination);
+  if (plan.fadeAt < seconds) rig.fadeOutCurve(plan.fadeAt, seconds - plan.fadeAt);
+  // Hits are scheduled a window ahead and finished voices are dropped at fixed suspend points (OfflineReaper),
+  // so the render stays linear in length. Suspend times are multiples of the window: deterministic.
+  const reaper = new OfflineReaper();
+  const hits = plan.hits.filter((hit) => hit.time < seconds);
+  let next = 0;
+  const playUntil = (until: number) => {
+    setOfflineReaper(reaper);
+    try {
+      while (next < hits.length && hits[next].time < until) rig.play(hits[next++]);
+    } finally {
+      setOfflineReaper(null);
+    }
+  };
+  playUntil(2 * RELEASE_WINDOW_SEC);
+  const quantum = 128 / sampleRate;
+  for (let k = 1; k * RELEASE_WINDOW_SEC < seconds - RELEASE_WINDOW_SEC; k++) {
+    const at = Math.round((k * RELEASE_WINDOW_SEC) / quantum) * quantum;
+    ctx.suspend(at).then(() => {
+      reaper.segment = k;
+      reaper.prune(at);
+      playUntil(at + 2 * RELEASE_WINDOW_SEC);
+      return ctx.resume();
+    });
   }
   return ctx.startRendering();
 }

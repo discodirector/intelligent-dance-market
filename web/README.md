@@ -1,6 +1,6 @@
 # web
 
-Player for [Intelligent Dance Market](https://github.com/discodirector/intelligent-dance-market) ($IDM). Every trade is a note. The pool is IDM/IMD on Robinhood Chain 4663. Package names stay `@swarm-sequencer/*`.
+Player for [Intelligent Dance Market](https://github.com/discodirector/intelligent-dance-market) ($IDM). Every trade is a note. The pool is IDM/ETH (native ETH) on Robinhood Chain 4663. Package names stay `@swarm-sequencer/*`.
 
 ```
 npm install

@@ -4,8 +4,10 @@ import { fileURLToPath } from "node:url";
 import { bassAt, encode, infoLine, initialState, isOn } from "../../packages/synth/src/index.ts";
 import { mutate } from "../src/demo/mutate.ts";
 
-const E = 10n ** 18n;
-const amounts = [E / 4n, E / 2n - 1n, 2n * E, 4n * E, 10n * E, 18n * E, 40n * E, 70n * E];
+/** 1 IMD-equivalent at the ETH calibration (1/400): 0.0025 ETH in wei. */
+
+const E = 10n ** 18n / 400n;
+const amounts = [E / 4n, E / 2n - 1n, E, 2n * E, 3n * E, 4n * E, 6n * E, 10n * E];
 
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
@@ -39,8 +41,9 @@ for (let i = 0; i < 28; i++) {
   const whale = i === 22;
   const input = {
     isBuy: rnd() < 0.66,
-    imdAmt: whale ? 160n * E : (amounts[Math.floor(rnd() * amounts.length)] ?? E),
-    tick: Math.floor(rnd() * 2800) - 400,
+    quoteAmt: whale ? 160n * E : (amounts[Math.floor(rnd() * amounts.length)] ?? E),
+    // Around the launch tick (FDV 4 ETH, whale ~0.04 ETH; demo mutate uses core whaleWeiAtTick).
+    tick: 193_380 + Math.floor(rnd() * 2800) - 400,
     blockNumber: block,
     timestamp: chainTs,
   };
@@ -57,7 +60,7 @@ for (let i = 0; i < 28; i++) {
     on: event.on,
     bassNote: event.bassNote,
     isBuy: event.isBuy,
-    imdAmount: event.imdAmount.toString(),
+    quoteAmount: event.quoteAmount.toString(),
     tick: event.tick,
     swapCount: event.swapCount,
   });

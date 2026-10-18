@@ -1,7 +1,7 @@
 import "./style.css";
 import { initialState, type State } from "@swarm-sequencer/core";
-import { ERAS, epochOf, eraOf, FORM_BARS, genreKey, idleStage, NOTE_NAMES, sectionAt, stepDuration, type Era, type SequencerState } from "@swarm-sequencer/synth";
-import { LINKS, NETWORKS, readSource } from "./config";
+import { ERA_SCHEDULE, ERAS, epochOf, eraOf, FORM_BARS, genreKey, idleStage, NOTE_NAMES, sectionAt, stepDuration, styleOf, stylesAt, type Era, type SequencerState } from "@swarm-sequencer/synth";
+import { LINKS, NATIVE_ETH, NETWORKS, readSource } from "./config";
 import { RULES, toSynth } from "./rules";
 import { Audio } from "./audio";
 import { sevenSeg } from "./sevenseg";
@@ -9,8 +9,8 @@ import { dropWalls, moduleWall, updateWalls } from "./wall";
 import { WaveSky } from "./sky";
 import { drawGrid, drawScope, drawSpectrum, Surface, type Flash } from "./visuals";
 import { startLive } from "./data/live";
-import { startReplay } from "./data/replay";
-import type { Feed, SwapEvent } from "./data/types";
+import { EPOCH_PLAY, startReplay } from "./data/replay";
+import { formatQuote, type Feed, type SwapEvent } from "./data/types";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const TRACKS = ["KICK", "SNARE", "HAT", "GLITCH"];
@@ -31,6 +31,8 @@ const flashes: Flash[] = [];
 const counts = { buys: 0, sells: 0, whales: 0 };
 const audio = new Audio();
 let eraOverride: string | null = null;
+/** Testnets and replays let a listener audition genres; the mainnet live view plays only what the chain picks. */
+const canAudition = !(source.kind === "live" && net.mainnet);
 const nowSec = () => clock ?? Date.now() / 1000;
 const asSynth = (s: State): SequencerState => toSynth(s, rules);
 let drops = 0;
@@ -51,16 +53,19 @@ function pushLine(li: HTMLLIElement) {
   if (stick) log.scrollTop = log.scrollHeight;
 }
 
+// Swaps sent by the pulse treasury (an automatic buy after 15 min of silence) are labelled, never passed off as trades.
+const pulseTag = (e: SwapEvent) => (e.pulse ? ` <span class="tag pulse">PULSE · treasury buy</span>` : "");
+
 function swapLine(e: SwapEvent) {
   const li = document.createElement("li");
-  li.className = e.whale ? "whale" : e.isBuy ? "buy" : "sell";
+  li.className = (e.whale ? "whale" : e.isBuy ? "buy" : "sell") + (e.pulse ? " pulse" : "");
   li.title = new Date(e.ts * 1000).toISOString();
   const side = e.isBuy ? "BUY " : "SELL";
-  const amt = e.imd.toFixed(2).padStart(8, " ");
-  const tag = e.whale ? ` <span class="tag">${e.isBuy ? "FILL" : "DROP"}</span>` : "";
+  const amt = formatQuote(e.quote).padStart(8, " ");
+  const tag = (e.whale ? ` <span class="tag">${e.isBuy ? "FILL" : "DROP"}</span>` : "") + pulseTag(e);
   const tx = e.tx ? `<a href="${explorer}/tx/${e.tx}" target="_blank" rel="noopener">${short(e.tx)}</a>` : "";
   li.innerHTML =
-    `<span class="p">&gt;</span> <span class="t">${hhmm(e.ts)}</span>  <span class="sd">${side}</span> ${amt} IMD  ` +
+    `<span class="p">&gt;</span> <span class="t">${hhmm(e.ts)}</span>  <span class="sd">${side}</span> ${amt} ${e.quoteSymbol}  ` +
     `<span class="trk">${TRACKS[e.track].padEnd(6, " ")}</span> s${String(e.step + 1).padStart(2, "0")} <span class="pm">${e.on ? "+" : "−"}</span>${tag}  ${tx}  ` +
     `<a class="blk" href="${explorer}/block/${e.block}" target="_blank" rel="noopener">blk ${e.block}</a>`;
   pushLine(li);
@@ -79,10 +84,10 @@ function tapeLine(html: string, cls: string) {
 }
 function tapeSwap(e: SwapEvent) {
   const side = e.isBuy ? "BUY " : "SELL";
-  const tag = e.whale ? ` <span class="tag">${e.isBuy ? "FILL" : "DROP"}</span>` : "";
+  const tag = (e.whale ? ` <span class="tag">${e.isBuy ? "FILL" : "DROP"}</span>` : "") + pulseTag(e);
   const tx = e.tx ? ` <a href="${explorer}/tx/${e.tx}" target="_blank" rel="noopener">${short(e.tx)}</a>` : "";
   tapeLine(
-    `<span class="t">${hhmm(e.ts)}</span> <span class="sd">${side}</span> ${e.imd.toFixed(2).padStart(8, " ")} IMD ` +
+    `<span class="t">${hhmm(e.ts)}</span> <span class="sd">${side}</span> ${formatQuote(e.quote).padStart(8, " ")} ${e.quoteSymbol} ` +
       `<span class="trk">${TRACKS[e.track].padEnd(7, " ")}</span>s${String(e.step + 1).padStart(2, "0")} <span class="pm">${e.on ? "+" : "−"}</span>${tag}${tx}`,
     e.whale ? "whale" : e.isBuy ? "buy" : "sell",
   );
@@ -247,6 +252,17 @@ knob.addEventListener("keydown", (e) => {
   if (e.key === "ArrowDown" || e.key === "ArrowLeft") setKnob(audio.getVolume() - 0.05);
 });
 
+/** Genres in the rotation at this epoch: the last ERA_SCHEDULE entry already in force, so the copy follows new genres. */
+let shownGenres = -1;
+function showGenreCount(epoch: number) {
+  let ids = ERA_SCHEDULE[0].ids;
+  for (const entry of ERA_SCHEDULE) if (entry.fromEpoch <= epoch) ids = entry.ids;
+  if (ids.length === shownGenres) return;
+  shownGenres = ids.length;
+  for (const el of document.querySelectorAll(".n-genres")) el.textContent = String(ids.length);
+}
+showGenreCount(0);
+
 // ---------------------------------------------------------------- eras rack
 const rack = $("rack");
 rack.innerHTML = ERAS.map(
@@ -258,10 +274,24 @@ rack.innerHTML = ERAS.map(
       <dt>BASS</dt><dd>${era.bassMode}</dd><dt>PAD</dt><dd>${era.padMode}</dd>
       <dt>LEAD</dt><dd>${era.leadMode}</dd><dt>KIT</dt><dd>${era.snare}/${era.hat}</dd>
       <dt>SWING</dt><dd>${Math.round(era.swing * 100)}%</dd>
+      <dt>STYLES</dt><dd class="styles" data-genre="${era.id}"></dd>
     </dl>
-    <button class="btn-sq audition" data-id="${era.id}">AUDITION</button>
+    ${canAudition ? `<button class="btn-sq audition" data-id="${era.id}">AUDITION</button>` : ""}
   </article>`,
 ).join("");
+/** The rack lists each genre's styles in force at the chain epoch (STYLE_SCHEDULE); redrawn when a list changes. */
+let rackStylesKey = "";
+function rackStyles(epoch: number) {
+  const lists = ERAS.map((era) => stylesAt(era.id, epoch));
+  const key = lists.map((l) => l.map((st) => st.id).join(",")).join("|");
+  if (key === rackStylesKey) return;
+  rackStylesKey = key;
+  ERAS.forEach((era, i) => {
+    const dd = rack.querySelector<HTMLElement>(`.styles[data-genre="${era.id}"]`);
+    if (dd) dd.innerHTML = lists[i].map((st) => `<span data-style="${st.id}">${st.name}</span>`).join(" · ");
+  });
+}
+rackStyles(0);
 rack.addEventListener("click", async (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".audition");
   if (!btn) return;
@@ -269,7 +299,11 @@ rack.addEventListener("click", async (e) => {
   if (!audio.running) await setPlaying(true);
   audio.player!.setEraOverride(eraOverride);
 });
-$("era-follow").addEventListener("click", () => {
+if (!canAudition) {
+  $("era-follow").remove();
+  $("rack-note").textContent = "the market picks which one plays";
+}
+$("era-follow")?.addEventListener("click", () => {
   eraOverride = null;
   audio.player?.setEraOverride(null);
 });
@@ -287,7 +321,9 @@ $("oc-grid").innerHTML = [
   ocRow("CHAIN", `${net.label} · id ${net.chainId}`),
   ocRow("HOOK", net.hook ?? "pending launch", [...addr(net.hook), ...src(net.hook)]),
   ocRow("TOKEN $IDM", net.token ?? "pending launch", [...addr(net.token, "token"), ...src(net.token)]),
-  ocRow("PAIRED WITH $IMD", net.imd ?? "—", addr(net.imd, "token")),
+  net.quote === NATIVE_ETH
+    ? ocRow("PAIRED WITH", "native ETH")
+    : ocRow(`PAIRED WITH $${net.quoteSymbol}`, net.quote ?? "—", addr(net.quote, "token")),
   ocRow("POOL ID", net.poolId ?? "pending launch"),
   ocRow("POOL MANAGER", net.poolManager ?? "—", addr(net.poolManager)),
   ocRow("LAUNCH", net.launchedBy, net.launchUrl ? [["job", net.launchUrl]] : [["imd.fun", LINKS.imd]]),
@@ -301,7 +337,7 @@ $("onchain-sub").textContent =
 const switchLink = $<HTMLAnchorElement>("src-switch");
 if (source.kind === "replay") {
   switchLink.textContent = `LIVE ${net.label}`;
-  switchLink.href = location.pathname;
+  switchLink.href = `${location.pathname}?net=${net.key}`;
   $("src-label").textContent = source.replay.label + (v2 ? " · RULES V2" : "");
 } else $("src-label").textContent = `LIVE · ${net.label}` + (v2 ? " · RULES V2" : "");
 $("sb-net").textContent = source.kind === "replay" ? "REPLAY" : net.label;
@@ -370,13 +406,18 @@ function frame(now: number) {
     const era = audio.running ? audio.player!.getEra() : { ...eraOf(epochOf(state)), epoch: epochOf(state), fading: false };
     const shown = eraOverride ? ERAS.find((e) => e.id === eraOverride)! : era;
     updateReadouts(bpm, ERAS.find((e) => e.id === shown.id)!);
+    // The style the engine plays: an audition keeps the chain epoch, so styleOf picks exactly as the engine does.
+    const style = styleOf(ERAS.find((e) => e.id === shown.id)!, era.epoch).style;
+    rackStyles(era.epoch);
     $("era-name").textContent = shown.name.toUpperCase();
     const part = audio.running ? ` · ${sectionAt(bar).name.toUpperCase()} ${(bar % FORM_BARS) + 1}/${FORM_BARS}` : "";
-    $("era-sub").textContent = eraOverride ? `AUDITION · CHAIN EPOCH ${epochOf(state)}${part}` : `EPOCH ${epochOf(state)}${era.fading ? " · CROSSFADE" : ""}${part || " · FOLLOWING CHAIN"}`;
+    const styleTag = `STYLE ${style.name.toUpperCase()} · `;
+    $("era-sub").textContent = eraOverride ? `${styleTag}AUDITION · CHAIN EPOCH ${epochOf(state)}${part}` : `${styleTag}EPOCH ${epochOf(state)}${era.fading ? " · CROSSFADE" : ""}${part || " · FOLLOWING CHAIN"}`;
     for (const el of rack.children) {
       const id = (el as HTMLElement).dataset.id;
       el.classList.toggle("current", id === era.id && !eraOverride);
       el.classList.toggle("audition-on", id === eraOverride);
+      for (const s of el.querySelectorAll<HTMLElement>("[data-style]")) s.classList.toggle("on", id === shown.id && s.dataset.style === style.id);
     }
     const idle = idleStage(state, nowSec());
     const order = ["full", "thinning", "sparse", "drone"];
@@ -384,7 +425,8 @@ function frame(now: number) {
     $("idle-label").textContent = state.lastTs ? idle.label : "NO SWAPS YET";
     $("sb-bpm").textContent = String(Math.round(bpm));
     $("sb-epoch").textContent = String(epochOf(state));
-    $("sb-era").textContent = era.name;
+    showGenreCount(epochOf(state));
+    $("sb-era").textContent = `${shown.name} · ${style.name}`;
     sparkline();
   }
   requestAnimationFrame(frame);
@@ -409,7 +451,7 @@ function sparkline() {
 
 // ---------------------------------------------------------------- boot
 systemLine(
-  (source.kind === "replay" ? `${source.replay.label} · ${source.speed}× speed` : `${net.label} · hook ${net.hook ? short(net.hook) : "pending"}`) +
+  (source.kind === "replay" ? `${source.replay.label} · ${EPOCH_PLAY[0]}–${EPOCH_PLAY[1]} s per genre` : `${net.label} · hook ${net.hook ? short(net.hook) : "pending"}`) +
     (v2 ? ` · rules v2${source.kind === "replay" && source.resim ? " (re-simulated)" : ""}` : ""),
 );
 requestAnimationFrame(frame);

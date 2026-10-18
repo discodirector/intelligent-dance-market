@@ -20,6 +20,12 @@
     "paths": {
       "@deployments/*": [
         "../contracts/deployments/*"
+      ],
+      "@swarm-sequencer/core": [
+        "../packages/core/src/index.ts"
+      ],
+      "@swarm-sequencer/synth": [
+        "../packages/synth/src/index.ts"
       ]
     }
   },

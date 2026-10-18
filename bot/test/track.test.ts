@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { buildTimeline, type RawSwap, type TimelineEntry } from "../src/lib/timeline.ts";
+import { buildTimeline, quoteAmtOf, type RawSwap, type TimelineEntry } from "../src/lib/timeline.ts";
 import { decodeFor } from "../src/lib/hookRules.ts";
 import { factsFromTimeline } from "../src/lib/facts.ts";
 import { templateCaption, validateCaption, MAX_LEN } from "../src/caption/index.ts";
@@ -8,7 +8,15 @@ import { decide, H, type SchedState } from "../src/rules.ts";
 import { AFTER_DROP, trackSubtitle, trackWindow } from "../src/lib/track.ts";
 
 const tl: TimelineEntry[] = JSON.parse(readFileSync(new URL("../data/imd-eth-7d.timeline.json", import.meta.url), "utf8"));
-const swaps: RawSwap[] = tl.map((e) => ({ isBuy: e.isBuy, imdAmt: BigInt(e.imdAmt), tick: e.tick, blockNumber: BigInt(e.blockNumber), timestamp: e.ts }));
+const tape: RawSwap[] = tl.map((e) => ({ isBuy: e.isBuy, quoteAmt: quoteAmtOf(e), tick: e.tick, blockNumber: BigInt(e.blockNumber), timestamp: e.ts }));
+// Whether a real week finishes a track depends on its whale density (its ticks sit at FDV ~2-4M ETH in IDM terms,
+// so the FDV-scaled whale is ~30-50 ETH and v2 sees almost none), so the v2 cases append a steady run of small buys that saturates the grid and drops for sure.
+const last = tl.at(-1)!;
+const tail: RawSwap[] = Array.from({ length: 400 }, (_, i) => ({
+  isBuy: i % 5 !== 4, quoteAmt: 2_500_000_000_000_000n, tick: last.tick + ((i * 37) % 600) - 300,
+  blockNumber: BigInt(last.blockNumber + 1 + i), timestamp: last.ts + 12 * (i + 1),
+}));
+const swaps = [...tape, ...tail];
 const v2 = buildTimeline(swaps, undefined, "v2").entries;
 const drops = v2.filter((e) => e.trackComplete);
 
@@ -39,7 +47,7 @@ describe("hook rules", () => {
 describe("track complete post", () => {
   it("template caption is valid", () => {
     const win = trackWindow(v2);
-    const f = factsFromTimeline(win, { kind: "track", chain: "robinhood", pool: "IDM/IMD" });
+    const f = factsFromTimeline(win, { kind: "track", chain: "robinhood", pool: "IDM/ETH" });
     const tc = drops.at(-1)!.trackComplete!;
     expect(f.track).toMatchObject({ no: tc.trackNo, swaps: tc.swaps, swapCount: tc.swapCount, page: tc.patternId });
     const t = templateCaption(f);

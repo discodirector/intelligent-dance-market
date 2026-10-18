@@ -18,13 +18,15 @@ import {
   type State,
 } from "../../packages/core/src/index.ts";
 
-const E = 10n ** 18n;
+/** 1 IMD-equivalent at the ETH calibration (1/400): 0.0025 ETH in wei. */
+
+const E = 10n ** 18n / 400n;
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const outDir = resolve(root, "sim/stress/accumulate/timelines");
 mkdirSync(outDir, { recursive: true });
 const EXPLORE = process.argv.includes("--explore");
 
-type Swap = { isBuy: boolean; imdAmt: bigint; tick?: number; ts?: number; block?: bigint };
+type Swap = { isBuy: boolean; quoteAmt: bigint; tick?: number; ts?: number; block?: bigint };
 
 function rng(seed: number) {
   let a = seed >>> 0;
@@ -40,7 +42,7 @@ function rng(seed: number) {
 /** Log-normal size: median * 2^(sigma * z), sigma in octaves. */
 function logNormal(r: () => number, median: number, sigma: number): bigint {
   const z = Math.sqrt(-2 * Math.log(1 - r())) * Math.cos(2 * Math.PI * r());
-  return BigInt(Math.round(median * 2 ** (sigma * z) * 1e9)) * 10n ** 9n;
+  return BigInt(Math.round(median * 2 ** (sigma * z) * 1e9)) * 10n ** 9n / 400n; // IMD-equivalent median -> ETH wei
 }
 
 const repeat = (n: number, s: Swap): Swap[] => Array.from({ length: n }, () => ({ ...s }));
@@ -49,32 +51,32 @@ const repeat = (n: number, s: Swap): Swap[] => Array.from({ length: n }, () => (
 const SIZE = { hat: E / 4n, glitch: 2n * E, snare: 10n * E, kick: 40n * E, whale: 160n * E };
 const r7 = rng(7);
 const SCENARIOS: Record<string, Swap[]> = {
-  "50-small-buys": repeat(50, { isBuy: true, imdAmt: SIZE.hat }),
-  "identical-spam-200": repeat(200, { isBuy: true, imdAmt: SIZE.hat }),
-  "buy-sell-churn": Array.from({ length: 200 }, (_, i) => ({ isBuy: i % 2 === 0, imdAmt: SIZE.glitch })),
-  "50-snare-buys": repeat(50, { isBuy: true, imdAmt: SIZE.snare }),
-  "50-kick-buys": repeat(50, { isBuy: true, imdAmt: SIZE.kick }),
-  "50-glitch-buys": repeat(50, { isBuy: true, imdAmt: SIZE.glitch }),
-  "50-sells": repeat(50, { isBuy: false, imdAmt: SIZE.snare }),
-  "whales-only": Array.from({ length: 20 }, (_, i) => ({ isBuy: i % 3 !== 2, imdAmt: SIZE.whale })),
-  "same-tick-buys": repeat(50, { isBuy: true, imdAmt: SIZE.snare, tick: 1200 }),
+  "50-small-buys": repeat(50, { isBuy: true, quoteAmt: SIZE.hat }),
+  "identical-spam-200": repeat(200, { isBuy: true, quoteAmt: SIZE.hat }),
+  "buy-sell-churn": Array.from({ length: 200 }, (_, i) => ({ isBuy: i % 2 === 0, quoteAmt: SIZE.glitch })),
+  "50-snare-buys": repeat(50, { isBuy: true, quoteAmt: SIZE.snare }),
+  "50-kick-buys": repeat(50, { isBuy: true, quoteAmt: SIZE.kick }),
+  "50-glitch-buys": repeat(50, { isBuy: true, quoteAmt: SIZE.glitch }),
+  "50-sells": repeat(50, { isBuy: false, quoteAmt: SIZE.snare }),
+  "whales-only": Array.from({ length: 20 }, (_, i) => ({ isBuy: i % 3 !== 2, quoteAmt: SIZE.whale })),
+  "same-tick-buys": repeat(50, { isBuy: true, quoteAmt: SIZE.snare, tick: 1200 }),
   "mixed-random": Array.from({ length: 60 }, () => ({
     isBuy: r7() < 0.6,
-    imdAmt: [SIZE.hat, SIZE.glitch, SIZE.snare, SIZE.kick][Math.floor(r7() * 4)],
+    quoteAmt: [SIZE.hat, SIZE.glitch, SIZE.snare, SIZE.kick][Math.floor(r7() * 4)],
   })),
 };
 const r11 = rng(11);
-SCENARIOS["small-buys-varied"] = Array.from({ length: 200 }, () => ({ isBuy: true, imdAmt: logNormal(r11, 0.3, 1.2) }));
+SCENARIOS["small-buys-varied"] = Array.from({ length: 200 }, () => ({ isBuy: true, quoteAmt: logNormal(r11, 0.3, 1.2) }));
 const r13 = rng(13);
 SCENARIOS["mixed-market-varied"] = Array.from({ length: 300 }, () => ({
   isBuy: r13() < 0.55,
-  imdAmt: r13() < 0.02 ? BigInt(120 + Math.floor(r13() * 200)) * E : logNormal(r13, 3, 1.6),
+  quoteAmt: r13() < 0.02 ? BigInt(120 + Math.floor(r13() * 200)) * E : logNormal(r13, 3, 1.6),
 }));
-SCENARIOS["dust-then-trade"] = [...repeat(100, { isBuy: false, imdAmt: 10n ** 12n }), { isBuy: true, imdAmt: 3n * E }];
+SCENARIOS["dust-then-trade"] = [...repeat(100, { isBuy: false, quoteAmt: 10n ** 12n }), { isBuy: true, quoteAmt: 3n * E }];
 
-interface WeekEvent { ts: number; blockNumber: number; isBuy: boolean; imdAmt: string; tick: number }
+interface WeekEvent { ts: number; blockNumber: number; isBuy: boolean; quoteAmt: string; tick: number }
 const week = JSON.parse(readFileSync(resolve(root, "site/public/timelines/imd-week.json"), "utf8")) as WeekEvent[];
-SCENARIOS["imd-week"] = week.map((e) => ({ isBuy: e.isBuy, imdAmt: BigInt(e.imdAmt), tick: e.tick, ts: e.ts, block: BigInt(e.blockNumber) }));
+SCENARIOS["imd-week"] = week.map((e) => ({ isBuy: e.isBuy, quoteAmt: BigInt(e.quoteAmt), tick: e.tick, ts: e.ts, block: BigInt(e.blockNumber) }));
 
 type Variant = { name: string; opts?: MutateOptions };
 const VARIANTS: Variant[] = [
@@ -158,7 +160,7 @@ function run(name: string, swaps: Swap[], v: Variant, timeline: boolean, musical
     const prevPattern = state.pattern;
     const next = mutate(
       state,
-      { isBuy: swap.isBuy, imdAmt: swap.imdAmt, tick: swap.tick ?? 600 + ((i * 397) % 2400), blockNumber: block, timestamp: ts },
+      { isBuy: swap.isBuy, quoteAmt: swap.quoteAmt, tick: swap.tick ?? 600 + ((i * 397) % 2400), blockNumber: block, timestamp: ts },
       undefined,
       v.opts,
     );

@@ -30,7 +30,7 @@ describe("Solidity v2 vectors", () => {
     it(`#${i} ${c.name}`, () => {
       const before = decode(c.before.slot0, c.before.slot1, V2_SLOTS);
       expect(json(encode(before, V2_SLOTS))).toEqual(c.before);
-      const input = { ...c.input, imdAmt: BigInt(c.input.imdAmt), blockNumber: BigInt(c.input.blockNumber) };
+      const input = { ...c.input, quoteAmt: BigInt(c.input.quoteAmt), blockNumber: BigInt(c.input.blockNumber) };
       const { state, event } = mutate(before, input, DEFAULT_THRESHOLDS, V2_RULES);
       expect(json(encode(state, V2_SLOTS))).toEqual(c.after);
       expect(state).toEqual(decode(c.after.slot0, c.after.slot1, V2_SLOTS));
@@ -40,7 +40,7 @@ describe("Solidity v2 vectors", () => {
       const actual = json({ ...event, movement: event.movement ?? null, drop: event.drop ?? null, trackComplete: event.trackComplete ?? null });
       expect(actual).toEqual(expected);
       if (!event.whale) {
-        expect(event.fromTrack).toBe(relativeTrackFor(log2Fixed(input.imdAmt) - before.sizeLogEma!));
+        expect(event.fromTrack).toBe(relativeTrackFor(log2Fixed(input.quoteAmt) - before.sizeLogEma!));
       }
       if (event.trackComplete) {
         const snap = decode(event.trackComplete.slot0, event.trackComplete.slot1, V2_SLOTS);

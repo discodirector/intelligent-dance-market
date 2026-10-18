@@ -12,12 +12,114 @@ export const MODE_NAMES = ["Dorian", "Phrygian", "Lydian", "Locrian"] as const;
 export const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"] as const;
 
 const E18 = 10n ** 18n;
-export const DEFAULT_THRESHOLDS: Thresholds = {
+
+// ---------------------------------------------------------------------------
+// Quote calibration (SPEC §3.1). The launch hook pairs IDM with native ETH; the rules read |ETH delta| in wei.
+// A 1/400 scale of the original IMD calibration, so the relative rules behave the same. The whale threshold is
+// not a constant: it scales with the pool's FDV, read from the post-swap tick (whaleWeiAtTick below).
+// Mirrors contracts/src/QuoteCalibration.sol; the hook gets hat/glitch/snare as constructor arguments.
+// ---------------------------------------------------------------------------
+
+/** Display symbol of the launch hook's quote currency. */
+export const QUOTE_SYMBOL = "ETH";
+/**
+ * ETH thresholds (wei of native ETH): 0.00125 · 0.0125 · 0.0625 ETH, a 1/400 scale of the IMD ones.
+ * `kick` (0.2 ETH) is the whale of the absolute v1-rules path only: ETH-calibrated replays of the old IMD tapes
+ * (teasers keep their sound). The launch hook (V2_RULES, fdvWhale) ignores it and uses whaleWeiAtTick(tick).
+ */
+export const ETH_THRESHOLDS: Thresholds = {
+  hat: 1_250_000_000_000_000n, // 0.5 IMD / 400
+  glitch: 12_500_000_000_000_000n, // 5 IMD / 400
+  snare: 62_500_000_000_000_000n, // 25 IMD / 400
+  kick: 200_000_000_000_000_000n, // v1-rules replays only; not the launch hook's whale
+};
+/** Amounts under this are clamped up before entering the size EMA: 0.000025 ETH (0.01 IMD / 400). */
+export const ETH_EMA_FLOOR = 25_000_000_000_000n;
+/** sizeLogEma starts at log2Fixed of this: 0.0125 ETH (5 IMD / 400). */
+export const ETH_INITIAL_SIZE = 12_500_000_000_000_000n;
+/** v1 hook (Sepolia, IMD quote) thresholds: old replays and spec/vectors.json only. */
+export const IMD_THRESHOLDS: Thresholds = {
   hat: E18 / 2n,
   glitch: 5n * E18,
   snare: 25n * E18,
   kick: 100n * E18,
 };
+/** The launch hook's thresholds (native ETH). */
+export const DEFAULT_THRESHOLDS: Thresholds = ETH_THRESHOLDS;
+/** Whale threshold of the v1 IMD-quoted hook (old tapes), wei of IMD. */
+export const IMD_WHALE_WEI = IMD_THRESHOLDS.kick;
+
+// ---------------------------------------------------------------------------
+// FDV-scaled whale threshold (SPEC §3.1). whale_wei = K * sqrt(FDV_wei), clamped to [WHALE_MIN_WEI, WHALE_MAX_WEI].
+// FDV_wei = SUPPLY / P with P = 1.0001^tick = IDM per ETH (currency0 = ETH, currency1 = IDM), so
+// sqrt(FDV) = sqrt(SUPPLY) * getSqrtPriceAtTick(-tick) / 2^96 and whale_wei = C * getSqrtPriceAtTick(-tick) >> 96,
+// C = floor(K * sqrt(SUPPLY)). K = 2e7: FDV 4 / 40 / 400 / 4000 ETH -> 0.04 / 0.1265 / 0.4 / 1.265 ETH.
+// The tick is the post-swap pool tick: Mutated.tick, MutationInput.tick, the timeline entry's tick.
+// ---------------------------------------------------------------------------
+
+/** Fixed IDM supply, wei (1 billion tokens). */
+export const IDM_SUPPLY = 10n ** 27n;
+/** Whale scale factor, wei per sqrt(wei) of FDV. */
+export const WHALE_K = 20_000_000n;
+/** floor(WHALE_K * sqrt(IDM_SUPPLY)) = floor(sqrt(4e41)). */
+export const WHALE_C = 632_455_532_033_675_866_399n;
+/** Whale threshold clamp: 0.005 ETH (reached at tick >= 234971, FDV <= 0.0625 ETH) .. 50 ETH (tick <= 50754). */
+export const WHALE_MIN_WEI = 5_000_000_000_000_000n;
+export const WHALE_MAX_WEI = 50_000_000_000_000_000_000n;
+/** v4-core TickMath bounds. */
+export const MIN_TICK = -887272;
+export const MAX_TICK = 887272;
+
+const SQRT_MUL = [
+  0xfffcb933bd6fad37aa2d162d1a594001n, 0xfff97272373d413259a46990580e213an, 0xfff2e50f5f656932ef12357cf3c7fdccn,
+  0xffe5caca7e10e4e61c3624eaa0941cd0n, 0xffcb9843d60f6159c9db58835c926644n, 0xff973b41fa98c081472e6896dfb254c0n,
+  0xff2ea16466c96a3843ec78b326b52861n, 0xfe5dee046a99a2a811c461f1969c3053n, 0xfcbe86c7900a88aedcffc83b479aa3a4n,
+  0xf987a7253ac413176f2b074cf7815e54n, 0xf3392b0822b70005940c7a398e4b70f3n, 0xe7159475a2c29b7443b29c7fa6e889d9n,
+  0xd097f3bdfd2022b8845ad8f792aa5825n, 0xa9f746462d870fdf8a65dc1f90e061e5n, 0x70d869a156d2a1b890bb3df62baf32f7n,
+  0x31be135f97d08fd981231505542fcfa6n, 0x9aa508b5b7a84e1c677de54f3e99bc9n, 0x5d6af8dedb81196699c329225ee604n,
+  0x2216e584f5fa1ea926041bedfe98n, 0x48a170391f7dc42444e8fa2n,
+] as const;
+const U256_MAX = (1n << 256n) - 1n;
+
+/** Bit-exact v4-core TickMath.getSqrtPriceAtTick: sqrt(1.0001^tick) * 2^96 (Q64.96). Throws if |tick| > MAX_TICK. */
+export function getSqrtPriceAtTick(tick: number): bigint {
+  if (!Number.isInteger(tick) || Math.abs(tick) > MAX_TICK) throw new RangeError(`InvalidTick(${tick})`);
+  const abs = Math.abs(tick);
+  let price = abs & 1 ? SQRT_MUL[0] : 1n << 128n;
+  for (let i = 1; i < 20; i++) if ((abs >> i) & 1) price = (price * SQRT_MUL[i]) >> 128n;
+  if (tick > 0) price = U256_MAX / price;
+  return (price + (1n << 32n) - 1n) >> 32n;
+}
+
+/**
+ * Whale threshold (quote wei) for a swap that leaves the pool at `tick` (SequencerState.whaleThreshold).
+ * quoteIs0 (native ETH, the launch pool): sqrt(FDV) ~ sqrtPrice(-tick); a currency1 quote reads sqrtPrice(+tick).
+ * Ticks outside TickMath's range saturate, so this never throws for an int24.
+ */
+export function whaleWeiAtTick(tick: number, quoteIs0 = true): bigint {
+  const t = Math.min(MAX_TICK, Math.max(MIN_TICK, tick));
+  const w = (WHALE_C * getSqrtPriceAtTick(quoteIs0 ? -t : t)) >> 96n;
+  return w < WHALE_MIN_WEI ? WHALE_MIN_WEI : w > WHALE_MAX_WEI ? WHALE_MAX_WEI : w;
+}
+
+/** FDV in ETH wei at a pool tick (currency0 = ETH): IDM_SUPPLY / 1.0001^tick. Display only (float price). */
+export function fdvWeiAtTick(tick: number): bigint {
+  const sp = getSqrtPriceAtTick(Math.min(MAX_TICK, Math.max(MIN_TICK, -tick)));
+  return (IDM_SUPPLY * sp * sp) >> 192n;
+}
+
+/**
+ * The one whale helper for clients: threshold for an entry's quote and post-swap tick.
+ * ETH (launch hook): FDV-scaled from the tick. IMD (v1 Sepolia hook, old tapes): the fixed 100 IMD.
+ */
+export function whaleThresholdFor(quote: "ETH" | "IMD", tick: number): bigint {
+  return quote === "IMD" ? IMD_WHALE_WEI : whaleWeiAtTick(tick);
+}
+
+/** True when a swap of `quoteAmt` ending at `tick` is a whale (drop) for that quote. */
+export function isWhaleSwap(quoteAmt: bigint, tick: number, quote: "ETH" | "IMD" = "ETH"): boolean {
+  return quoteAmt >= whaleThresholdFor(quote, tick);
+}
 
 export const BPM_MIN = 72;
 export const BPM_MAX = 118;
@@ -54,7 +156,7 @@ export interface State {
   pressure: number; // int32
   intervalEma: number; // uint32
   releaseCount: number; // uint32
-  /** Relative mode only (prototype): EMA of log2Fixed(imdAmt), uint16. Would live in slot1 bits 152..167. */
+  /** Relative mode only: EMA of log2Fixed(quoteAmt), uint16, in slot1 bits 152..167. */
   sizeLogEma?: number;
   /** Drop mode only (prototype): buy pressure on a saturated grid, uint8. Would live in slot1 bits 168..175. */
   heat?: number;
@@ -69,7 +171,8 @@ export interface Slots {
 
 export interface MutationInput {
   isBuy: boolean;
-  imdAmt: bigint; // 18 decimals, absolute value
+  /** |delta| of the quote currency (launch: native ETH, wei; v1 hook: IMD), 18 decimals. */
+  quoteAmt: bigint;
   tick: number; // pool tick after the swap
   blockNumber: bigint | number;
   timestamp: bigint | number;
@@ -82,9 +185,12 @@ export interface MutationEvent {
   on: boolean;
   bassNote: number;
   isBuy: boolean;
-  imdAmount: bigint;
+  /** Mutated.quoteAmount (was imdAmount; same ABI slot and type). */
+  quoteAmount: bigint;
   tick: number;
   whale: boolean;
+  /** fdvWhale only: the whale threshold this swap was judged against (whaleWeiAtTick(tick)). Not an on-chain field. */
+  whaleWei?: bigint;
   slot0: bigint;
   slot1: bigint;
   /** Present when a Movement event is emitted (whale swap). */
@@ -210,10 +316,10 @@ export function stepHash(swapCount: number, tick: number, blockNumber: bigint | 
   );
 }
 
-export function trackFor(imdAmt: bigint, t: Thresholds = DEFAULT_THRESHOLDS): number {
-  if (imdAmt < t.hat) return TRACK_HAT;
-  if (imdAmt < t.glitch) return TRACK_GLITCH;
-  if (imdAmt < t.snare) return TRACK_SNARE;
+export function trackFor(quoteAmt: bigint, t: Thresholds = DEFAULT_THRESHOLDS): number {
+  if (quoteAmt < t.hat) return TRACK_HAT;
+  if (quoteAmt < t.glitch) return TRACK_GLITCH;
+  if (quoteAmt < t.snare) return TRACK_SNARE;
   return TRACK_KICK; // < T_KICK or whale
 }
 
@@ -249,8 +355,8 @@ export function euclidMask(k: number, rot: number): number {
 //
 // Per swap, BEFORE the EMA update: r = L - sizeLogEma (signed, 1/16 octave), then
 //   r < hatBelow → HAT, r < glitchBelow → GLITCH, r < snareBelow → SNARE, else KICK.
-// Whale stays absolute: imdAmt >= thresholds.kick (100 IMD) still drops, regardless of r.
-// Update: Lc = clamp(L, L(floor), L(thresholds.kick)); sizeLogEma = (sizeLogEma * 7 + Lc) / 8 (floor div).
+// Whale stays absolute: quoteAmt >= the whale threshold (v2: whaleWeiAtTick(tick)) still drops, regardless of r.
+// Update: Lc = clamp(L, L(floor), L(whale threshold)); sizeLogEma = (sizeLogEma * 7 + Lc) / 8 (floor div).
 // The clamps stop one whale or a run of dust from shoving the market median far.
 // ---------------------------------------------------------------------------
 
@@ -285,17 +391,17 @@ export function log2Fixed(x: bigint): number {
   return m * 16 + Number(f);
 }
 
-/** L(5 IMD) = 993. */
-export const INITIAL_SIZE_LOG_EMA = log2Fixed(5n * E18);
+/** L(0.0125 ETH) = 854 (was L(5 IMD) = 993; 1/400 is not a power of two, so log2Fixed rounds it on its own). */
+export const INITIAL_SIZE_LOG_EMA = log2Fixed(ETH_INITIAL_SIZE);
 
 export const DEFAULT_RELATIVE_TIERS: RelativeTiers = {
-  // Tuned on small-buys-varied (log-normal, median 0.3 IMD, sigma 1.2 octaves, 50 seeds):
+  // Tuned on small-buys-varied (log-normal, median 0.3 IMD = 0.00075 ETH, sigma 1.2 octaves, 50 seeds):
   // hat 28% · glitch 34% · snare 23% · kick 15% at steady state. Floor division keeps the EMA
   // ~3.5/16 octave under the market, so r centres near +3, hence the asymmetric cut points.
   hatBelow: -8,
   glitchBelow: 10,
   snareBelow: 25,
-  emaFloor: E18 / 100n,
+  emaFloor: ETH_EMA_FLOOR,
 };
 
 /** The brief's starting tiers (<0.5x, 0.5x..1.5x, 1.5x..4x, >=4x), kept for the A/B harness. */
@@ -312,10 +418,10 @@ export function relativeTrackFor(r: number, t: RelativeTiers = DEFAULT_RELATIVE_
   return TRACK_KICK;
 }
 
-export function nextSizeLogEma(ema: number, imdAmt: bigint, thresholds: Thresholds = DEFAULT_THRESHOLDS, t: RelativeTiers = DEFAULT_RELATIVE_TIERS): number {
+export function nextSizeLogEma(ema: number, quoteAmt: bigint, thresholds: Thresholds = DEFAULT_THRESHOLDS, t: RelativeTiers = DEFAULT_RELATIVE_TIERS): number {
   const lo = log2Fixed(t.emaFloor);
   const hi = log2Fixed(thresholds.kick);
-  const l = Math.min(hi, Math.max(lo, log2Fixed(imdAmt)));
+  const l = Math.min(hi, Math.max(lo, log2Fixed(quoteAmt)));
   return Math.floor((ema * 7 + l) / 8);
 }
 
@@ -424,7 +530,7 @@ export function accumulateWrite(
 //   drop (heat >= heatMax): snapshot = encode(state)  → trackComplete event
 //         root = (root + 7) % 12; patternId += 1        (same movement as a whale)
 //         pattern = dropSeed(h); bass &= BASS_KEEP; heat = 0; trackNo += 1 (uint16, wraps)
-// Defaults (see sim/stress/drop/REPORT.md): satBits 48, heatMax 16, coolMode silence, sellCool 1, noopHeat on.
+// Defaults: satBits 44 (was 48, sim/stress/drop/REPORT.md), heatMax 16, coolMode silence, sellCool 1, noopHeat on.
 // A drop depends on how many trades went into a full grid, not on how fast they came.
 // ---------------------------------------------------------------------------
 
@@ -451,7 +557,7 @@ export interface DropRules {
 /** Silence after which heat resets (coolMode "silence"). Mirrors packages/synth/src/idle.ts IDLE_DRONE_SEC. */
 export const SILENCE_RESET_SEC = 3600;
 
-export const DEFAULT_DROP_RULES: DropRules = { satBits: 48, heatMax: 16, coolSec: 120, sellCool: 1, noopHeat: true, coolMode: "silence" };
+export const DEFAULT_DROP_RULES: DropRules = { satBits: 44, heatMax: 16, coolSec: 120, sellCool: 1, noopHeat: true, coolMode: "silence" };
 
 export const HEAT_SHIFT = 168n;
 export const TRACK_NO_SHIFT = 176n;
@@ -501,16 +607,21 @@ export function initialDropState(base: State = initialState()): State {
 }
 
 export interface MutateOptions {
-  /** Classify non-whale swaps against the market's own size EMA instead of fixed IMD thresholds. */
+  /** Classify non-whale swaps against the market's own size EMA instead of fixed thresholds. */
   relative?: boolean | RelativeTiers;
   /** Grow repeated buys up the strength ladder (and thin repeated sells) instead of re-writing a bit that is already there. */
   accumulate?: boolean | AccumulateRules;
   /** Heat on a saturated grid finishes the track: snapshot, movement, fresh seed (see DropRules). */
   drop?: boolean | DropRules;
+  /**
+   * Whale threshold from the post-swap tick (whaleWeiAtTick) instead of thresholds.kick, for the whale test and the
+   * EMA upper clamp. `true` = quote is currency0 (native ETH, the launch pool).
+   */
+  fdvWhale?: boolean | { quoteIs0: boolean };
 }
 
-/** The v2 hook: relative tiers + accumulation + heat/drop with their default rules. */
-export const V2_RULES: MutateOptions = { relative: true, accumulate: true, drop: true };
+/** The v2 hook: relative tiers + accumulation + heat/drop with their default rules, FDV-scaled whale. */
+export const V2_RULES: MutateOptions = { relative: true, accumulate: true, drop: true, fdvWhale: true };
 /** Slot layout of the v2 hook (sizeLogEma, heat, trackNo in slot1). */
 export const V2_SLOTS: SlotOptions = { relative: true, drop: true };
 
@@ -518,14 +629,17 @@ export const V2_SLOTS: SlotOptions = { relative: true, drop: true };
 export function mutate(
   prev: State,
   input: MutationInput,
-  thresholds: Thresholds = DEFAULT_THRESHOLDS,
+  thresholdsIn: Thresholds = DEFAULT_THRESHOLDS,
   opts?: MutateOptions,
 ): { state: State; event: MutationEvent } {
   const s: State = { ...prev };
+  const fdv = opts?.fdvWhale ? (opts.fdvWhale === true ? { quoteIs0: true } : opts.fdvWhale) : null;
+  const whaleWei = fdv ? whaleWeiAtTick(input.tick, fdv.quoteIs0) : undefined;
+  const thresholds: Thresholds = whaleWei === undefined ? thresholdsIn : { ...thresholdsIn, kick: whaleWei };
   const rel = opts?.relative ? (opts.relative === true ? DEFAULT_RELATIVE_TIERS : opts.relative) : null;
   const acc = opts?.accumulate ? (opts.accumulate === true ? DEFAULT_ACCUMULATE_RULES : opts.accumulate) : null;
   const dr = opts?.drop ? (opts.drop === true ? DEFAULT_DROP_RULES : opts.drop) : null;
-  const { isBuy, imdAmt, tick } = input;
+  const { isBuy, quoteAmt, tick } = input;
   const now = Number(input.timestamp);
 
   // 1. cool (drop mode): before anything else, from the previous swap's timestamp.
@@ -539,7 +653,7 @@ export function mutate(
   const h = stepHash(s.swapCount, tick, input.blockNumber);
 
   // 3. track
-  const whale = imdAmt >= thresholds.kick;
+  const whale = quoteAmt >= thresholds.kick;
   const step = Number(h % 16n);
   let track: number;
   let drop: MutationEvent["drop"];
@@ -556,7 +670,7 @@ export function mutate(
     }
     drop = { track, fill: isBuy, mask };
   } else {
-    track = rel ? relativeTrackFor(log2Fixed(imdAmt) - (s.sizeLogEma ?? INITIAL_SIZE_LOG_EMA), rel) : trackFor(imdAmt, thresholds);
+    track = rel ? relativeTrackFor(log2Fixed(quoteAmt) - (s.sizeLogEma ?? INITIAL_SIZE_LOG_EMA), rel) : trackFor(quoteAmt, thresholds);
     if (acc) {
       const w = accumulateWrite(s.pattern, track, step, isBuy, acc);
       accEvent = { fromTrack: track, promoted: w.track !== track || w.step !== step, writeStep: w.step, noop: w.noop };
@@ -612,7 +726,7 @@ export function mutate(
   // 10.
   s.lastTs = now;
   s.lastTick = tick;
-  if (rel) s.sizeLogEma = nextSizeLogEma(s.sizeLogEma ?? INITIAL_SIZE_LOG_EMA, imdAmt, thresholds, rel);
+  if (rel) s.sizeLogEma = nextSizeLogEma(s.sizeLogEma ?? INITIAL_SIZE_LOG_EMA, quoteAmt, thresholds, rel);
 
   const slotOpts: SlotOptions | undefined = rel || dr ? { relative: !!rel, drop: !!dr } : undefined;
 
@@ -641,9 +755,10 @@ export function mutate(
       on: isBuy,
       bassNote,
       isBuy,
-      imdAmount: imdAmt,
+      quoteAmount: quoteAmt,
       tick,
       whale,
+      ...(whaleWei !== undefined ? { whaleWei } : {}),
       slot0,
       slot1,
       movement,
@@ -673,4 +788,37 @@ export function describe(s: State) {
     swapCount: s.swapCount,
     page: s.patternId,
   };
+}
+
+// ---------------------------------------------------------------- pulse treasury
+// contracts/src/PulseTreasury.sol: after PULSE_IDLE_SEC without swaps anyone may call pulse(), and the treasury buys
+// a hat-sized amount of IDM with ETH. It calls PoolManager.swap itself, so Mutated.sender == the treasury address.
+
+/** Seconds of silence (since the hook's lastTs) before a pulse is allowed. */
+export const PULSE_IDLE_SEC = 900;
+/** Pulse size clamp, wei of native ETH. MIN = the hook's EMA floor; below it pulse() reverts. */
+export const PULSE_MIN_WEI = 25_000_000_000_000n;
+export const PULSE_MAX_WEI = 2_000_000_000_000_000n;
+/** Pulse size = 2^((sizeLogEma - 24)/16): 1.5 octaves under the size EMA, filed as a hat. */
+export const PULSE_HAT_OFFSET = 24;
+
+/** True when a Mutated.sender is the configured treasury. An empty/unset treasury labels nothing. */
+export function isPulse(sender: string | null | undefined, treasury: string | null | undefined): boolean {
+  return !!sender && !!treasury && sender.toLowerCase() === treasury.toLowerCase();
+}
+
+/** Inverse of log2Fixed on its grid (PulseTreasury.exp2Fixed). */
+export function exp2Fixed(l: number): bigint {
+  const m = BigInt(l >> 4), v = BigInt(16 + (l & 15));
+  return m >= 4n ? v << (m - 4n) : v >> (4n - m);
+}
+
+/** PulseTreasury.pulseSize: wei the next pulse spends (0n = no budget). */
+export function pulseSize(sizeLogEma: number, balanceWei: bigint): bigint {
+  let a = sizeLogEma > PULSE_HAT_OFFSET ? exp2Fixed(sizeLogEma - PULSE_HAT_OFFSET) : 0n;
+  if (a < PULSE_MIN_WEI) a = PULSE_MIN_WEI;
+  if (a > PULSE_MAX_WEI) a = PULSE_MAX_WEI;
+  const cap = balanceWei / 100n;
+  if (a > cap) a = cap;
+  return a < PULSE_MIN_WEI ? 0n : a;
 }

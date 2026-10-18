@@ -13,9 +13,11 @@ import {
   euclidMask,
   stepHash as hashOf,
   type State,
+  DEFAULT_THRESHOLDS,
 } from "../src/index.ts";
 
-const E18 = 10n ** 18n;
+/** 1 IMD at the launch calibration (1/400): 0.0025 ETH in wei. Keeps every relative case identical. */
+const E18 = 10n ** 18n / 400n;
 const base = { blockNumber: 21_000_000n, timestamp: 1_760_000_000 };
 
 suite("encode/decode", () => {
@@ -85,7 +87,7 @@ suite("helpers", () => {
 
 suite("mutate", () => {
   it("buy sets bit and bass note; first swap uses intervalEma as dt", () => {
-    const { state, event } = mutate(initialState(), { isBuy: true, imdAmt: E18, tick: -600, ...base });
+    const { state, event } = mutate(initialState(), { isBuy: true, quoteAmt: E18, tick: -600, ...base });
     expect(state.swapCount).toBe(1);
     expect(event.track).toBe(3);
     expect(isOn(state.pattern, 3, event.step)).toBe(true);
@@ -102,7 +104,7 @@ suite("mutate", () => {
 
   it("sell clears bit; pressure goes negative -> Phrygian", () => {
     let s = initialState();
-    const r = mutate(s, { isBuy: false, imdAmt: 30n * E18, tick: 100, ...base });
+    const r = mutate(s, { isBuy: false, quoteAmt: 30n * E18, tick: 100, ...base });
     s = r.state;
     expect(r.event.track).toBe(0);
     expect(isOn(s.pattern, 0, r.event.step)).toBe(false);
@@ -112,35 +114,35 @@ suite("mutate", () => {
 
   it("pressure decay truncates toward zero like Solidity", () => {
     const s = { ...initialState(), pressure: -17 };
-    expect(mutate(s, { isBuy: true, imdAmt: 1n, tick: 0, ...base }).state.pressure).toBe(-17 + 1 + 1000);
+    expect(mutate(s, { isBuy: true, quoteAmt: 1n, tick: 0, ...base }).state.pressure).toBe(-17 + 1 + 1000);
   });
 
   it("dt caps at EMA_CAP and bpm stays within bounds", () => {
     let s: State = { ...initialState(), swapCount: 5, lastTs: 1000, intervalEma: 900 };
-    const r = mutate(s, { isBuy: true, imdAmt: 1n, tick: 0, blockNumber: 1, timestamp: 10_000_000 });
+    const r = mutate(s, { isBuy: true, quoteAmt: 1n, tick: 0, blockNumber: 1, timestamp: 10_000_000 });
     expect(r.state.intervalEma).toBe(900);
     expect(r.state.bpm).toBe(72);
     s = { ...initialState(), swapCount: 5, lastTs: 1000, intervalEma: 0 };
-    expect(mutate(s, { isBuy: true, imdAmt: 1n, tick: 0, blockNumber: 1, timestamp: 1000 }).state.bpm).toBe(118);
+    expect(mutate(s, { isBuy: true, quoteAmt: 1n, tick: 0, blockNumber: 1, timestamp: 1000 }).state.bpm).toBe(118);
   });
 
   it("first swap is swapCount==0 regardless of lastTs; backwards clock gives dt=0", () => {
-    const first = mutate({ ...initialState(), lastTs: 5 }, { isBuy: true, imdAmt: 1n, tick: 0, blockNumber: 1, timestamp: 99_999 });
+    const first = mutate({ ...initialState(), lastTs: 5 }, { isBuy: true, quoteAmt: 1n, tick: 0, blockNumber: 1, timestamp: 99_999 });
     expect(first.state.intervalEma).toBe(600);
-    const back = mutate({ ...initialState(), swapCount: 3, lastTs: 2000, intervalEma: 800 }, { isBuy: true, imdAmt: 1n, tick: 0, blockNumber: 1, timestamp: 1000 });
+    const back = mutate({ ...initialState(), swapCount: 3, lastTs: 2000, intervalEma: 800 }, { isBuy: true, quoteAmt: 1n, tick: 0, blockNumber: 1, timestamp: 1000 });
     expect(back.state.intervalEma).toBe(700);
   });
 
   it("counters wrap mod 2^32", () => {
     const s = { ...initialState(), swapCount: 0xffffffff, patternId: 0xffffffff };
-    const r = mutate(s, { isBuy: true, imdAmt: 100n * E18, tick: 0, ...base });
+    const r = mutate(s, { isBuy: true, quoteAmt: 100n * E18, tick: 0, ...base });
     expect(r.state.swapCount).toBe(0);
     // whale +1 -> 0, then swapCount 0 % 64 == 0 -> page +1
     expect(r.state.patternId).toBe(1);
   });
 
   it("whale rotates root by a fifth and emits Movement", () => {
-    const r = mutate(initialState(), { isBuy: true, imdAmt: 100n * E18, tick: 0, ...base });
+    const r = mutate(initialState(), { isBuy: true, quoteAmt: 100n * E18, tick: 0, ...base });
     expect(r.event.whale).toBe(true);
     expect(r.state.root).toBe((9 + 7) % 12);
     expect(r.state.patternId).toBe(1);
@@ -171,7 +173,7 @@ suite("mutate", () => {
   it("whale sell wipes dropTrack (incl. kick) and nothing else", () => {
     for (let t = 0; t < 4; t++) {
       const c = findCount((h) => Number((h >> 16n) % 4n) === t);
-      const { state, event } = mutate(full(c), { isBuy: false, imdAmt: 150n * E18, tick: 0, ...base });
+      const { state, event } = mutate(full(c), { isBuy: false, quoteAmt: 150n * E18, tick: 0, ...base });
       expect(event.track).toBe(t);
       expect(event.drop).toEqual({ track: t, fill: false, mask: 0 });
       expect((state.pattern >> BigInt(t * 16)) & 0xffffn).toBe(0n);
@@ -184,7 +186,7 @@ suite("mutate", () => {
     for (let k = 3; k <= 8; k++) {
       const c = findCount((h) => 3 + Number((h >> 24n) % 6n) === k);
       const h = hashOf(c, 0, base.blockNumber);
-      const { state, event } = mutate(full(c), { isBuy: true, imdAmt: 100n * E18, tick: 0, ...base });
+      const { state, event } = mutate(full(c), { isBuy: true, quoteAmt: 100n * E18, tick: 0, ...base });
       const mask = loopEuclid(k, Number((h >> 32n) % 16n));
       expect(event.drop).toEqual({ track: event.track, fill: true, mask });
       expect(Number((state.pattern >> BigInt(event.track * 16)) & 0xffffn)).toBe(mask);
@@ -194,7 +196,7 @@ suite("mutate", () => {
 
   it("non-whale swaps change at most one drum bit and carry no drop", () => {
     const s = full(5);
-    const r = mutate(s, { isBuy: false, imdAmt: 99n * E18, tick: 0, ...base });
+    const r = mutate(s, { isBuy: false, quoteAmt: DEFAULT_THRESHOLDS.kick - 1n, tick: 0, ...base }); // just under the 0.2 ETH whale
     expect(r.event.drop).toBeUndefined();
     const diff = s.pattern ^ r.state.pattern;
     expect(diff & (diff - 1n)).toBe(0n);
@@ -203,7 +205,7 @@ suite("mutate", () => {
   it("page turns every 64 swaps", () => {
     let s = initialState();
     for (let i = 0; i < 64; i++) {
-      s = mutate(s, { isBuy: i % 2 === 0, imdAmt: E18, tick: i * 7 - 200, blockNumber: 100 + i, timestamp: 1000 + i * 12 }).state;
+      s = mutate(s, { isBuy: i % 2 === 0, quoteAmt: E18, tick: i * 7 - 200, blockNumber: 100 + i, timestamp: 1000 + i * 12 }).state;
       expect(s.patternId).toBe(i === 63 ? 1 : 0);
     }
   });
@@ -211,8 +213,8 @@ suite("mutate", () => {
   it("is deterministic and does not mutate its input", () => {
     const s = initialState();
     const snap = { ...s };
-    const a = mutate(s, { isBuy: true, imdAmt: 7n * E18, tick: 1234, ...base });
-    const b = mutate(s, { isBuy: true, imdAmt: 7n * E18, tick: 1234, ...base });
+    const a = mutate(s, { isBuy: true, quoteAmt: 7n * E18, tick: 1234, ...base });
+    const b = mutate(s, { isBuy: true, quoteAmt: 7n * E18, tick: 1234, ...base });
     expect(a).toEqual(b);
     expect(s).toEqual(snap);
   });

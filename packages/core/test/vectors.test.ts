@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe as suite, expect, it } from "vitest";
-import { decode, mutate } from "../src/index.ts";
+import { decode, IMD_THRESHOLDS, mutate } from "../src/index.ts";
 
 const path = fileURLToPath(new URL("../../../spec/vectors.json", import.meta.url));
 const present = existsSync(path);
@@ -28,11 +28,11 @@ suite.skipIf(!present)("spec/vectors.json", () => {
       const before = decode(big(c.before.slot0), big(c.before.slot1));
       const { state, event } = mutate(before, {
         isBuy: bool(c.input.isBuy),
-        imdAmt: big(c.input.imdAmt),
+        quoteAmt: big(c.input.imdAmt), // v1 vectors keep the historical field name
         tick: Number(c.input.tick),
         blockNumber: big(c.input.blockNumber),
         timestamp: big(c.input.timestamp),
-      });
+      }, IMD_THRESHOLDS); // the v1 hook (Sepolia) was IMD-quoted
       expect("0x" + event.slot0.toString(16)).toBe("0x" + big(c.after.slot0).toString(16));
       expect("0x" + event.slot1.toString(16)).toBe("0x" + big(c.after.slot1).toString(16));
       expect(state).toEqual(decode(big(c.after.slot0), big(c.after.slot1)));

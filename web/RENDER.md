@@ -21,8 +21,8 @@ Two shapes are accepted. Both are a JSON array. Packed `slot0` / `slot1` are dec
 | `slot0`, `slot1` | yes | packed state, `0x` hex or decimal |
 | `ts` | yes | unix seconds (or unix ms if `> 1e12`). Playback time is `ts - first`. |
 | `track`, `step` | no | mutation flash |
-| `on`, `bassNote`, `isBuy`, `imdAmt`, `imd`, `tick`, `swapCount`, `whale`, `movement` | no | kept for the bot. A bass cell flashes when `isBuy` or `bassNote === 0`. |
-| `whale` | no | `true`, or `imd` / `imdAmt` at least 100 IMD (`100e18` wei), makes the swap a drop |
+| `on`, `bassNote`, `isBuy`, `quoteAmt`, `quote`, `tick`, `swapCount`, `whale`, `movement` | no | kept for the bot. Legacy tapes carry `imdAmt`/`imd` instead of `quoteAmt`/`quote`; both are accepted. A bass cell flashes when `isBuy` or `bassNote === 0`. |
+| `whale` | no | `true`/`false` is taken as is. Without it, `quote` / `quoteAmt` at least the FDV-scaled threshold at the entry's `tick` (core `whaleThresholdFor`, ~0.04 ETH at FDV 4 ETH) makes the swap a drop; an ETH entry without `tick` is not a whale; legacy `imd` / `imdAmt` use 100 IMD (`100e18` wei) |
 | `drop` | no | `{ track: 0..3, fill, mask }`. Sell (`fill: false`) is a filter sweep into the breakdown on that step. Buy (`fill: true`) is an impact on the next downbeat, and the packed pattern is already the new Euclidean line. A whale with no `drop` uses `track` and `isBuy`. The whole track row flashes. |
 
 The committed tape is served in dev and preview at `/timelines/imd-eth-7d.timeline.json` (file: `bot/data/imd-eth-7d.timeline.json`, 2036 swaps). The `.meta.json` sidecar is not required; playback starts at the first entry.
@@ -83,6 +83,37 @@ Era is not stored on the timeline. It is the synth's deterministic pick for that
 ```
 
 At `speed=200` the tape is about 57 seconds. The first part of each long gap is the recovery (full kit again, plus a short fill). Hats and glitch thin across the 15-minute gap, the 45-minute gap reaches the sparse pad-and-bass stage, and the 2-hour gap is the quiet pad. The whale buy and sell land in the last few seconds.
+
+## Release
+
+A release (SPEC §4.6) is one finished v2 track played whole, from its seed to its `TrackComplete`, at a fixed pace instead of the timeline clock: one swap per bar by default, each swap's state on the next downbeat, no idle stages, an arc (intro on the seed → build → full while the grid fills → breakdown/rebuild when it saturates → full with heat → rebuild → drop on the downbeat after the completing swap → 8-bar outro on the new seed that fades out). The whole release plays ONE genre instance: the genre, style and tonic of the epoch the track finished in (the `patternId` of the `trackComplete` snapshot, before the reset; for an unfinished track, its last swap), from the intro on the seed to the outro on the new seed. Live playback and replays keep following the epochs. Length is bounded to `minSeconds`..`maxSeconds` (180..360) by putting several swaps in a bar or holding states longer.
+
+```
+/render.html?timeline=/release-test.timeline.json&release=1&track=2
+```
+
+| query | default | meaning |
+|---|---|---|
+| `release=1` | off | first frame is the release's frame 0; the globals below use these values as defaults |
+| `track` | latest completed | `trackComplete.trackNo` of the track. One past the last completed = the unfinished track at the end of the tape (no drop) |
+| `pace` | 1 | swaps per bar |
+| `maxSeconds`, `minSeconds` | 360, 180 | length bounds |
+
+The timeline is the W3 shape with `trackComplete` on the swap that finished a track (`bot/src/lib/timeline.ts` with rules `v2`). Slots are decoded with heat (`heatMax` 16). The track's swaps are the entries after the previous `trackComplete` (or from the tape start) through this one; the seed is the state left by the previous `trackComplete` entry, else `initial` (below), else the v2 initial state. Whale `drop` cues and flashes are read as in replay.
+
+```ts
+window.__releaseInfo(req?): Promise<ReleaseSummary>
+window.__renderRelease(req?): Promise<{ wav: string; seconds: number; summary: ReleaseSummary }>
+window.__releaseFrame(i, fps = 30, type = "image/jpeg", quality = 0.9): string   // data URL
+```
+
+`req` is `{ track?, swapsPerBar?, maxSeconds?, minSeconds?, introBars?, outroBars?, initial?: { slot0, slot1 } }`; it overrides the query. `__renderRelease` returns a base64 WAV (16-bit PCM, stereo, 44100 Hz) exactly `seconds` long (the end of the outro's last bar; the fade reaches 0 there). Same timeline and options give the same string in one browser. Rendering takes about half the release's length (hits are scheduled two seconds ahead and finished voices are dropped at fixed suspend points). `__releaseFrame` paints frame `i` (time `i / fps`) of the release built by the last `__releaseInfo` / `__renderRelease` call, with no wall-clock pacing, and returns the canvas as a data URL: the grid, the genre line `EPOCH #e · Genre / Style` of the release's instance, the swaps' flashes at their release times, a row flash on the drop, a `TRACK #N · SECTION · HEAT hh/16 · m:ss / m:ss` line on top and a progress line at the bottom. `window.__frame` gets `bar`, `section` and `heat` as well, and its `epoch` / `era` / `eraId` are the release's genre instance; `idle` is always `"full"`.
+
+`ReleaseSummary` (also the bot's metadata JSON): `trackNo`, `complete`, `swaps`, `hookSwaps`, `bars`, `introBars`, `bodyBars`, `outroBars`, `seconds`, `dropBar`, `dropTime`, `fadeAt`, `saturationBar`, `swapsPerBar` (effective), `paceTempo`, `genre` (`epoch`, `era`, `eraName`, `style`, `styleName`: what the whole release plays), `synth` (`version` from `packages/synth/package.json`, `build`: `{ commit, dirty }` the page was built from via Vite `define`; the bot adds `bot`: its own checkout's `git rev-parse HEAD`), `seed` / `next` / `finished` (live `epoch`, `era`, `style`; seed and next also `pattern`, `patternId`, `root`), `epochs`, `epochChanges`, `chainGenres` (`epoch`, `era`, `eraName` of each epoch the track passed through on chain: context only), `sections` (`name`, `from`, `to` bars, `time`), `first` / `last` (`index`, `ts`, `blockNumber`, `txHash`).
+
+A published release is archived as WAV + metadata JSON. Re-rendering the same track later with a newer synth may sound different; the archived WAV is the release, and `synth` names the code that made it.
+
+`web/public/release-test.timeline.json` (served at `/release-test.timeline.json`) is a synthetic v2 tape with three completed tracks and the start of a fourth (`npx tsx bot/scripts/release-tape.ts`). The bot drives this page with `npm run release -w @swarm-sequencer/bot` (`bot/src/release`).
 
 ## Bot sketch
 

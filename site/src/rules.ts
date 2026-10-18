@@ -1,4 +1,4 @@
-// Hook rules versions. "v1" is the deployed hook (fixed IMD tiers, slots without heat); "v2" adds relative tiers,
+// Hook rules versions. "v1" is the deployed Sepolia hook (fixed tiers, IMD-quoted, slots without heat); "v2" adds relative tiers,
 // accumulation and heat -> drop (core V2_RULES / V2_SLOTS). Everything that decodes or simulates state goes through here.
 import {
   DEFAULT_DROP_RULES,

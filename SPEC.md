@@ -1,20 +1,20 @@
 # Intelligent Dance Market ($IDM) — спецификация
 
-> Название и тикер утверждены владельцем 15.10: **Intelligent Dance Market, $IDM**, пул IDM/IMD. Во внутренних идентификаторах кода (SequencerHook, swarm-sequencer) осталось рабочее имя.
+> Название и тикер утверждены владельцем 15.10: **Intelligent Dance Market, $IDM**. Пул **IDM/ETH** (нативный ETH; 18.10 пара переключена с IDM/IMD, потому что у IMD нет ликвидности на Robinhood Chain и там всё торгуется против ETH). Во внутренних идентификаторах кода (SequencerHook, swarm-sequencer) осталось рабочее имя.
 > Хакатон: Identity MD Hackathon, приём заявок 7–21 октября 2026, подача на imdradar.site/hackathon.
 
 ## 1. Что строим (одной фразой)
 
-Uniswap v4 хук на пуле `IDM/IMD`, внутри которого живёт **ончейн-секвенсор**: каждая сделка детерминированно мутирует 16-шаговый паттерн из 4 ударных дорожек и басовой линии, темп и лад зависят от рынка. Сайт играет текущее состояние хука вживую как IDM-трек, бот на VPS превращает состояние и события в видео-посты для X.
+Uniswap v4 хук на пуле `IDM/ETH` (нативный ETH), внутри которого живёт **ончейн-секвенсор**: каждая сделка детерминированно мутирует 16-шаговый паттерн из 4 ударных дорожек и басовой линии, темп и лад зависят от рынка. Сайт играет текущее состояние хука вживую как IDM-трек, бот на VPS превращает состояние и события в видео-посты для X.
 
 ## 2. Ожидаемый результат к 21 октября
 
 | # | Результат | Критерий готовности |
 |---|---|---|
-| R1 | Хук задеплоен **через IMD Protocol** на **Robinhood Chain (4663)** (`launch.open`, kind `univ4_hook`, пара с IMD) | Адрес хука и пула в explorer.imd.fun, свап реально меняет `state()` |
+| R1 | Хук задеплоен **через IMD Protocol** на **Robinhood Chain (4663)** (`launch.open`, kind `univ4_hook`, `pairWith: eth`, пара IDM/ETH) | Адрес хука и пула в explorer.imd.fun, свап реально меняет `state()` |
 | R2 | Референсная реализация хука в `contracts/` (Foundry) | `forge test` зелёный, gas afterSwap ≤ 35k, test vectors в `spec/vectors.json` |
 | R3 | Сайт-плеер `web/` | Открываешь — слышишь трек из ончейн-состояния, видишь сетку, мигание мутаций; режимы live / replay / demo |
-| R4 | Тизер «как звучал пул IMD» (источник — пул IMD на Ethereum mainnet, там больше сделок; live-режим бота и сайта — Robinhood) | mp4 ≥ 30 с из реальных свапов пула IMD на Ethereum за последние 7 дней |
+| R4 | Тизер «как звучал пул IMD/ETH» (источник — пул IMD/ETH на Ethereum mainnet, там больше сделок; суммы берутся с ETH-стороны, т.е. в wei; live-режим бота и сайта — Robinhood) | mp4 ≥ 30 с из реальных свапов пула IMD/ETH на Ethereum за последние 7 дней |
 | R5 | Бот на VPS | Docker-сервис, генерирует пост (видео + подпись) по правилам; `DRY_RUN=true` по умолчанию, реальный постинг включается после ключей X |
 | R6 | Заявка | X-аккаунт проекта, 5+ постов, подача на imdradar |
 
@@ -24,11 +24,22 @@ Stretch (если успеваем): R7 — «трек дня» через IMD o
 
 ### 3.1 Константы (обновлено 15.10: v2)
 - `STEPS = 16`, `TRACKS = 4`: `0 kick`, `1 snare`, `2 hat`, `3 glitch`.
-- Immutable пороги в IMD (18 decimals): `T_HAT = 0.5`, `T_GLITCH = 5`, `T_SNARE = 25`, `T_KICK = 100`. В **v2** абсолютным остаётся whale-порог `imdAmt >= T_KICK`; остальные три сохранены в ABI для совместимости с v1.
+- Quote-валюта — immutable `quote` хука; на запуске это нативный ETH (`address(0)`, всегда `currency0`, IDM — `currency1`). ERC20-quote тоже поддерживается (в любом порядке сортировки); `quote == token` и `token == address(0)` → revert.
+- Immutable пороги в ETH (wei, 18 decimals), масштаб 1/400 от прежних значений в IMD (`contracts/src/QuoteCalibration.sol`): `T_HAT = 0.00125` (0.5 IMD), `T_GLITCH = 0.0125` (5 IMD), `T_SNARE = 0.0625` (25 IMD) — аргументы конструктора, в **v2** не читаются (классы относительные), сохранены в ABI для совместимости с v1. Старый v1-хук на Sepolia котировался в IMD (исторические пороги в IMD, включая whale 100 IMD, `spec/vectors.json`).
+- **Whale-порог v2 (обновлено 18.10) масштабируется с FDV** — хук нельзя заменить и у него нет владельца, поэтому порог настраивается сам. `whale(tick) = clamp(K·sqrt(FDV_wei), WHALE_MIN, WHALE_MAX)`, где `FDV_wei = SUPPLY / P`, `P = 1.0001^tick` — IDM за 1 ETH (ETH = `currency0`, IDM = `currency1`, оба 18 decimals), `SUPPLY = 1e27` (1 млрд IDM), `K = 2e7` (wei на sqrt(wei)). Считается от **тика после свапа** (он уже читается в `afterSwap` и есть в событии `Mutated`), а не от `sqrtPriceX96`: `sqrt(1/P) = getSqrtPriceAtTick(-tick)/2^96`, поэтому `whale = (C · TickMath.getSqrtPriceAtTick(-tick)) >> 96` с константой `C = K·sqrt(SUPPLY) = floor(sqrt(K²·SUPPLY)) = floor(sqrt(4e41)) = 632455532033675866399` (`C < 2^70`, `sqrtPrice < 2^160`, произведение помещается в uint256 и равно `FullMath.mulDiv(C, sqrtPrice, 2^96)`). Клэмп: `WHALE_MIN = 0.005 ETH` (достигается при `tick >= 234971`, FDV ≤ 0.0625 ETH), `WHALE_MAX = 50 ETH` (`tick <= 50754`, FDV ≥ 6.25 млн ETH). Тики вне диапазона TickMath (`|tick| > 887272`, пул их не выдаёт) насыщаются — функция никогда не ревертит. Если quote — ERC20 на стороне `currency1`, цена читается наоборот: `getSqrtPriceAtTick(+tick)`; ориентация — immutable `quoteIs0` хука. TS: `whaleWeiAtTick(tick)` в `packages/core` (бит-в-бит порт TickMath), клиенты — один хелпер `whaleThresholdFor(quote, tick)`. Хук отдаёт `whaleThreshold()` (текущий тик пула) и `whaleThresholdAt(tick)`.
+
+  | FDV (ETH ≈ $2500) | FDV, ETH | тик | whale, ETH |
+  |---|---:|---:|---:|
+  | $10k (запуск) | 4 | 193380 | 0.0400 |
+  | $100k | 40 | 170352 | 0.1265 |
+  | $1M | 400 | 147325 | 0.400 |
+  | $10M | 4000 | 124298 | 1.265 |
+
+  Каждый тик сдвигает порог на 0.005%, каждые ×10 FDV — на ×3.16. Покупка поднимает FDV и чуть-чуть свой же порог (оценивается тик после свапа).
 - `BPM_MIN = 72`, `BPM_MAX = 118`, `EMA_CAP = 900` секунд; `PAGE = 64`.
-- **v2 relative:** `hatBelow = -8`, `glitchBelow = 10`, `snareBelow = 25`; EMA размера клампится между `L(0.01 IMD)` и `L(T_KICK)`.
+- **v2 relative:** `hatBelow = -8`, `glitchBelow = 10`, `snareBelow = 25`; EMA размера клампится между `L(0.000025 ETH) = 710` (пол; было `L(0.01 IMD) = 849`) и `L(whale(tick))` — верхний клэмп следует за порогом: `L(0.04 ETH) = 881` при FDV 4 ETH (на 27 выше стартового EMA 854), `L(0.4 ETH) = 934` при FDV 400 ETH, от `L(WHALE_MIN) = 833` до `L(WHALE_MAX) = 1045`. Пол и стартовый EMA не менялись. 400 — не степень двойки (16·log2(400) ≈ 138.3), поэтому wei-значения точные, а каждое `L` округляется само; относительные пороги (−8/10/25) не меняются.
 - **v2 accumulation:** лестница `hat → glitch → snare → kick`, buy fallback `scan`, sell `up` только до snare, sell fallback `none`.
-- **v2 heat/drop:** `SAT_BITS = 48`, `HEAT_MAX = 16`, `SILENCE_RESET_SEC = 3600`, sell cooling `1`, нагрев на no-op buy включён. Число 56 в старом stress-отчёте не является правилом v2: каноничен `DEFAULT_DROP_RULES` из TS.
+- **v2 heat/drop:** `SAT_BITS = 44` (было 48 до 18.10), `HEAT_MAX = 16`, `SILENCE_RESET_SEC = 3600`, sell cooling `1`, нагрев на no-op buy включён. Число 56 в старом stress-отчёте не является правилом v2: каноничен `DEFAULT_DROP_RULES` из TS.
 
 ### 3.2 Упаковка (обновлено 15.10: v2)
 `slot0` (uint256), от младших бит; раскладка v1 сохранена:
@@ -58,18 +69,18 @@ Stretch (если успеваем): R7 — «трек дня» через IMD o
 | **`trackNo` uint16, добавлено 15.10** | **176–191** |
 | свободно | 192–255 |
 
-Начальное состояние v2: `pattern = 0x10100101` (kick 0,8; snare 4,12), `bass = 0`, `bpm = 96`, `root = 9` (A), `mode = 0`, `intervalEma = 600`, **`sizeLogEma = L(5 IMD) = 993`**. Остальные поля = 0. Дополнительных storage-слотов нет. Старый развёрнутый хук и его replays продолжают использовать v1; TS `mutate/encode/decode` без options и Solidity `initial/mutate` сохраняют v1. Новый хук вызывает `initialV2/mutateV2`; TS соответствует `V2_RULES/V2_SLOTS`.
+Начальное состояние v2: `pattern = 0x10100101` (kick 0,8; snare 4,12), `bass = 0`, `bpm = 96`, `root = 9` (A), `mode = 0`, `intervalEma = 600`, **`sizeLogEma = L(0.0125 ETH) = 854`** (v1-эпохи IMD: `L(5 IMD) = 993`). Остальные поля = 0. Дополнительных storage-слотов нет. Старый развёрнутый хук и его replays продолжают использовать v1; TS `mutate/encode/decode` без options и Solidity `initial/mutate` сохраняют v1. Новый хук вызывает `initialV2/mutateV2`; TS соответствует `V2_RULES/V2_SLOTS`.
 
 ### 3.3 Мутация в `afterSwap` (обновлено 15.10: v2)
-1. `isBuy` = свопер получил IDM (дельта IDM > 0), `imdAmt = |дельта IMD|`; используются фактическая дельта и тик **после** свапа. До остальных действий: если `now >= lastTs` и `now-lastTs >= 3600`, `heat = 0`. При 3599 секундах нагрев сохраняется; обратный ход часов ничего не охлаждает.
+1. `isBuy` = свопер получил IDM (дельта IDM > 0), `quoteAmt = |дельта quote|` (на запуске — ETH); используются фактическая дельта и тик **после** свапа. До остальных действий: если `now >= lastTs` и `now-lastTs >= 3600`, `heat = 0`. При 3599 секундах нагрев сохраняется; обратный ход часов ничего не охлаждает.
 2. `first = swapCount == 0` до инкремента; `swapCount = (swapCount+1) mod 2^32`; `h = uint256(keccak256(abi.encodePacked(uint32 swapCount, int24 tick, uint64 block.number)))`; `step = h % 16`.
-3. **Relative:** `L(0)=0`; иначе `m=msb(imdAmt)`, `f=(m>=4 ? imdAmt>>(m-4) : imdAmt<<(4-m)) & 15`, `L=m*16+f`. До обновления EMA вычисляется signed `r=L-sizeLogEma`: `r<-8 → hat`, `r<10 → glitch`, `r<25 → snare`, иначе kick. Whale определяется только абсолютным `T_KICK` и обходит relative/accumulation.
+3. **Relative:** `L(0)=0`; иначе `m=msb(quoteAmt)`, `f=(m>=4 ? quoteAmt>>(m-4) : quoteAmt<<(4-m)) & 15`, `L=m*16+f`. До обновления EMA вычисляется signed `r=L-sizeLogEma`: `r<-8 → hat`, `r<10 → glitch`, `r<25 → snare`, иначе kick. Whale определяется только абсолютным `quoteAmt >= whale(tick)` (§3.1, тик после свапа) и обходит relative/accumulation.
 4. **Accumulation, только non-whale:** если classified-бит отличается от `isBuy`, просто записать его. Иначе buy ставит первый свободный бит выше по лестнице на том же шаге; sell снимает первый установленный выше, **только до snare**, kick такой sell не трогает. Если buy дошёл до верха, искать ближайший свободный шаг на исходной classified-дорожке вперёд по кругу (1..15); полная строка → no-op. Для sell без кандидата → no-op. `fromTrack` = исходный класс, `track/writeStep` = место записи; `promoted` также означает spill на другой шаг. `Mutated.step` всегда остаётся hash-шагом для баса, `on = isBuy` даже при no-op.
-5. **Heat, только non-whale:** buy после записи добавляет 1 (saturating 255), если `popcount(pattern)>=48` **или** pattern не изменился. Sell уменьшает heat на 1 с насыщением в 0. Whale не меняет heat после silence-reset.
+5. **Heat, только non-whale:** buy после записи добавляет 1 (saturating 255), если `popcount(pattern)>=44` **или** pattern не изменился. Sell уменьшает heat на 1 с насыщением в 0. Whale не меняет heat после silence-reset.
 6. Бас на hash-шаге: `deg=1+(abs(int256(tick))/60)%15`. Buy записывает deg; sell при `((h>>8)&1)==0` очищает нибл. `bassNote` события берётся после этого действия, **до thinning на track completion**.
 7. Темп: для first `dt=intervalEma`, иначе при обратных часах 0, иначе `min(now-lastTs,900)`. `intervalEma=floor((intervalEma*7+dt)/8)`; `bpm=clamp(118-floor(intervalEma*46/900),72,118)`. Давление: `pressure=pressure-trunc(pressure/16)+(isBuy ? 1000 : -1000)`; mode: `>8000 → 2`, `>=0 → 0`, `>=-8000 → 1`, иначе 3.
 8. **Whale, поведение v1 сохранено:** вместо шагов 3–5 заменить всю дорожку `dropTrack=(h>>16)%4`. Sell очищает её. Buy пишет евклидов ритм: `k=3+(h>>24)%6`, `rot=(h>>32)%16`; бит `(i+rot)%16` установлен iff `(i*k)%16<k` для `i=0..15`. Бас выполняется обычно. `root=(root+7)%12`, `patternId+=1`, `Movement`, затем `Drop`; `Mutated.track=dropTrack`. Идентичность Movement фиксируется до возможного дальнейшего completion.
-9. Если `swapCount%64==0`, `patternId+=1`. Затем `lastTs=now`, `lastTick=tick`; `sizeLogEma=floor((7*sizeLogEma+clamp(L,L(0.01 IMD),L(T_KICK)))/8)` **на каждом свапе, включая whale**.
+9. Если `swapCount%64==0`, `patternId+=1`. Затем `lastTs=now`, `lastTick=tick`; `sizeLogEma=floor((7*sizeLogEma+clamp(L,L(0.000025 ETH),L(whale(tick))))/8)` **на каждом свапе, включая whale**.
 10. **Track completion:** если `heat>=16`, сохранить `snapshot=encode(state)` **после** page/EMA/timestamps, **до** reset. Затем `root=(root+7)%12`, `patternId+=1`, `trackNo=(trackNo+1) mod 2^16`; `pattern=dropSeed(h)`, `bass &= 0x000f000f000f000f` (оставить четвертные якоря 0,4,8,12), `heat=0`. Событие `TrackComplete` несёт старые слоты, но **новые** `trackNo/patternId/root/seed`. Номер внутри snapshot = предыдущий trackNo.
 11. Записать финальные два слота один раз. События по порядку: whale `Movement/Drop` (если есть), `Accumulated` (если есть), `TrackComplete` (если есть), `Mutated` с финальными слотами. `TrackReleased/releaseCount` зарезервированы и не задействованы.
 
@@ -82,7 +93,7 @@ Stretch (если успеваем): R7 — «трек дня» через IMD o
 ### 3.4 События и view (обновлено 15.10: v2)
 ```solidity
 event Mutated(address indexed sender, uint32 indexed swapCount, uint8 track, uint8 step, bool on,
-              uint8 bassNote, bool isBuy, uint128 imdAmount, int24 tick, uint256 slot0, uint256 slot1);
+              uint8 bassNote, bool isBuy, uint128 quoteAmount, int24 tick, uint256 slot0, uint256 slot1);
 event Movement(uint32 indexed patternId, uint8 root, uint32 swapCount);
 event Drop(uint32 indexed swapCount, uint8 track, bool fill, uint16 mask);
 event Accumulated(uint32 indexed swapCount, uint8 fromTrack, uint8 writeStep, bool promoted, bool noop);
@@ -92,10 +103,10 @@ event TrackReleased(uint32 indexed releaseId, uint32 patternId, uint256 slot0, u
 function state() external view returns (State memory);
 function raw() external view returns (uint256 slot0, uint256 slot1);
 ```
-Сигнатура `Mutated` сохранена. `Accumulated` эмитится только при `promoted || noop` у non-whale; его отсутствие означает `fromTrack=track`, `writeStep=step`, `promoted=false`, `noop=false`. Это позволяет корректно рисовать spill и no-op, сохраняя bass/hash step; отдельный лог имеет дополнительную стоимость газа на таких свапах. `TrackComplete` включает seed, поэтому все поля TS TrackComplete доступны из одного события. Финальный стейт берётся из `Mutated`; законченный трек — из snapshot в `TrackComplete`. Индексаторы старого хука остаются на v1 ABI/слотах.
+Сигнатура `Mutated` сохранена (параметр `imdAmount` переименован в `quoteAmount`, типы и порядок те же, topic не меняется). `Accumulated` эмитится только при `promoted || noop` у non-whale; его отсутствие означает `fromTrack=track`, `writeStep=step`, `promoted=false`, `noop=false`. Это позволяет корректно рисовать spill и no-op, сохраняя bass/hash step; отдельный лог имеет дополнительную стоимость газа на таких свапах. `TrackComplete` включает seed, поэтому все поля TS TrackComplete доступны из одного события. Финальный стейт берётся из `Mutated`; законченный трек — из snapshot в `TrackComplete`. Индексаторы старого хука остаются на v1 ABI/слотах.
 
 ### 3.5 Test vectors (обновлено 15.10: v2)
-`spec/vectors.json` сохраняет v1. `spec/vectors-v2.json` генерируется Foundry из `mutateV2` и содержит имена кейсов, before/input/after и **все** поля TS event (включая fromTrack/promoted/writeStep/noop и TrackComplete snapshot/seed). Schema расширена аддитивно. TS отдельно прогоняет обе версии; отсутствие v2-файла считается ошибкой. Набор v2 покрывает границы relative, все сочетания занятости колонок, подъём/scan и sell-правило, нагрев/насыщение 48, no-op heat, 3599/3600, sell cooling, whale/page/drop interplay, wraps и непрерывную последовательность нескольких треков.
+`spec/vectors.json` сохраняет v1 (старый хук в IMD, поля `imdAmt/imdAmount`). `spec/vectors-v2.json` генерируется Foundry из `mutateV2` в масштабе ETH (поля `input.quoteAmt` / `event.quoteAmount`) и содержит имена кейсов, before/input/after и **все** поля TS event (включая fromTrack/promoted/writeStep/noop и TrackComplete snapshot/seed). Schema расширена аддитивно. TS отдельно прогоняет обе версии; отсутствие v2-файла считается ошибкой. Набор v2 покрывает границы relative, все сочетания занятости колонок, подъём/scan и sell-правило, нагрев/насыщение 44 (43→44 греет, 42→43 нет), no-op heat, 3599/3600, sell cooling, whale/page/drop interplay, wraps и непрерывную последовательность нескольких треков. С 18.10 каждый v2-event несёт `whaleWei` — порог, с которым сравнивался свап (`whale(tick)`, не on-chain поле); кейсы `whale-threshold` проходят весь диапазон тиков (int24 min/max, ±887272/887273, обе границы клэмпа 50754/50755 и 234970/234971, тики FDV 4/40/400/4000 ETH) ровно на пороге и на 1 wei ниже, `launch-market` — рынок при FDV ~4 ETH. `contracts/scripts/validate-vectors.py` пересчитывает `whaleWei` и клэмп EMA собственным портом TickMath.
 
 ## 4. Звук (`packages/synth`, `web/`)
 - Чистый WebAudio, без сэмплов, детерминированно из стейта (одинаковый стейт → одинаковый звук; сид микро-таймингов = `patternId`).
@@ -117,6 +128,8 @@ function raw() external view returns (uint256 slot0, uint256 slot1);
 - Каждая эпоха получает один из 10 **жанров** (обновлено 18.10). Эпохи идут циклами, в каждом цикле каждый жанр звучит один раз. Первый цикл (эпохи 0–9) — порядок владельца: Liquid DnB, Wonky, Trip-hop, Lofi House, Future Garage, Electro, Ambient Drone, Ambient IDM, Dub Techno, Acid. Каждый следующий цикл — детерминированная перетасовка по хэшу, без повтора жанра и без A-B-A на стыке циклов.
 - **Стили** (`packages/synth/src/styles.ts`): у каждого жанра 3 стиля, появление жанра играет один стиль всю эпоху. Появления жанра идут по стилям строго по кругу в порядке владельца: Liquid — Keys, Soulful, Atmospheric; Wonky — Dilla Swing, Brainfeeder, Glitch-hop; Trip-hop — Bristol Dark, Cinematic, Rhodes Break; Lofi House — Raw Rave, Sample Chop, Dusty Keys; Future Garage — Dark Sub, Rain Atmos, Vocal Chops; Electro — Alien Rave, Cold 808, Client_03; Ambient Drone — Wall, Dark Low, Overtone Pulse; Ambient IDM — Tape Haze, Tape Keys, Crystal; Dub Techno — Lucidflow, Ixtlan, The Moment; Acid — 303 Floor, Acid House, Slow Rubber.
   - История жанров заморожена: жанр прошлой эпохи не меняется никогда. Пул меняется только добавлением записи с будущей эпохи. Тест `packages/synth/test/eras.test.ts` фиксирует жанры эпох 0–4095.
+  - История стилей заморожена так же (добавлено 18.10). Списки стилей версионируются по эпохам в `STYLE_SCHEDULE` (`styles.ts`): запись `{ fromEpoch, styles: { <жанр>: [весь новый список] } }`. Для эпохи действует список последней начавшейся записи, где этот жанр есть. Ротация: k-е появление жанра начиная с `fromEpoch` играет стиль `k % n` нового списка, то есть новый список начинается с первого стиля (новый стиль ставим первым, чтобы он прозвучал сразу); эпохи до `fromEpoch` не меняются. Id стиля = один звук навсегда. Тест `packages/synth/test/styles.test.ts` фиксирует пары (жанр, стиль) эпох 0–4095.
+  - **Как добавить жанр или стиль после запуска** (подробно — `packages/synth/README.md`): 1) `fromEpoch` = текущая эпоха чейна + запас (≥ 8); 2) стиль — дописать запись в `STYLE_SCHEDULE` с полным новым списком жанра; жанр — новый `GenreId`, `Era` в конец `ERA_LIST`, голос в `engine.ts`, его стили записью в `STYLE_SCHEDULE` и запись в `ERA_SCHEDULE` с новым пулом; 3) никогда не править и не удалять прошлые записи, не переставлять `ERA_LIST`, не перезакреплять хэши тестов; 4) звук существующего стиля молча не меняем: новый звук — новый id с будущей эпохи, общий фикс — поднять версию синта (`packages/synth/package.json`); 5) задеплоить сайт и бота до `fromEpoch`, иначе сдвинуть `fromEpoch`.
 - **Жанры** (диапазон темпа): Dub Techno (117–124 по стилям; Brickman / Lucidflow), Electro (118–130), Acid (120–132), Ambient IDM (84–100), Ambient Drone (60–80), Liquid DnB (170–176), Future Garage (130–138), Trip-hop (84–96), Lofi House (118–124), Wonky (80–94; бит-сцена: Dilla, Brainfeeder, Prefuse 73). До запуска набор менялся (16.10: убраны Hypnotic Techno и Braindance; Techstep и Romanian House попробованы и убраны; 18.10: добавлен Wonky, убран Industrial, задан порядок первого цикла и стилей, история жанров перезакреплена), после запуска только через `ERA_SCHEDULE`.
 - **Принципы:**
   - чейн управляет ритмом и тембром, а не высотой нот;
@@ -163,17 +176,35 @@ function raw() external view returns (uint256 slot0, uint256 slot1);
 - Детерминизм: на любом AudioParam не больше одного модулирующего входа (вибрато и FM складываются в отдельном узле), голоса суммируются попарно.
 - Галерея для прослушивания: `node web/scripts/lead-gallery.mjs` → `sim/stress/leads/<жанр>-<патч>.wav` (кульминация, 16 с) + проверка детерминизма каждого патча.
 
+### 4.6 Релиз трека (добавлено 18.10)
+- **Что это**: v2-трек целиком — от сида до `TrackComplete` — проигранный по логам в фиксированном музыкальном темпе, независимо от реального времени между свапами («вариант 2», выбор владельца). Типично 3–5 минут. Каждый `Mutated` несёт полный стейт (slot0/slot1), так что весь путь трека восстанавливается из логов.
+- **Вход**: свапы трека — от первого свапа после предыдущего `TrackComplete` (или начала ленты) до свапа, который выпустил этот `TrackComplete`, включительно; сид — стейт, оставленный предыдущим `TrackComplete` (новый сид после сброса); в конце — новый сид для аутро. Последний свап трека играет законченный трек (`trackComplete.slot0/slot1`, heat = 16), а не сброшенный стейт.
+- **Темп подачи**: по умолчанию один свап на такт, стейт свапа вступает с сильной доли (параметр `swapsPerBar`). Длина ограничена: если при этом выходит больше ~6 мин (`maxSeconds` = 360) в темпе жанра, свапы раскладываются равномерно по несколько на такт; очень короткие (китовые) треки растягиваются до минимума (`minSeconds` = 180): каждый стейт держится целыми тактами (или ровным числом долей). Тело — кратно 4 тактам. Так как жанры трека бывают в разных темпах, границы подгоняются по фактической длине плана.
+- **Простоя нет**: реальные паузы между свапами не воспроизводятся, idle-стадия всегда `full` (никаких thinning/sparse/drone).
+- **Арка** (поверх формы §4.4, которая в лайве — петля; релиз отображает каждый свой такт на такт этой формы и ведёт монотонный счётчик тактов, совпадающий с ним по модулю 32, так что аранжировка и движки работают без изменений):
+  1. `intro` 8 тактов на сиде (закрытый фильтр, пэд, бочка вполсилы, бас и хэты со 2-й половины);
+  2. `build` 8 тактов (4 у коротких треков) — свапы уже идут;
+  3. `full`, пока сетка заполняется (длинный `full` раз в 48 тактов дышит 4-тактовым `breakdown`);
+  4. когда сетка насыщается (≥ 44 бит, начинается heat): `breakdown` 4 + `rebuild` 4, затем `full` с heat-эффектами (фильтр, драйв, роллы, райзер растут к 16);
+  5. последние 4 такта перед дропом — `rebuild` (полутемп, затем полный, ролл снейра в 32-м такте формы);
+  6. **дроп** ровно на сильной доле после свапа с `TrackComplete` (удар, фильтр распахивается, форма прыгает в `full`), дальше аутро 8 тактов на новом сиде: 4 такта `full`, 4 такта `breakdown` с равномощным затуханием в ноль к концу файла.
+- **Жанр/стиль — один на весь релиз** (обновлено 18.10): жанр, стиль и тоника эпохи, в которой трек **закончился** — `patternId` законченного трека из `TrackComplete` (slot0/slot1 до сброса), то есть стейт последнего свапа тела; у незаконченного трека — последний свап. Интро на сиде и аутро на новом сиде звучат в том же жанре, хотя `TrackComplete` сдвигает `patternId`. Темп — диапазон этого стиля, ончейн-bpm каждого стейта по-прежнему двигает его внутри диапазона. Лайв по-прежнему следует эпохам. В метаданных: `genre` (`epoch`, `era`, `style` и имена), `chainGenres` — жанры, через которые трек прошёл в эфире (только для справки). Заголовок бота: `TRACK #N COMPLETE · K SWAPS · Genre / Style`. Уровень: релиз на полном heat получался на ~1 дБ громче цели жанров, поэтому выход релиза ослаблен на 1.2 дБ (`RELEASE_TRIM_DB`, после лимитера; лайв не меняется). Цель loudest-3s −14.3 ± 0.5 dBFS.
+- **Версия синта**: метаданные релиза несут `synth` — версию `packages/synth/package.json`, коммит сборки веба (`git rev-parse HEAD` при сборке/старте Vite, флаг незакоммиченных правок) и коммит чекаута бота. Опубликованный релиз архивируется как WAV + JSON; повторный рендер того же трека новым синтом может звучать иначе, архивный WAV и есть релиз.
+- **Детерминизм**: та же лента → тот же WAV в одном браузере (попарное суммирование, §4.4); план — чистая функция (`planRelease`), рендер — `renderReleaseToBuffer` (`packages/synth/src/release.ts`, `player.ts`). Оффлайн-граф не отключает отзвучавшие голоса, поэтому длинный рендер квадратичен; релиз планирует удары окнами по 2 с и в фиксированных точках `suspend()` отключает голоса, закончившиеся ≥ 3 с назад (`OfflineReaper`): 6 минут рендерятся быстрее реального времени, детерминизм сохраняется. Лайв, реплей и клипы не меняются бит в бит.
+- **Где**: `web/render.html?timeline=…&release=1&track=N` и глобалы `__releaseInfo` / `__renderRelease` / `__releaseFrame` (`web/RENDER.md`); бот — `npm run release -w @swarm-sequencer/bot -- --track N [--mp4]` → `sim/release/<trackNo>.wav` (+ `.mp4` 1080×1080, `.json` с метаданными). Тестовая лента: `web/public/release-test.timeline.json` (синтетика по правилам V2, `bot/scripts/release-tape.ts`, 3 завершённых трека).
+
 ## 5. Бот (`packages/core`, `bot/`)
 - `packages/core` — TS-порт §3 (`decode`, `encode`, `mutate`), проходит `spec/vectors.json`.
-- `bot/replay` — выгружает свапы пула IMD/ETH на Ethereum mainnet из PoolManager `0x000000000004444c5dc75cB358380D2e3dE08A90` (событие `Swap`, poolId пула IMD) за N дней, прогоняет через `mutate` → `timeline.json`. Источник для тизера R4.
+- `bot/replay` — выгружает свапы пула IMD/ETH на Ethereum mainnet из PoolManager `0x000000000004444c5dc75cB358380D2e3dE08A90` (событие `Swap`, poolId `0x4158...a704`) за N дней, берёт ETH-сторону свапа как `quoteAmt` (wei) и прогоняет через `mutate` → `timeline.json`. Источник для тизера R4. Старые таймлайны с `imdAmt/imd` по-прежнему читаются.
 - `bot/render` — Playwright/Chromium открывает `render.html`, записывает кадры + аудио → ffmpeg → mp4 1080×1080 и 1920×1080, 20–45 с.
+- `bot/release` — релиз завершённого трека (§4.6): из `timeline.json` (позже — из живых логов) выбирает трек по `trackNo` (по умолчанию последний завершённый), рендерит WAV через `render.html` в release-режиме, опционально mp4 1080×1080 с сеткой, и пишет JSON метаданных (trackNo, свапы, такты, секунды, жанры/стили по частям, первый/последний блок и tx, сид). В v2-эфире на новый `TrackComplete` планировщик (пост `track`: приоритет над движениями и снапшотами, общий интервал 1/ч, лимит 6/сутки) дочитывает логи назад до начала трека, рендерит релиз (WAV + mp4) и ставит пост `TRACK #N COMPLETE · K SWAPS · Жанр / Стиль`; если релиз длиннее лимита видео X (140 с), в пост идёт подъём в дроп (последние 140 с, дроп внутри), а полные WAV/mp4 и метаданные лежат рядом как артефакты. Подпись — только из фактов. Фоллбэк — прежний клип разгона.
 - `bot/caption` — Claude API (`claude-sonnet-5-5`), вход: строгий JSON фактов; выход ≤ 240 символов. Только факты из входа, никакой цены/«купи»/обещаний. Фоллбэк — шаблоны.
 - `bot/post` — X API v2, загрузка видео chunked. `DRY_RUN=true` → пишет пост в `out/queue/<ts>/` (mp4 + caption.txt + facts.json).
 - Правила постинга: снапшот каждые 6 ч; событие при `Movement`/whale (не чаще 1/ч); «трек дня» после релиза (R7); лимит 6 постов/сутки. До запуска хука — тизеры из replay.
 - Деплой: Docker Compose на VPS `root@138.201.92.157` в `/opt/swarm-sequencer`. Не трогать другие сервисы и контейнеры на машине. Секреты только в `/opt/swarm-sequencer/.env`.
 
 ## 6. Интеграция с IMD (обязательная для квалификации)
-1. Репо R2 публикуется на GitHub → `POST /requests/import` → `launch.open` kind `univ4_hook`, `pairWith: imd`, chain — **Robinhood Chain (chainId 4663)**, IMD на Robinhood `0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127` (решение владельца, 15.10). Рой адаптирует, ревьюит, деплоит. Оплата 0.5 IMD подписывается кошельком владельца.
+1. Репо R2 публикуется на GitHub → `POST /requests/import` → `launch.open` kind `univ4_hook`, `pairWith: eth` (нативный ETH, currency `0x0000000000000000000000000000000000000000`), chain — **Robinhood Chain (chainId 4663)** (решение владельца: chain 15.10, пара ETH 18.10). Конструктор: 4-й аргумент `quote = address(0)`, пороги из `QuoteCalibration.sol`. Capabilities `launch.open` для 4663 перепроверить при подаче. Рой адаптирует, ревьюит, деплоит. Оплата 0.5 IMD подписывается кошельком владельца.
 2. Stretch R7: `schedule.create` с `oracle.request` раз в сутки, ответ через Intake `0xa43e6f75ee006411f79ac1c84120606c2330de82` → `onOracleResult` в хуке (проверка `msg.sender == Intake`, `agreed >= quorum`, свежесть) → `TrackReleased`.
 3. Все шаги роя (job id, ревью, аудит) — в README и постах: «built by the IMD swarm» = критерий «uses IMD».
 
@@ -196,3 +227,23 @@ package.json       — координатор (npm workspaces)
 - Призы платятся на адрес деплоера контракта, а при запуске через рой это кошелёк IMD → уточнить у @imdradar.
 - Срок: запуск через рой занимает непредсказуемое время → `launch.open` подаём как только готов R2, не позже 18 октября.
 - X API платный; бот работает в DRY_RUN до получения ключей.
+
+## 9. Казна-пульс (добавлено 18.10, `contracts/src/PulseTreasury.sol`)
+Зачем: в тишине трек замирает (heat сбрасывается после 3600 с без свапов, синт через 60 мин уходит в дрон). Казна-пульс — отдельный immutable-контракт без владельца, админа, апгрейда и вывода средств, который после 45 минут тишины делает маленькую покупку IDM за ETH. Покупка — обычный свап пула IDM/ETH, поэтому хук записывает её в сетку как любой buy (на насыщенной сетке — +1 heat). Правила хука (§3) и векторы не меняются.
+
+**Деньги.** Комиссия пула 1.25%; из неё 1% IMD платит запускающему (requester) в обеих валютах пула. После запуска владелец перенаправляет эту долю на казну: `LaunchFactory.setRequester(launchNumber, treasury)` (сигнатуру и то, что выплаты контракту работают через `receive()`, нужно проверить — `contracts/TREASURY-RUNBOOK.md`). `receive()` пустой, принимает ETH даже со стипендией 2300 газа; IDM приходит обычным ERC20 `transfer`.
+
+**Правила `pulse()`** (вызвать может кто угодно):
+- revert `NotIdle`, если `block.timestamp - lastTs < PULSE_IDLE = 900 с` (15 мин), где `lastTs` читается из `slot0` хука через `raw()` (§3.2);
+- размер: `amount = 2^((sizeLogEma - 24)/16)` в пространстве `L()` (обратная к `log2Fixed` функция на её сетке), т.е. на 1.5 октавы ниже EMA рынка — relative-классификатор (§3.3 п.3, `r < -8`) относит его к **hat**; затем клэмп в `[0.000025 ETH (= пол EMA, L=710), MAX_PULSE = 0.002 ETH (L=812)]` и не больше 1% ETH-баланса; если меньше 0.000025 ETH — revert `NoBudget`;
+- своп exactInput `zeroForOne` (ETH → IDM) напрямую через `PoolManager.unlock` + `unlockCallback`; `sqrtPriceLimit = sqrtPrice · 0.99` (цена падает не более чем на 1.99%; при упоре — частичное исполнение, остаток ETH остаётся в казне);
+- событие `Pulse(amountIn, amountOut, idleSec, heatBefore)`; купленный IDM остаётся в казне;
+- `burn()` (кто угодно) отправляет весь IDM-баланс казны на `0x…dEaD`, событие `Burned(amount)`.
+
+**Цифры.** Сам пульс — свап, он обновляет `lastTs`, поэтому не чаще одного пульса за 15 минут. В полной тишине: пульс каждые 15 мин, 96 в сутки, максимум 96 × 0.002 = **0.192 ETH/сутки**, и каждый пульс тратит не больше 1% баланса, так что долгая тишина расходует казну плавно. Так как 15 мин < 3600 с, heat в «пульсирующей» тишине не сбрасывается: на насыщенной сетке 16 пульсов завершают трек примерно за **4 ч** тишины. Любой реальный свап сдвигает следующий пульс — живая торговля всегда главнее. Побочный эффект: пульсы тянут EMA размера вниз (~3 единицы за пульс); после ~45 пульсов подряд (~11 ч тишины) EMA доходит до 718, и пульс на минимальном размере уже классифицируется как glitch, а не hat. Газ `pulse()` ≈ 143k (обычная сетка), ≈ 169k (насыщенная).
+
+**Почему отдельно от хука.** Хук не держит средств и не может сам инициировать свап (у v4-хука нет «таймера»: он вызывается только чужими свапами). Отдельный контракт держит бюджет, не трогает каноническую модель §3 и может быть задеплоен после запуска, когда известен ключ пула. Его можно не использовать вовсе — хук от него не зависит.
+
+**MEV.** Пульсы крошечные, а каждая нога сэндвича платит 1.25% комиссии пула, так что сэндвич убыточен; лимит цены ограничивает худший случай. Время пульса публично по замыслу.
+
+**Прозрачность.** Казна сама вызывает `PoolManager.swap`, поэтому у пульсов `Mutated.sender == адрес казны`. Клиенты помечают такие свапы (адрес — конфиг, пустой до деплоя): сайт — строка лога `PULSE · treasury buy`; бот — `pulse: true` в таймлайне, `pulses: N` в фактах, подписи называют их «treasury pulses» и никогда не выдают за внешний спрос; `packages/core` — `isPulse(sender, treasury)`, `pulseSize()`. Кипер `bot/src/pulse.ts` вызывает `pulse()` с горячего кошелька (ключ только из env `PULSE_KEY`, по умолчанию dry-run) — но вызвать может любой.

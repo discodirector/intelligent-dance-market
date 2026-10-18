@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {QuoteCalibration} from "./QuoteCalibration.sol";
+import {TickMath} from "v4-core/src/libraries/TickMath.sol";
+
 /// @notice Canonical SPEC.md §3 codec and deterministic transition, shared by hook and vector generator.
 library SequencerState {
     uint256 internal constant EMA_CAP = 900;
     uint16 internal constant BPM_MIN = 72;
     uint16 internal constant BPM_MAX = 118;
     uint32 internal constant PAGE = 64;
+    /// @dev popcount(pattern) at or above which a non-whale buy heats the grid (SPEC §3.1 v2 heat/drop).
+    uint256 internal constant SAT_BITS = 44;
     /// @dev Euclidean base masks for k = 3..8 (bit i set iff (i * k) % 16 < k), 16 bits each, k = 3 lowest.
     uint256 internal constant EUCLID = 0x5555_54a9_4949_2491_1111_0841;
 
@@ -30,7 +35,8 @@ library SequencerState {
 
     struct Input {
         bool isBuy;
-        uint128 imdAmt;
+        /// @dev |delta| of the quote currency (native ETH for the launch hook; IMD for the v1 hook).
+        uint128 quoteAmt;
         int24 tick;
         uint64 blockNumber;
         uint40 timestamp;
@@ -68,10 +74,10 @@ library SequencerState {
         s.intervalEma = 600;
     }
 
-    /// @notice V2 starts its market-size EMA at log2Fixed(5 IMD) = 993.
+    /// @notice V2 starts its market-size EMA at log2Fixed(QuoteCalibration.INITIAL_SIZE) = L(0.0125 ETH) = 854.
     function initialV2() internal pure returns (State memory s) {
         s = initial();
-        s.sizeLogEma = 993;
+        s.sizeLogEma = uint16(log2Fixed(QuoteCalibration.INITIAL_SIZE));
     }
 
     function decode(uint256 a, uint256 b) internal pure returns (State memory s) {
@@ -134,12 +140,12 @@ library SequencerState {
         // All arithmetic below is widened/bounded; counters deliberately wrap.
         unchecked {
             if (heatDrop && x.timestamp >= s.lastTs && uint256(x.timestamp) - s.lastTs >= 3600) s.heat = 0;
-            uint256 sizeLog = v2 ? log2Fixed(x.imdAmt) : 0;
+            uint256 sizeLog = v2 ? log2Fixed(x.quoteAmt) : 0;
             bool first = s.swapCount == 0;
             s.swapCount += 1;
             uint256 h = uint256(keccak256(abi.encodePacked(s.swapCount, x.tick, x.blockNumber)));
             m.step = uint8(h % 16);
-            m.whale = x.imdAmt >= t.kick;
+            m.whale = x.quoteAmt >= t.kick;
             if (m.whale) {
                 // SPEC §3.3.8 drop: a whale acts on a whole track. Sell wipes it; buy writes a rotated Euclidean rhythm.
                 m.track = uint8((h >> 16) % 4);
@@ -160,12 +166,12 @@ library SequencerState {
                     m.promoted = m.track != m.fromTrack || m.writeStep != m.step;
                     if (heatDrop && x.isBuy) {
                         // Saturate even for arbitrary packed input (heat=255), matching TS Math.min.
-                        if ((popcount64(s.pattern) >= 48 || m.noop) && s.heat < 255) ++s.heat;
+                        if ((popcount64(s.pattern) >= SAT_BITS || m.noop) && s.heat < 255) ++s.heat;
                     } else if (heatDrop && s.heat > 0) {
                         --s.heat;
                     }
                 } else {
-                    m.track = x.imdAmt < t.hat ? 2 : x.imdAmt < t.glitch ? 3 : x.imdAmt < t.snare ? 1 : 0;
+                    m.track = x.quoteAmt < t.hat ? 2 : x.quoteAmt < t.glitch ? 3 : x.quoteAmt < t.snare ? 1 : 0;
                     uint64 bit = uint64(1) << (uint64(m.track) * 16 + m.step);
                     if (x.isBuy) s.pattern |= bit;
                     else s.pattern &= ~bit;
@@ -200,7 +206,7 @@ library SequencerState {
             s.lastTick = x.tick;
             if (v2) {
                 uint256 l = sizeLog;
-                uint256 lo = log2Fixed(0.01 ether);
+                uint256 lo = log2Fixed(QuoteCalibration.EMA_FLOOR);
                 uint256 hi = log2Fixed(t.kick);
                 l = l < lo ? lo : l;
                 l = l > hi ? hi : l;
@@ -218,6 +224,24 @@ library SequencerState {
             }
             return (s, m);
         }
+    }
+
+    /// @notice Whale threshold (wei of the quote) for a swap that leaves the pool at `tick` (SPEC §3.1):
+    ///         K * sqrt(FDV in quote wei), clamped to [WHALE_MIN, WHALE_MAX]. See QuoteCalibration for C and K.
+    /// @dev quoteIs0 (native ETH, always currency0): 1.0001^tick = IDM per quote, sqrt(FDV) ~ sqrtPrice(-tick).
+    ///      Quote on currency1 (ERC20 quote sorting above IDM): 1.0001^tick = quote per IDM, sqrt(FDV) ~ sqrtPrice(tick).
+    ///      Ticks outside TickMath's range (never produced by a pool, only by arbitrary vector input) saturate,
+    ///      so this never reverts. C < 2^70 and the sqrt price < 2^160, so C * sqrtPrice fits in 256 bits:
+    ///      the plain product equals FullMath.mulDiv(C, sqrtPrice, 2^96).
+    function whaleThreshold(int24 tick, bool quoteIs0) internal pure returns (uint128) {
+        // Saturate first: negating type(int24).min would overflow.
+        if (tick < TickMath.MIN_TICK) tick = TickMath.MIN_TICK;
+        else if (tick > TickMath.MAX_TICK) tick = TickMath.MAX_TICK;
+        int24 t = quoteIs0 ? -tick : tick;
+        uint256 w = (QuoteCalibration.WHALE_C * TickMath.getSqrtPriceAtTick(t)) >> 96;
+        if (w < QuoteCalibration.WHALE_MIN) return QuoteCalibration.WHALE_MIN;
+        if (w > QuoteCalibration.WHALE_MAX) return QuoteCalibration.WHALE_MAX;
+        return uint128(w);
     }
 
     /// @dev Integer log2 with four linear mantissa bits; binary search is bounded to seven probes for uint128.

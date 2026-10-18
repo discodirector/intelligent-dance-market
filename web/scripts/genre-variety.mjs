@@ -36,8 +36,14 @@ function slice(start, seconds) {
   return rows.map((p) => ({ ...p, time: p.time - start }));
 }
 
-const dropTimes = tl.points.filter((p) => p.held).map((p) => p.time);
-if (dropTimes.length < 3) throw new Error(`need 3 track drops in the tape, have ${dropTimes.length}`);
+let dropTimes = tl.points.filter((p) => p.held).map((p) => p.time);
+if (dropTimes.length < 3) {
+  // The re-simulated tape can end up with fewer than three drops (hook rules move); fall back to three evenly spaced
+  // stretches so the script still renders (deterministic, so before/after comparisons stay valid).
+  const end = tl.points.at(-1).time;
+  console.warn(`only ${dropTimes.length} track drops in the tape; using stretches at 1/4, 2/4, 3/4 of it`);
+  dropTimes = [1, 2, 3].map((k) => (end * k) / 4 + LEAD);
+}
 const windows = dropTimes.slice(0, 3).map((t) => slice(Math.max(0, t - LEAD), CLIP_SEC));
 
 const server = await createServer({ root: resolve(root, "web"), logLevel: "error", server: { port: Number(process.env.RENDER_PORT ?? 5199), strictPort: true, fs: { allow: [root] } } });
@@ -103,8 +109,8 @@ try {
           const styles = synth.GENRE_STYLES[id];
           const picks = styles.map((st, s) => {
             let e = 0;
-            while (e < 100000 && !(synth.eraOf(e).id === id && synth.styleOf(era, e).index === s)) e++;
-            if (e >= 100000) for (e = 0; synth.styleOf(era, e).index !== s; e++);
+            while (e < 100000 && !(synth.eraOf(e).id === id && synth.styleOf(era, e).style.id === st.id)) e++;
+            if (e >= 100000) for (e = 0; synth.styleOf(era, e).style.id !== st.id; e++);
             return { epoch: e, style: st, rows: windows[s % windows.length] };
           });
           for (const [s, p] of picks.entries()) {

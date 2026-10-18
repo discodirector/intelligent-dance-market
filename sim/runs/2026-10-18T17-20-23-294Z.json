@@ -1,0 +1,254 @@
+{
+  "startedAt": "2026-10-18T17:20:23.294Z",
+  "finishedAt": "2026-10-18T17:21:41.257Z",
+  "profile": "whale",
+  "seed": 344022687,
+  "chainId": 11155111,
+  "net": "v2",
+  "quote": "ETH",
+  "hook": "0x737c2a11f7eD9e420305Ef01717952986f243040",
+  "poolId": "0x6bf7da514615af7674676fc4338da9051282db243b11d1d65418795d1e190a83",
+  "router": "0x865E2bEb3F25352DCA8B05919a76E16848b47903",
+  "wallet": "0xd5450C26017f25E1EfB49996CE4cE59447328BaB",
+  "summary": {
+    "swaps": 4,
+    "matched": 4,
+    "mismatched": 0,
+    "errors": 0,
+    "whales": 2,
+    "fills": 1,
+    "drops": 1,
+    "tracksCompleted": 0,
+    "gasUsed": "691398",
+    "pagesCrossed": 1,
+    "finalState": {
+      "pattern": "0x2c00200009494",
+      "bass": "0xc1020000000000d0",
+      "swapCount": 8,
+      "lastTs": 1792344096,
+      "bpm": 106,
+      "root": 11,
+      "mode": 0,
+      "patternId": 2,
+      "lastTick": 193671,
+      "pressure": 1358,
+      "intervalEma": 247,
+      "releaseCount": 0,
+      "sizeLogEma": 837,
+      "heat": 0,
+      "trackNo": 0
+    }
+  },
+  "swaps": [
+    {
+      "n": 1,
+      "profile": "whale",
+      "side": "sell",
+      "quoteRequested": "0.135748",
+      "txHash": "0x550ef3753952c4c5ff6024efe993d152e238d4de001018fac56a54dea6f601b6",
+      "block": 11942512,
+      "timestamp": 1792344036,
+      "gasUsed": "173332",
+      "parity": "match",
+      "movement": {
+        "patternId": 1,
+        "root": 4,
+        "swapCount": 5
+      },
+      "drop": {
+        "track": 1,
+        "fill": false,
+        "mask": 0,
+        "maskBits": "0000000000000000"
+      },
+      "event": {
+        "sender": "0x865E2bEb3F25352DCA8B05919a76E16848b47903",
+        "swapCount": 5,
+        "track": "snare",
+        "step": 6,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "quoteAmount": "0.135748 ETH",
+        "tick": 196276
+      },
+      "state": {
+        "pattern": "0x2800200000101",
+        "bass": "0xc0000000000000d0",
+        "swapCount": 5,
+        "lastTs": 1792344036,
+        "bpm": 100,
+        "root": 4,
+        "mode": 0,
+        "patternId": 1,
+        "lastTick": 196276,
+        "pressure": 656,
+        "intervalEma": 360,
+        "releaseCount": 0,
+        "sizeLogEma": 837,
+        "heat": 0,
+        "trackNo": 0
+      },
+      "expected": {
+        "slot0": "0x40064006ad4ffe400000005c0000000000000d00002800200000101",
+        "slot1": "0x34500000000000001680000029002feb400000001"
+      },
+      "actual": {
+        "slot0": "0x40064006ad4ffe400000005c0000000000000d00002800200000101",
+        "slot1": "0x34500000000000001680000029002feb400000001"
+      }
+    },
+    {
+      "n": 2,
+      "profile": "whale",
+      "side": "buy",
+      "quoteRequested": "0.002975",
+      "txHash": "0xebf5958e48ffc6a91de5a2864f8f43d1421e03db3e977e5912229621214cbc2a",
+      "block": 11942513,
+      "timestamp": 1792344048,
+      "gasUsed": "171327",
+      "parity": "match",
+      "event": {
+        "sender": "0x865E2bEb3F25352DCA8B05919a76E16848b47903",
+        "swapCount": 6,
+        "track": "hat",
+        "step": 14,
+        "on": true,
+        "bassNote": 1,
+        "isBuy": true,
+        "quoteAmount": "0.002975 ETH",
+        "tick": 196208
+      },
+      "state": {
+        "pattern": "0x2c00200000101",
+        "bass": "0xc1000000000000d0",
+        "swapCount": 6,
+        "lastTs": 1792344048,
+        "bpm": 102,
+        "root": 4,
+        "mode": 0,
+        "patternId": 1,
+        "lastTick": 196208,
+        "pressure": 1615,
+        "intervalEma": 316,
+        "releaseCount": 0,
+        "sizeLogEma": 835,
+        "heat": 0,
+        "trackNo": 0
+      },
+      "expected": {
+        "slot0": "0x40066006ad4fff000000006c1000000000000d00002c00200000101",
+        "slot1": "0x343000000000000013c0000064f02fe7000000001"
+      },
+      "actual": {
+        "slot0": "0x40066006ad4fff000000006c1000000000000d00002c00200000101",
+        "slot1": "0x343000000000000013c0000064f02fe7000000001"
+      }
+    },
+    {
+      "n": 3,
+      "profile": "whale",
+      "side": "buy",
+      "quoteRequested": "0.122138",
+      "txHash": "0x2ae88dbe131639b4e8f08ed21003199660262d9eb5d3d2b0e169ab92df1cb13d",
+      "block": 11942515,
+      "timestamp": 1792344084,
+      "gasUsed": "173451",
+      "parity": "match",
+      "movement": {
+        "patternId": 2,
+        "root": 11,
+        "swapCount": 7
+      },
+      "drop": {
+        "track": 0,
+        "fill": true,
+        "mask": 38036,
+        "maskBits": "1001010010010100"
+      },
+      "event": {
+        "sender": "0x865E2bEb3F25352DCA8B05919a76E16848b47903",
+        "swapCount": 7,
+        "track": "kick",
+        "step": 12,
+        "on": true,
+        "bassNote": 2,
+        "isBuy": true,
+        "quoteAmount": "0.122138 ETH",
+        "tick": 193606
+      },
+      "state": {
+        "pattern": "0x2c00200009494",
+        "bass": "0xc1020000000000d0",
+        "swapCount": 7,
+        "lastTs": 1792344084,
+        "bpm": 104,
+        "root": 11,
+        "mode": 0,
+        "patternId": 2,
+        "lastTick": 193606,
+        "pressure": 2515,
+        "intervalEma": 281,
+        "releaseCount": 0,
+        "sizeLogEma": 840,
+        "heat": 0,
+        "trackNo": 0
+      },
+      "expected": {
+        "slot0": "0xb0068006ad5001400000007c1020000000000d00002c00200009494",
+        "slot1": "0x3480000000000000119000009d302f44600000002"
+      },
+      "actual": {
+        "slot0": "0xb0068006ad5001400000007c1020000000000d00002c00200009494",
+        "slot1": "0x3480000000000000119000009d302f44600000002"
+      }
+    },
+    {
+      "n": 4,
+      "profile": "whale",
+      "side": "sell",
+      "quoteRequested": "0.003205",
+      "txHash": "0xb29e3a927b2017252770a36bdcb87674a3c9d4706356b69e0d515f6c013be1aa",
+      "block": 11942516,
+      "timestamp": 1792344096,
+      "gasUsed": "173288",
+      "parity": "match",
+      "event": {
+        "sender": "0x865E2bEb3F25352DCA8B05919a76E16848b47903",
+        "swapCount": 8,
+        "track": "hat",
+        "step": 5,
+        "on": false,
+        "bassNote": 0,
+        "isBuy": false,
+        "quoteAmount": "0.003205 ETH",
+        "tick": 193671
+      },
+      "state": {
+        "pattern": "0x2c00200009494",
+        "bass": "0xc1020000000000d0",
+        "swapCount": 8,
+        "lastTs": 1792344096,
+        "bpm": 106,
+        "root": 11,
+        "mode": 0,
+        "patternId": 2,
+        "lastTick": 193671,
+        "pressure": 1358,
+        "intervalEma": 247,
+        "releaseCount": 0,
+        "sizeLogEma": 837,
+        "heat": 0,
+        "trackNo": 0
+      },
+      "expected": {
+        "slot0": "0xb006a006ad5002000000008c1020000000000d00002c00200009494",
+        "slot1": "0x34500000000000000f70000054e02f48700000002"
+      },
+      "actual": {
+        "slot0": "0xb006a006ad5002000000008c1020000000000d00002c00200009494",
+        "slot1": "0x34500000000000000f70000054e02f48700000002"
+      }
+    }
+  ]
+}

@@ -32,6 +32,8 @@ export class Visualizer {
   private phase = 0;
   private flashes: Flash[] = [];
   private epochSeen = -1;
+  /** Release: a fixed genre line instead of the state's epoch and era (the release plays one genre instance). */
+  private genreLine: string | null = null;
   private epochAt = 0;
 
   private arr: Arrangement | null = null;
@@ -59,6 +61,10 @@ export class Visualizer {
   }
 
   /** Replace flashes with the ones still visible at `nowMs`. Used by the headless renderer. */
+  setGenreLine(line: string | null) {
+    this.genreLine = line;
+  }
+
   setFlashes(flashes: Flash[]) {
     this.flashes = flashes;
   }
@@ -118,7 +124,7 @@ export class Visualizer {
       ctx.fillStyle = "#c8d2b8";
       ctx.fillText(infoLine(this.state), layout.pad, h - layout.pad * 0.45 - layout.infoH * 0.68);
       ctx.fillStyle = hot ? "#fff6e8" : "#e0a15a";
-      ctx.fillText(`EPOCH #${epoch} · ${era.name}`, layout.pad, h - layout.pad * 0.45 - layout.infoH * 0.28);
+      ctx.fillText(this.genreLine ?? `EPOCH #${epoch} · ${era.name}`, layout.pad, h - layout.pad * 0.45 - layout.infoH * 0.28);
     }
   }
 
@@ -175,7 +181,7 @@ export class Visualizer {
     ctx.textBaseline = "middle";
     ctx.fillText("IDM", layout.pad, layout.top - layout.cellH * 0.38);
     ctx.textAlign = "right";
-    ctx.fillText("IDM/IMD", w - layout.pad, layout.top - layout.cellH * 0.38);
+    ctx.fillText("IDM/ETH", w - layout.pad, layout.top - layout.cellH * 0.38);
     ctx.textAlign = "center";
     ctx.fillStyle = "#3d4638";
     for (const beat of [0, 4, 8, 12]) {

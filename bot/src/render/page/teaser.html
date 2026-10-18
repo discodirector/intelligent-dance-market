@@ -205,8 +205,11 @@
       const j = cur.idx - r; if (j < 0) break;
       const m = T[j];
       const side = m.isBuy ? "BUY " : "SELL";
-      const amt = m.imd >= 100 ? m.imd.toFixed(0) : m.imd.toFixed(2);
-      const line = `${side} ${amt.padStart(7)} IMD  ${TRACKS[m.track].padEnd(6)} s${String(m.step).padStart(2, "0")} ${m.on ? "+" : "-"}${m.whale ? "  WHALE" : ""}`;
+      // New tapes: quote/quoteSymbol (ETH unless stated); legacy tapes: imd (IMD-quoted).
+      const q = m.quote ?? m.imd ?? 0;
+      const sym = m.quoteSymbol ?? (m.quote == null && m.imd != null ? "IMD" : "ETH");
+      const amt = q >= 100 ? q.toFixed(0) : q >= 1 ? q.toFixed(2) : q.toFixed(4);
+      const line = `${side} ${amt.padStart(7)} ${sym}  ${TRACKS[m.track].padEnd(6)} s${String(m.step).padStart(2, "0")} ${m.on ? "+" : "-"}${m.whale ? "  WHALE" : ""}`;
       ctx.globalAlpha = 1 - r / (rows + 1);
       txt(line, x, y + 30 * S + r * 28 * S, 18 * S, m.whale ? C.whale : m.isBuy ? C.buy : C.sell);
       ctx.globalAlpha = 1;

@@ -27,14 +27,16 @@ import {
   type State,
 } from "../../packages/core/src/index.ts";
 
-const E = 10n ** 18n;
+/** 1 IMD-equivalent at the ETH calibration (1/400): 0.0025 ETH in wei. */
+
+const E = 10n ** 18n / 400n;
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const outDir = resolve(root, "sim/stress/drop");
 const tlDir = resolve(outDir, "timelines");
 mkdirSync(tlDir, { recursive: true });
 const QUICK = process.argv.includes("--quick");
 
-type Swap = { isBuy: boolean; imdAmt: bigint; tick?: number; ts?: number; block?: bigint; gap?: number };
+type Swap = { isBuy: boolean; quoteAmt: bigint; tick?: number; ts?: number; block?: bigint; gap?: number };
 
 function rng(seed: number) {
   let a = seed >>> 0;
@@ -50,33 +52,33 @@ function rng(seed: number) {
 /** Log-normal size: median * 2^(sigma * z), sigma in octaves. */
 function logNormal(r: () => number, median: number, sigma: number): bigint {
   const z = Math.sqrt(-2 * Math.log(1 - r())) * Math.cos(2 * Math.PI * r());
-  return BigInt(Math.round(median * 2 ** (sigma * z) * 1e9)) * 10n ** 9n;
+  return BigInt(Math.round(median * 2 ** (sigma * z) * 1e9)) * 10n ** 9n / 400n; // IMD-equivalent median -> ETH wei
 }
 const repeat = (n: number, s: Swap): Swap[] => Array.from({ length: n }, () => ({ ...s }));
 
 // Same generators and seeds as accumulate-ab.ts; small-buys-varied is extended to 600 swaps (its first 200 are identical).
 const SIZE = { hat: E / 4n, glitch: 2n * E };
 const SCENARIOS: Record<string, Swap[]> = {
-  "identical-spam-200": repeat(200, { isBuy: true, imdAmt: SIZE.hat }),
+  "identical-spam-200": repeat(200, { isBuy: true, quoteAmt: SIZE.hat }),
 };
 const r11 = rng(11);
-SCENARIOS["small-buys-varied"] = Array.from({ length: 600 }, () => ({ isBuy: true, imdAmt: logNormal(r11, 0.3, 1.2) }));
+SCENARIOS["small-buys-varied"] = Array.from({ length: 600 }, () => ({ isBuy: true, quoteAmt: logNormal(r11, 0.3, 1.2) }));
 const r13 = rng(13);
 SCENARIOS["mixed-market-varied"] = Array.from({ length: 300 }, () => ({
   isBuy: r13() < 0.55,
-  imdAmt: r13() < 0.02 ? BigInt(120 + Math.floor(r13() * 200)) * E : logNormal(r13, 3, 1.6),
+  quoteAmt: r13() < 0.02 ? BigInt(120 + Math.floor(r13() * 200)) * E : logNormal(r13, 3, 1.6),
 }));
-SCENARIOS["buy-sell-churn"] = Array.from({ length: 200 }, (_, i) => ({ isBuy: i % 2 === 0, imdAmt: SIZE.glitch }));
+SCENARIOS["buy-sell-churn"] = Array.from({ length: 200 }, (_, i) => ({ isBuy: i % 2 === 0, quoteAmt: SIZE.glitch }));
 // Buy-heavy market (70/30) of small varied sizes: the realistic case for drops.
 const r19 = rng(19);
-SCENARIOS["buy-heavy-varied"] = Array.from({ length: 600 }, () => ({ isBuy: r19() < 0.7, imdAmt: logNormal(r19, 0.3, 1.2) }));
-interface WeekEvent { ts: number; blockNumber: number; isBuy: boolean; imdAmt: string; tick: number }
+SCENARIOS["buy-heavy-varied"] = Array.from({ length: 600 }, () => ({ isBuy: r19() < 0.7, quoteAmt: logNormal(r19, 0.3, 1.2) }));
+interface WeekEvent { ts: number; blockNumber: number; isBuy: boolean; quoteAmt: string; tick: number }
 const week = JSON.parse(readFileSync(resolve(root, "site/public/timelines/imd-week.json"), "utf8")) as WeekEvent[];
-SCENARIOS["imd-week"] = week.map((e) => ({ isBuy: e.isBuy, imdAmt: BigInt(e.imdAmt), tick: e.tick, ts: e.ts, block: BigInt(e.blockNumber) }));
+SCENARIOS["imd-week"] = week.map((e) => ({ isBuy: e.isBuy, quoteAmt: BigInt(e.quoteAmt), tick: e.tick, ts: e.ts, block: BigInt(e.blockNumber) }));
 // burst-then-silence is adaptive (see burst()): small varied buys every 6 s until heat = heatMax - 1, a 30-minute gap, 150 more buys.
 const BURST = "burst-then-silence";
 const r17 = rng(17);
-const BURST_SWAPS = Array.from({ length: 1000 }, () => ({ isBuy: true, imdAmt: logNormal(r17, 0.3, 1.2) }));
+const BURST_SWAPS = Array.from({ length: 1000 }, () => ({ isBuy: true, quoteAmt: logNormal(r17, 0.3, 1.2) }));
 const BURST_GAP = 1800;
 const BURST_AFTER = 150;
 const BURST_BASE_LEN = 200; // base variant (no heat): fixed burst length
@@ -86,7 +88,7 @@ const BURST_BASE_LEN = 200; // base variant (no heat): fixed burst length
 const CADENCE_MIN = [1, 5, 10, 30, 60, 90];
 const CADENCE_N = 600;
 const r23 = rng(23);
-const CADENCE_FLOW = Array.from({ length: CADENCE_N }, () => ({ isBuy: r23() < 0.8, imdAmt: logNormal(r23, 0.3, 1.2) }));
+const CADENCE_FLOW = Array.from({ length: CADENCE_N }, () => ({ isBuy: r23() < 0.8, quoteAmt: logNormal(r23, 0.3, 1.2) }));
 const r29 = rng(29);
 const CADENCE_JITTER = Array.from({ length: CADENCE_N }, () => 0.75 + 0.5 * r29());
 const cadenceKey = (m: number) => `cadence-${m}m`;
@@ -237,7 +239,7 @@ function run(name: string, v: Variant, opts: { musical: boolean; timeline?: Time
     const prevPattern = state.pattern;
     const res = mutate(
       state,
-      { isBuy: swap.isBuy, imdAmt: swap.imdAmt, tick: swap.tick ?? 600 + ((i * 397) % 2400), blockNumber: block, timestamp: ts },
+      { isBuy: swap.isBuy, quoteAmt: swap.quoteAmt, tick: swap.tick ?? 600 + ((i * 397) % 2400), blockNumber: block, timestamp: ts },
       undefined,
       mopts,
     );
@@ -296,12 +298,13 @@ const label = (r: DropRules) =>
 
 const KEYS = ["identical-spam-200", "small-buys-varied", "buy-heavy-varied", "mixed-market-varied", "buy-sell-churn", "imd-week", BURST];
 const GRID: DropRules[] = [];
-for (const satBits of [52, 56, 60]) for (const heatMax of [8, 16, 24]) GRID.push({ satBits, heatMax, coolSec: 120, sellCool: 1 });
+for (const satBits of [44, 48, 52, 56, 60]) for (const heatMax of [8, 16, 24]) GRID.push({ satBits, heatMax, coolSec: 120, sellCool: 1 });
 // The previous default (gap cooling, coolSec 120) and its clock variant, for comparison with silence.
 const GAP120: DropRules = { ...DEFAULT_DROP_RULES, coolSec: 120, coolMode: "gap" };
 const CLOCK120: DropRules = { ...GAP120, coolMode: "clock" };
 const ALT: DropRules[] = [
   DEFAULT_DROP_RULES,
+  { ...DEFAULT_DROP_RULES, satBits: 48 }, // the previous default
   GAP120,
   CLOCK120,
   { ...GAP120, coolSec: 60 },

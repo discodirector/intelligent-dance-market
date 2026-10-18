@@ -85,18 +85,21 @@ export function eraAt(patternId: number, eraId?: string | null): Era {
   return eraId ? eraById(eraId) : eraOf(epochOf({ patternId: patternId >>> 0 }));
 }
 
-/** One 16th at the genre tempo of this state (the chain bpm mapped into the genre's range). */
-export function genreStep(state: { bpm: number; patternId: number }, eraId?: string | null): { tempo: number; duration: number } {
+/**
+ * One 16th at the genre tempo of this state (the chain bpm mapped into the genre's range). `styleEpoch` pins the
+ * instance whose style sets the feel (a release plays the epoch its track finished in); default: the state's epoch.
+ */
+export function genreStep(state: { bpm: number; patternId: number }, eraId?: string | null, styleEpoch?: number | null): { tempo: number; duration: number } {
   const era = eraAt(state.patternId, eraId);
-  const feel = styleFeel(era, styleOf(era, epochOf(state)).style);
+  const feel = styleFeel(era, styleOf(era, styleEpoch ?? epochOf(state)).style);
   const tempo = genreTempo(era, state.bpm, feel.bpm);
   return { tempo, duration: stepDuration(tempo) };
 }
 
-export function stepCharacter(patternId: number, step: number, eraId?: string | null): StepCharacter {
+export function stepCharacter(patternId: number, step: number, eraId?: string | null, styleEpoch?: number | null): StepCharacter {
   const id = patternId >>> 0;
   const era = eraAt(id, eraId);
-  const feel = styleFeel(era, styleOf(era, epochOf({ patternId: id })).style);
+  const feel = styleFeel(era, styleOf(era, styleEpoch ?? epochOf({ patternId: id })).style);
   const h = hash32(id, step, 0xa11);
   const h2 = hash32(id, step, 0x9e37);
   const micro = ((h % 1000) / 999 - 0.5) * 0.012 * feel.microScale;

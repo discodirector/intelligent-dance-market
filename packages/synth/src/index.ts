@@ -30,7 +30,7 @@ export type { Arrangement, MotifNote, Section, SectionName } from "./arrange.ts"
 export { heatIdleFactor, IDLE_DRONE_SEC, IDLE_FULL_SEC, IDLE_SPARSE_SEC, idleLabel, idleStage } from "./idle.ts";
 export type { IdleGains, IdleName, IdleStage } from "./idle.ts";
 
-export { createLivePlayer, projectTimeline, renderTimelineToBuffer, renderToBuffer } from "./player.ts";
+export { createLivePlayer, projectTimeline, renderReleaseToBuffer, renderTimelineToBuffer, renderToBuffer } from "./player.ts";
 export type { EraView, LivePlayer, RenderOptions, StepListenerEvent } from "./player.ts";
 
 export {
@@ -48,7 +48,11 @@ export {
 } from "./eras.ts";
 export type { Era, GenreId } from "./eras.ts";
 
-export { GENRE_STYLES, styleById, styleFeel, styleOf } from "./styles.ts";
-export type { GenreStyle, StyleChoice } from "./styles.ts";
+export { allStyles, GENRE_STYLES, STYLE_SCHEDULE, styleById, styleFeel, styleListAt, styleOf, stylesAt } from "./styles.ts";
+export type { GenreStyle, StyleChoice, StyleList, StyleScheduleEntry } from "./styles.ts";
+export { SYNTH_VERSION } from "./version.ts";
 
 export { audioBufferToWavBase64 } from "./wav.ts";
+
+export { counterBars, planRelease, RELEASE_DEFAULTS, RELEASE_HEAT_MAX, RELEASE_SAT_BITS, releaseBodyForm, releaseGenre, releasePace, releaseTempo } from "./release.ts";
+export type { ReleaseGenre, ReleaseInput, ReleaseOptions, ReleasePace, ReleasePlan, ReleaseSection, ReleaseSwap } from "./release.ts";

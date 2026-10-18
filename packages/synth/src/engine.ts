@@ -129,7 +129,10 @@ function pulse(gain: AudioParam, time: number, attack: number, peak: number, rel
 
 function dispose(node: AudioBufferSourceNode | OscillatorNode, rest: AudioNode[], when: number, live: boolean) {
   node.stop(when);
-  if (!live) return;
+  if (!live) {
+    activeReaper?.noteDisposal(node, rest, when);
+    return;
+  }
   node.onended = () => {
     try {
       node.disconnect();
@@ -167,14 +170,27 @@ const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
  */
 export class MixChain {
   private acc: AudioNode | null = null;
+  /** Sum nodes this chain created; only kept for a release segment (OfflineReaper). */
+  readonly sums: AudioNode[] = [];
 
   constructor(
     private readonly ctx: BaseAudioContext,
     readonly dest: AudioNode,
     private readonly live: boolean,
+    /** A release segment's own chain: never segmented again. */
+    private readonly flat = false,
   ) {}
 
   add(source: AudioNode) {
+    if (!this.live && !this.flat && activeReaper) {
+      activeReaper.addTo(this, this.ctx, source);
+      return;
+    }
+    this.addFlat(source);
+  }
+
+  /** The pairwise chain itself. */
+  addFlat(source: AudioNode) {
     if (this.live || this.acc == null) {
       source.connect(this.dest);
       this.acc ??= source;
@@ -187,7 +203,87 @@ export class MixChain {
     source.connect(sum);
     sum.connect(this.dest);
     this.acc = sum;
+    if (this.flat) this.sums.push(sum);
   }
+}
+
+interface ReaperSegment {
+  index: number;
+  out: GainNode;
+  inner: MixChain;
+  members: AudioNode[];
+  retired: boolean;
+}
+
+/**
+ * Release renders only (player.ts renderReleaseToBuffer). An offline graph never drops a finished voice, so the work
+ * per render quantum grows with every voice ever played and a 6-minute render becomes quadratic. While a reaper is
+ * active, each MixChain collects new voices in per-window segments (one gain node per segment on the pairwise
+ * chain), and at fixed suspend points the renderer calls `prune`: voices that stopped `margin` seconds ago are
+ * disconnected, and a segment whose voices are all gone leaves the bus. Same plan → same suspend points → same WAV.
+ * Clips, replays and the live player never set a reaper, so their graphs are exactly as before.
+ */
+export class OfflineReaper {
+  /** Current window; the renderer bumps it before each batch of hits. */
+  segment = 0;
+  private readonly ends = new Map<AudioNode, number>();
+  private pending: { nodes: AudioNode[]; when: number }[] = [];
+  private readonly current = new Map<MixChain, ReaperSegment>();
+  private segments: ReaperSegment[] = [];
+
+  noteDisposal(node: AudioNode, rest: AudioNode[], when: number) {
+    const nodes = [node, ...rest];
+    for (const n of nodes) this.ends.set(n, Math.max(this.ends.get(n) ?? -Infinity, when));
+    this.pending.push({ nodes, when });
+  }
+
+  addTo(chain: MixChain, ctx: BaseAudioContext, source: AudioNode) {
+    let seg = this.current.get(chain);
+    if (!seg || seg.index !== this.segment) {
+      const out = ctx.createGain();
+      stereo(out);
+      chain.addFlat(out);
+      seg = { index: this.segment, out, inner: new MixChain(ctx, out, false, true), members: [], retired: false };
+      this.current.set(chain, seg);
+      this.segments.push(seg);
+    }
+    seg.inner.add(source);
+    seg.members.push(source);
+  }
+
+  prune(now: number, margin = 3) {
+    const keep: { nodes: AudioNode[]; when: number }[] = [];
+    for (const p of this.pending) {
+      if (p.when + margin >= now) {
+        keep.push(p);
+        continue;
+      }
+      for (const n of p.nodes) {
+        try {
+          n.disconnect();
+        } catch {
+          /* already disconnected */
+        }
+      }
+    }
+    this.pending = keep;
+    for (const seg of this.segments) {
+      if (seg.index >= this.segment) continue;
+      if (!seg.members.every((m) => (this.ends.get(m) ?? Infinity) + margin < now)) continue;
+      seg.out.disconnect();
+      for (const sum of seg.inner.sums) sum.disconnect();
+      for (const m of seg.members) this.ends.delete(m);
+      seg.retired = true;
+    }
+    this.segments = this.segments.filter((seg) => !seg.retired);
+  }
+}
+
+let activeReaper: OfflineReaper | null = null;
+
+/** Release renders set this around their synchronous play calls; null everywhere else. */
+export function setOfflineReaper(reaper: OfflineReaper | null) {
+  activeReaper = reaper;
 }
 
 type BusName = "kick" | "snare" | "hat" | "perc" | "bass" | "harm" | "lead" | "tex" | "fx";
@@ -435,9 +531,12 @@ export class VoiceEngine {
    * auditioned genre keeps its key across epoch changes; following the chain, a new epoch is a new instance.
    */
   private instance = -1;
+  /** Release: the instance epoch is fixed up front (the epoch the track finished in), not taken from the first hit. */
+  private readonly pinnedInstance: number | null;
   private readonly trim: number;
 
-  constructor(ctx: BaseAudioContext, eraIndex = 0) {
+  constructor(ctx: BaseAudioContext, eraIndex = 0, instance: number | null = null) {
+    this.pinnedInstance = instance;
     this.ctx = ctx;
     this.era = eraByIndex(eraIndex);
     this.mix = MIX[this.era.id];
@@ -583,7 +682,7 @@ export class VoiceEngine {
     const heatFade = hit.idle?.heat ?? 1;
     const heat = clamp(state.heat ?? 0, 0, 1) * heatFade;
     if (this.instance < 0) {
-      this.instance = epochOf(state);
+      this.instance = this.pinnedInstance ?? epochOf(state);
       const first = styleOf(this.era, this.instance).style;
       this.styleGain.gain.value = first.trim ?? 1;
       if (this.era.id === "dubtechno") {

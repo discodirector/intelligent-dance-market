@@ -1,4 +1,5 @@
 import { decode, type SequencerState, type TimelinePoint } from "@swarm-sequencer/synth";
+import { whaleThresholdFor } from "../../packages/core/src/index.ts";
 
 /**
  * Accepts W3's `bot/TIMELINE.md` entries (`ts`, Mutated fields, slot0/slot1)
@@ -15,21 +16,61 @@ export interface RawTimelineEvent {
   on?: boolean;
   bassNote?: number;
   isBuy?: boolean;
+  /** |quote delta| in wei (launch hook: native ETH). Mutated field name: quoteAmount. */
+  quoteAmt?: string;
+  quoteAmount?: string;
+  /** Legacy IMD-quoted tapes (v1 hook / old replays). */
   imdAmount?: string;
   imdAmt?: string;
   tick?: number;
   swapCount?: number;
   whale?: boolean;
-  /** Display IMD, not wei. */
+  /** Display quote amount, not wei. */
+  quote?: number;
+  /** Absent = ETH (or IMD when only legacy imd fields are present). */
+  quoteSymbol?: QuoteSymbol;
+  /** Legacy display IMD, not wei. */
   imd?: number;
   /** Present on timelines written after the whale-drop change. */
   drop?: { track?: number; fill?: boolean; mask?: number };
 }
 
-const T_KICK = 100n * 10n ** 18n;
+export type QuoteSymbol = "ETH" | "IMD";
 
-function amountWei(event: RawTimelineEvent): bigint | null {
-  const raw = event.imdAmt ?? event.imdAmount;
+/**
+ * Whale threshold (wei) of the hook behind a quote at the swap's post-swap tick: FDV-scaled for ETH (the launch
+ * hook, core whaleWeiAtTick), the fixed 100 IMD for legacy IMD tapes. null = unknown (an ETH entry with no tick).
+ */
+export function whaleWeiFor(symbol: QuoteSymbol, tick: number | null | undefined): bigint | null {
+  if (symbol === "IMD") return whaleThresholdFor("IMD", 0);
+  return tick == null ? null : whaleThresholdFor("ETH", tick);
+}
+
+type AmountFields = Pick<RawTimelineEvent, "quoteAmt" | "quoteAmount" | "quote" | "quoteSymbol" | "imdAmt" | "imdAmount" | "imd">;
+
+/** New tapes carry quote fields; a tape with only imd fields is a legacy IMD-quoted one. */
+export function quoteSymbolOf(event: AmountFields): QuoteSymbol {
+  if (event.quoteSymbol) return event.quoteSymbol;
+  const hasQuote = event.quoteAmt != null || event.quoteAmount != null || event.quote != null;
+  const hasImd = event.imdAmt != null || event.imdAmount != null || event.imd != null;
+  return !hasQuote && hasImd ? "IMD" : "ETH";
+}
+
+/** Display amount (float) in the entry's quote currency. */
+export function quoteOf(event: AmountFields): number {
+  if (typeof event.quote === "number") return event.quote;
+  if (typeof event.imd === "number") return event.imd;
+  const wei = amountWei(event);
+  return wei == null ? 0 : Number(wei / 10n ** 12n) / 1e6;
+}
+
+/** ETH amounts are small: keep four decimals below 1. */
+export function formatQuote(v: number): string {
+  return v >= 100 ? v.toFixed(0) : v >= 1 ? v.toFixed(2) : v.toFixed(4);
+}
+
+export function amountWei(event: AmountFields): bigint | null {
+  const raw = event.quoteAmt ?? event.quoteAmount ?? event.imdAmt ?? event.imdAmount;
   if (raw == null || raw === "") return null;
   try {
     return BigInt(raw);
@@ -40,10 +81,13 @@ function amountWei(event: RawTimelineEvent): bigint | null {
 
 function isWhale(event: RawTimelineEvent): boolean {
   if (event.drop && typeof event.drop.track === "number") return true;
-  if (event.whale === true) return true;
-  if (typeof event.imd === "number" && event.imd >= 100) return true;
+  if (typeof event.whale === "boolean") return event.whale; // the tape's own verdict (bot timelines always carry it)
+  const threshold = whaleWeiFor(quoteSymbolOf(event), event.tick);
+  if (threshold == null) return false; // recorded tapes carry whale/drop; without a tick the amount alone cannot tell
   const wei = amountWei(event);
-  return wei != null && wei >= T_KICK;
+  if (wei != null) return wei >= threshold;
+  const display = event.quote ?? event.imd;
+  return typeof display === "number" && display * 1e18 >= Number(threshold);
 }
 
 function readDrop(event: RawTimelineEvent): TimelinePoint["drop"] {

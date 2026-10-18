@@ -12,6 +12,8 @@ export interface PostInput {
   facts: Facts;
   video: string; // primary (1080x1080)
   extraVideos?: string[];
+  /** Files kept next to the post but not uploaded (e.g. the full release WAV/mp4); listed in post.json `artifacts`. */
+  artifacts?: string[];
 }
 
 export interface PostResult { mode: "dry-run" | "x"; dir: string; postId?: string }
@@ -22,11 +24,17 @@ export async function publish(p: PostInput, outRoot = process.env.OUT_DIR ?? "ou
   mkdirSync(dir, { recursive: true });
   copyFileSync(p.video, join(dir, "video.mp4"));
   for (const v of p.extraVideos ?? []) copyFileSync(v, join(dir, v.split("/").pop()!));
+  const artifacts = (p.artifacts ?? []).map((a) => {
+    const name = a.split("/").pop()!;
+    copyFileSync(a, join(dir, name));
+    return name;
+  });
   writeFileSync(join(dir, "caption.txt"), p.caption + "\n");
   writeFileSync(join(dir, "facts.json"), JSON.stringify(p.facts, null, 2) + "\n");
 
   const dry = isDryRun();
   const meta: Record<string, unknown> = { createdAt: new Date().toISOString(), dryRun: dry, captionSource: p.captionSource };
+  if (artifacts.length) meta.artifacts = artifacts;
   let postId: string | undefined;
   if (!dry) {
     const creds = credsFromEnv();

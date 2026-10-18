@@ -2,10 +2,25 @@
 pragma solidity 0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {SequencerState as S} from "../src/SequencerState.sol";
+import {QuoteCalibration as Q} from "../src/QuoteCalibration.sol";
 
 abstract contract SequencerTestBase is Test {
+    /// @dev 1 IMD at the 1/400 ETH calibration: a mid-size v2 swap well below the whale threshold.
+    uint128 internal constant UNIT = 0.0025 ether;
+
+    /// @dev v1 (old Sepolia hook, IMD quote) thresholds; v1 vectors and tests stay on these.
     function thresholds() internal pure returns (S.Thresholds memory) {
         return S.Thresholds(0.5 ether, 5 ether, 25 ether, 100 ether);
+    }
+
+    /// @dev Launch hook thresholds (native ETH quote) for a swap that leaves the pool at `tick`.
+    function v2Thresholds(int24 tick) internal pure returns (S.Thresholds memory) {
+        return S.Thresholds(Q.T_HAT, Q.T_GLITCH, Q.T_SNARE, S.whaleThreshold(tick, true));
+    }
+
+    /// @dev The v2 transition exactly as the native-ETH hook runs it.
+    function v2(S.State memory s, S.Input memory x) internal pure returns (S.State memory, S.Mutation memory) {
+        return S.mutateV2(s, x, v2Thresholds(x.tick));
     }
 
     function input(bool buy, uint128 amt, int24 tick) internal pure returns (S.Input memory) {

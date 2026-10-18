@@ -6,7 +6,8 @@
   "scripts": {
     "sim": "tsx src/index.ts",
     "write-deployment": "tsx src/write-deployment.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "write-deployment-v2": "tsx src/write-deployment-v2.ts"
   },
   "dependencies": {
     "@swarm-sequencer/core": "*",

@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { createReadStream } from "node:fs";
 import { fileURLToPath, URL } from "node:url";
 import { defineConfig, type Connect, type Plugin, type PreviewServer, type ViteDevServer } from "vite";
@@ -5,6 +6,19 @@ import { defineConfig, type Connect, type Plugin, type PreviewServer, type ViteD
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const synthEntry = fileURLToPath(new URL("../packages/synth/src/index.ts", import.meta.url));
 const realTimeline = fileURLToPath(new URL("../bot/data/imd-eth-7d.timeline.json", import.meta.url));
+
+/**
+ * The commit this build (or dev server) runs, for release metadata: `git rev-parse HEAD` and whether packages/synth
+ * or web had uncommitted changes. Null outside a git checkout.
+ */
+function buildStamp(): { commit: string; dirty: boolean } | null {
+  try {
+    const git = (...args: string[]) => execFileSync("git", args, { cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    return { commit: git("rev-parse", "HEAD").trim(), dirty: git("status", "--porcelain", "--", "packages/synth", "web").trim().length > 0 };
+  } catch {
+    return null;
+  }
+}
 
 /** Dev and preview serve W3's committed 7-day tape without copying it into public/. */
 function serveRealTimeline(): Plugin {
@@ -34,6 +48,9 @@ function serveRealTimeline(): Plugin {
 
 export default defineConfig({
   plugins: [serveRealTimeline()],
+  define: {
+    __IDM_BUILD__: JSON.stringify(buildStamp()),
+  },
   resolve: {
     alias: {
       "@swarm-sequencer/synth": synthEntry,

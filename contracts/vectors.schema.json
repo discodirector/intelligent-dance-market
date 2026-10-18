@@ -33,11 +33,11 @@
         }
       },
       "input": {
+        "description": "Exactly one amount field: v1 (vectors.json, IMD-quoted Sepolia hook) uses imdAmt; v2 (vectors-v2.json, quote = native ETH) uses quoteAmt. Enforced by scripts/validate-vectors.py.",
         "type": "object",
         "additionalProperties": false,
         "required": [
           "isBuy",
-          "imdAmt",
           "tick",
           "blockNumber",
           "timestamp"
@@ -47,6 +47,10 @@
             "type": "boolean"
           },
           "imdAmt": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$"
+          },
+          "quoteAmt": {
             "type": "string",
             "pattern": "^(0|[1-9][0-9]*)$"
           },
@@ -85,6 +89,7 @@
         }
       },
       "event": {
+        "description": "Exactly one amount field: imdAmount (v1) or quoteAmount (v2), equal to the input amount. The Mutated ABI types and topic are unchanged.",
         "type": "object",
         "additionalProperties": false,
         "required": [
@@ -95,7 +100,6 @@
           "on",
           "bassNote",
           "isBuy",
-          "imdAmount",
           "tick",
           "slot0",
           "slot1",
@@ -134,6 +138,10 @@
             "type": "boolean"
           },
           "imdAmount": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$"
+          },
+          "quoteAmount": {
             "type": "string",
             "pattern": "^(0|[1-9][0-9]*)$"
           },
@@ -226,6 +234,11 @@
           },
           "whale": {
             "type": "boolean"
+          },
+          "whaleWei": {
+            "description": "v2 only: the whale threshold this swap was judged against, K * sqrt(FDV) from the post-swap tick (quote = currency0), clamped to [5e15, 5e19]. Not an on-chain field: clients derive it from Mutated.tick.",
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$"
           },
           "promoted": {
             "type": "boolean"

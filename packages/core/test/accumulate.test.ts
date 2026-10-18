@@ -14,11 +14,12 @@ import {
   type State,
 } from "../src/index.ts";
 
-const E = 10n ** 18n;
+/** 1 IMD at the launch calibration (1/400): 0.0025 ETH in wei. Keeps every relative case identical. */
+const E = 10n ** 18n / 400n;
 const bit = (track: number, step: number) => 1n << BigInt(track * 16 + step);
 const bits = (...ts: [number, number][]) => ts.reduce((p, [t, s]) => p | bit(t, s), 0n);
 const rowFull = (track: number) => 0xffffn << BigInt(track * 16);
-const swap = (imdAmt: bigint, i = 0, isBuy = true) => ({ isBuy, imdAmt, tick: 600 + ((i * 397) % 2400), blockNumber: 21_000_000n + BigInt(i), timestamp: 1_760_000_000 + i * 6 });
+const swap = (quoteAmt: bigint, i = 0, isBuy = true) => ({ isBuy, quoteAmt, tick: 600 + ((i * 397) % 2400), blockNumber: 21_000_000n + BigInt(i), timestamp: 1_760_000_000 + i * 6 });
 
 function rng(seed: number) {
   let a = seed >>> 0;
@@ -115,7 +116,7 @@ describe("accumulation through mutate", () => {
       const r = rng(5);
       let s = init();
       for (let i = 0; i < 600; i++) {
-        const sz = r() < 0.03 ? 150n * E : BigInt(Math.floor(2 ** (r() * 12) * 1e6)) * 10n ** 12n;
+        const sz = r() < 0.03 ? 150n * E : BigInt(Math.floor(2 ** (r() * 12) * 1e6)) * (10n ** 12n / 400n);
         const input = swap(sz, i, r() < 0.55);
         const a = mutate(s, input, undefined, base);
         const b = mutate(s, input, undefined, acc);

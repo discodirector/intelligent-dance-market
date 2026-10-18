@@ -96,7 +96,7 @@ if (botTimeline) {
   const timeline = JSON.parse(readFileSync(botTimeline, "utf8"));
   await session("v2-bot", { width: 1080, height: 1080 }, `${base}bot.html`, async (page) => {
     await page.waitForFunction(() => typeof window.__setup === "function");
-    const info = await page.evaluate((t) => window.__setup({ timeline: t, width: 1080, height: 1080, fps: 30, seconds: 32, title: "IDM/IMD · V2 PREVIEW", subtitle: "TRACK COMPLETE" }), timeline);
+    const info = await page.evaluate((t) => window.__setup({ timeline: t, width: 1080, height: 1080, fps: 30, seconds: 32, title: "IDM/ETH · V2 PREVIEW", subtitle: "TRACK COMPLETE" }), timeline);
     const at = timeline.findIndex((e) => e.trackComplete);
     const frame = Math.round(((0.25 + (at / timeline.length) * (32 - 0.85)) + 0.3) * 30);
     await page.evaluate((f) => window.__frame(f), frame);

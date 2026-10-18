@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 import {SequencerTestBase} from "./SequencerState.t.sol";
 import {SequencerState as S} from "../src/SequencerState.sol";
+import {QuoteCalibration as Q} from "../src/QuoteCalibration.sol";
 
 /// @dev Every output is produced by the same Solidity transition used by afterSwap.
 contract VectorsTest is SequencerTestBase {
@@ -20,21 +21,9 @@ contract VectorsTest is SequencerTestBase {
     {
         (uint256 b0, uint256 b1) = S.encode(s);
         S.Mutation memory m;
-        (a, m) = v2 ? S.mutateV2(s, x, thresholds()) : change(s, x);
+        (a, m) = v2 ? S.mutateV2(s, x, v2Thresholds(x.tick)) : change(s, x);
         (uint256 a0, uint256 a1) = S.encode(a);
-        string memory ins = string.concat(
-            '{"isBuy":',
-            vm.toString(x.isBuy),
-            ',"imdAmt":"',
-            vm.toString(x.imdAmt),
-            '","tick":',
-            vm.toString(int256(x.tick)),
-            ',"blockNumber":"',
-            vm.toString(x.blockNumber),
-            '","timestamp":',
-            vm.toString(x.timestamp),
-            "}"
-        );
+        string memory ins = inputJson(x, v2);
         string memory movement = m.whale
             ? string.concat(
                 '{"patternId":',
@@ -58,21 +47,9 @@ contract VectorsTest is SequencerTestBase {
             )
             : "null";
         string memory ev = string.concat(
-            '{"sender":"0x0000000000000000000000000000000000001234","swapCount":',
-            vm.toString(a.swapCount),
-            ',"track":',
-            vm.toString(m.track),
-            ',"step":',
-            vm.toString(m.step),
-            ',"on":',
-            vm.toString(x.isBuy),
-            ',"bassNote":',
-            vm.toString(m.bassNote),
-            ',"isBuy":',
-            vm.toString(x.isBuy),
-            ',"imdAmount":"',
-            vm.toString(x.imdAmt),
-            '","tick":',
+            eventHead(a, m, x.isBuy),
+            amountJson(x.quoteAmt, v2),
+            ",\"tick\":",
             vm.toString(int256(x.tick)),
             ',"slot0":"',
             vm.toString(a0),
@@ -91,12 +68,59 @@ contract VectorsTest is SequencerTestBase {
             bytes memory prefix = bytes(ev);
             assembly ("memory-safe") { mstore(prefix, sub(mload(prefix), 1)) }
             ev = string.concat(
-                string(prefix), ',"whale":', vm.toString(m.whale), acc, ',"trackComplete":', complete, "}"
+                string(prefix),
+                ',"whale":',
+                vm.toString(m.whale),
+                ',"whaleWei":"',
+                vm.toString(S.whaleThreshold(x.tick, true)),
+                '"',
+                acc,
+                ',"trackComplete":',
+                complete,
+                "}"
             );
         }
         json = string.concat(
             '{"before":', words(b0, b1), ',"input":', ins, ',"after":', words(a0, a1), ',"event":', ev, "}"
         );
+    }
+
+    function eventHead(S.State memory a, S.Mutation memory m, bool isBuy) internal pure returns (string memory) {
+        return string.concat(
+            '{"sender":"0x0000000000000000000000000000000000001234","swapCount":',
+            vm.toString(a.swapCount),
+            ',"track":',
+            vm.toString(m.track),
+            ',"step":',
+            vm.toString(m.step),
+            ',"on":',
+            vm.toString(isBuy),
+            ',"bassNote":',
+            vm.toString(m.bassNote),
+            ',"isBuy":',
+            vm.toString(isBuy)
+        );
+    }
+
+    /// @dev v1 keeps its historical field names so spec/vectors.json stays byte-identical.
+    function inputJson(S.Input memory x, bool v2) internal pure returns (string memory) {
+        return string.concat(
+            '{"isBuy":',
+            vm.toString(x.isBuy),
+            v2 ? ',"quoteAmt":"' : ',"imdAmt":"',
+            vm.toString(x.quoteAmt),
+            '","tick":',
+            vm.toString(int256(x.tick)),
+            ',"blockNumber":"',
+            vm.toString(x.blockNumber),
+            '","timestamp":',
+            vm.toString(x.timestamp),
+            "}"
+        );
+    }
+
+    function amountJson(uint128 amount, bool v2) internal pure returns (string memory) {
+        return string.concat(v2 ? ',"quoteAmount":"' : ',"imdAmount":"', vm.toString(amount), '"');
     }
 
     function completeJson(S.State memory a, S.Mutation memory m) internal pure returns (string memory) {
@@ -214,7 +238,7 @@ contract VectorsTest is SequencerTestBase {
             }
             if (i == 7) {
                 s.patternId = type(uint32).max;
-                x.imdAmt = 100 ether - 1;
+                x.quoteAmt = 100 ether - 1;
                 s.swapCount = 63;
             }
             if (i == 8) x.timestamp = 0;
@@ -228,14 +252,14 @@ contract VectorsTest is SequencerTestBase {
                 s.releaseCount = type(uint32).max;
             }
             if (i == 11) {
-                x.imdAmt = type(uint128).max;
+                x.quoteAmt = type(uint128).max;
                 s.bass = type(uint64).max;
                 x.isBuy = false;
             }
             if (i == 12) {
                 s.swapCount = 38;
                 s.intervalEma = 0;
-                x.imdAmt = 1 ether;
+                x.quoteAmt = 1 ether;
             }
             (string memory item,) = vector(s, x);
             all = string.concat(all, ",", item);
@@ -305,8 +329,8 @@ contract VectorsTest is SequencerTestBase {
         for (uint256 i; i < 16; ++i) {
             S.State memory s = S.initialV2();
             s.pattern = 0;
-            s.sizeLogEma = uint16(uint256(int256(S.log2Fixed(1 ether)) - offsets[i / 2]));
-            (all,) = appendV2(all, "relative-boundary", s, input(i % 2 == 0, 1 ether, -120));
+            s.sizeLogEma = uint16(uint256(int256(S.log2Fixed(UNIT)) - offsets[i / 2]));
+            (all,) = appendV2(all, "relative-boundary", s, input(i % 2 == 0, UNIT, -120));
         }
         // All 16 column occupancy combinations, for every classified track and both sides.
         // Include arbitrary anchor bass, releaseCount and nonzero trackNo in each snapshot.
@@ -320,13 +344,13 @@ contract VectorsTest is SequencerTestBase {
                     s.trackNo = 7;
                     s.releaseCount = 99;
                     int256 r = t == 2 ? int256(-9) : t == 3 ? int256(0) : t == 1 ? int256(10) : int256(25);
-                    s.sizeLogEma = uint16(uint256(int256(S.log2Fixed(1 ether)) - r));
+                    s.sizeLogEma = uint16(uint256(int256(S.log2Fixed(UNIT)) - r));
                     uint256 step = uint256(keccak256(abi.encodePacked(uint32(18), int24(0), uint64(20_000_000)))) % 16;
                     s.pattern = 0;
                     for (uint256 row; row < 4; ++row) {
                         if (column & (1 << row) != 0) s.pattern |= uint64(1) << (row * 16 + step);
                     }
-                    (all,) = appendV2(all, "accumulation-column", s, input(side == 0, 1 ether, 0));
+                    (all,) = appendV2(all, "accumulation-column", s, input(side == 0, UNIT, 0));
                 }
             }
         }
@@ -335,24 +359,24 @@ contract VectorsTest is SequencerTestBase {
             S.State memory s = S.initialV2();
             s.pattern = type(uint64).max ^ (uint64(1) << (32 + st));
             s.sizeLogEma = 1100; // dust-relative hat; occupied column climbs then scans hat
-            (all,) = appendV2(all, "scan-wrap", s, input(true, 1 ether, 0));
+            (all,) = appendV2(all, "scan-wrap", s, input(true, UNIT, 0));
         }
-        // Saturation 47 -> 48 (post-write popcount), frozen row below saturation, 3599 vs 3600,
+        // Saturation 43 -> 44 (post-write popcount; 42 -> 43 does not heat), frozen row below saturation, 3599 vs 3600,
         // backwards clock, sell cooling, and malformed maximum packed fields must never revert.
         for (uint256 i; i < 18; ++i) {
             S.State memory s = S.initialV2();
-            S.Input memory x = input(true, 1 ether, 0);
+            S.Input memory x = input(true, UNIT, 0);
             s.swapCount = 63;
             s.lastTs = x.timestamp - 1;
             s.pattern = type(uint64).max;
             s.bass = type(uint64).max;
             s.heat = 15;
             if (i == 0) {
-                s.pattern = 0x0000ffffffffffff;
+                s.pattern = 0x0000ffff07ffffff; // 43 bits, full hat row: the write climbs to glitch -> 44
                 s.heat = 0;
             }
             if (i == 1) {
-                s.pattern = 0x0000ffffffffffff;
+                s.pattern = 0x0000ffff03ffffff; // 42 bits -> 43 after the write: no heat
                 s.heat = 14;
             }
             if (i == 2) {
@@ -367,13 +391,14 @@ contract VectorsTest is SequencerTestBase {
                 x.isBuy = false;
                 s.heat = 0;
             }
-            if (i == 8) x.imdAmt = 100 ether;
+            // Tick 0 is FDV 1e9 ETH: the whale threshold sits at the WHALE_MAX clamp.
+            if (i == 8) x.quoteAmt = Q.WHALE_MAX;
             if (i == 9) {
-                x.imdAmt = 100 ether;
+                x.quoteAmt = Q.WHALE_MAX;
                 s.heat = 16;
             }
             if (i == 10) {
-                x.imdAmt = 100 ether;
+                x.quoteAmt = Q.WHALE_MAX;
                 x.isBuy = false;
             }
             if (i == 11) {
@@ -395,11 +420,11 @@ contract VectorsTest is SequencerTestBase {
                 x.tick = type(int24).max;
             }
             if (i == 15) {
-                x.imdAmt = 0;
+                x.quoteAmt = 0;
                 s.heat = 0;
             }
             if (i == 16) {
-                x.imdAmt = type(uint128).max;
+                x.quoteAmt = type(uint128).max;
                 x.blockNumber = type(uint64).max;
             }
             if (i == 17) {
@@ -421,16 +446,70 @@ contract VectorsTest is SequencerTestBase {
                 s.lastTs = 1_799_999_999;
                 s.pattern = type(uint64).max;
                 s.heat = 15;
-                (all,) = appendV2(all, "curated-seed", s, input(true, 1 ether, 0));
+                (all,) = appendV2(all, "curated-seed", s, input(true, UNIT, 0));
             }
         }
         // A continuous live buy-heavy run, including multiple finished tracks and seeded next tracks.
         S.State memory running = S.initialV2();
         for (uint256 i; i < 180; ++i) {
-            S.Input memory x = input(true, 1 ether, int24(int256(i) * 61 - 3000));
+            S.Input memory x = input(true, UNIT, int24(int256(i) * 61 - 3000));
             x.timestamp += uint40(i * 6);
             x.blockNumber += uint64(i);
             (all, running) = appendV2(all, "live-heat-build", running, x);
+        }
+        // FDV-scaled whale threshold across the whole tick range: exactly at the threshold (whale) and 1 wei under.
+        // Tick extremes and out-of-range int24 (saturated), both clamp boundaries, the FDV 4/40/400/4000 ETH ticks.
+        int24[26] memory ticks = [
+            type(int24).min,
+            -887273,
+            -887272,
+            -887271,
+            -400000,
+            -1,
+            0,
+            1,
+            50753,
+            50754,
+            50755,
+            100000,
+            124298,
+            147325,
+            170352,
+            193379,
+            193380,
+            193381,
+            220000,
+            234970,
+            234971,
+            300000,
+            887271,
+            887272,
+            887273,
+            type(int24).max
+        ];
+        for (uint256 i; i < ticks.length * 2; ++i) {
+            S.State memory s = S.initialV2();
+            s.swapCount = uint32(100 + i);
+            s.lastTs = 1_799_999_999;
+            uint128 w = S.whaleThreshold(ticks[i / 2], true);
+            (all,) = appendV2(all, "whale-threshold", s, input(i % 4 < 2, i % 2 == 0 ? w : w - 1, ticks[i / 2]));
+        }
+        // A launch-like market at FDV ~4-40 ETH: ~0.004 ETH trades, a few 0.02-0.1 ETH buys, the tick walking with
+        // price. The EMA upper clamp follows the whale threshold (L(0.04 ETH) = 881 at the start).
+        running = S.initialV2();
+        int24 tick = 193380;
+        for (uint256 i; i < 120; ++i) {
+            uint256 h = uint256(keccak256(abi.encodePacked("launch", i)));
+            bool buy = h % 100 < 60;
+            uint128 amt = uint128(0.001 ether + (h >> 8) % 0.006 ether);
+            if ((h >> 64) % 16 == 0) amt = uint128(0.02 ether + (h >> 72) % 0.08 ether);
+            // ~2 ETH of virtual liquidity per side: 0.004 ETH moves ~0.2% of price, i.e. ~20 ticks.
+            int24 move = int24(int256(uint256(amt) / 0.0002 ether));
+            tick = buy ? tick - move : tick + move;
+            S.Input memory x = input(buy, amt, tick);
+            x.timestamp += uint40(i * 40);
+            x.blockNumber += uint64(i * 3);
+            (all, running) = appendV2(all, "launch-market", running, x);
         }
         vm.writeLine(string.concat(vm.projectRoot(), "/../spec/vectors-v2.json"), "]");
     }

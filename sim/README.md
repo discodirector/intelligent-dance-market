@@ -1,6 +1,11 @@
 # sim — Sepolia swap simulator (W3b)
 
-Drives real swaps through the self-deployed IDM/IMD SequencerHook pool on Sepolia
+**v2 (IDM/ETH, native ETH)**: `--net v2` uses `contracts/deployments/sepolia-v2.json`, ETH amounts, the v2 rules
+(parity against core `V2_RULES`, `TrackComplete` included) and the extra `track` profile. The full rehearsal,
+from deploy to site and bot, is `contracts/SEPOLIA-V2.md`; record the deploy with `npm run write-deployment-v2`.
+`--dry` prints a plan without a key or RPC. The rest of this file describes the v1 rehearsal.
+
+Drives real swaps through the self-deployed IDM/IMD (v1) SequencerHook pool on Sepolia
 (`contracts/deployments/sepolia.json`, key from gitignored `contracts/.env.sepolia`) and checks, for every swap,
 that the on-chain `slot0/slot1` emitted in `Mutated` equal `packages/core` `mutate()` applied to the previous
 on-chain state (Solidity ⇔ TS parity on a real chain).

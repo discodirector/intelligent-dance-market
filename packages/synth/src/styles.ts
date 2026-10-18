@@ -3,12 +3,23 @@ import { hash32 } from "./hash.ts";
 
 /**
  * Styles: each genre has several distinct sound worlds (kit, groove, bass, harmony treatment, processing).
- * Each appearance of a genre plays ONE style for its whole epoch. Appearances walk the genre's styles in list
- * order, round and round: the first appearance plays style 1, the second style 2, and so on.
+ * Each appearance of a genre plays ONE style for its whole epoch.
+ *
+ * Which styles a genre has is versioned by epoch, like the genre pool (ERA_SCHEDULE): STYLE_SCHEDULE is a list of
+ * entries `{ fromEpoch, styles: { <genre>: [style, ...] } }`. For an epoch, a genre plays from the list of the last
+ * entry that has started (fromEpoch <= epoch) and names that genre. Rotation: the genre's appearances since that
+ * entry's fromEpoch walk the list in order, round and round (appearance k since fromEpoch plays style k % n). So a
+ * new list starts over at its first style on the genre's first appearance on or after its fromEpoch (put a new
+ * style first to hear it at once), and every epoch before fromEpoch keeps the style it had.
+ *
+ * History is frozen once the app is live (bot posts and releases name the style). So:
+ *   - never edit, remove or reorder a list already in force; to change a genre's styles, APPEND an entry from a
+ *     future epoch with the genre's whole new list (other genres can be left out: they keep their list);
+ *   - a style id, once defined, means one sound: reuse the same definition in later lists, give a changed sound a
+ *     new id (and bump the synth version, README "How to add a genre or a style after launch").
+ * test/styles.test.ts pins the (genre, style) of epochs 0..4095.
  *
  * The id "classic" marks the sound the genre had before styles existed; it need not be listed first.
- * Changing the list after launch changes which style past appearances played: append only, and know that even
- * an append shifts the rotation of every later appearance.
  * Every field except id/name is optional and falls back to the genre's value in eras.ts.
  */
 export interface GenreStyle {
@@ -24,7 +35,8 @@ export interface GenreStyle {
   leads?: readonly string[];
 }
 
-export const GENRE_STYLES: Record<GenreId, readonly GenreStyle[]> = {
+/** The launch lists (STYLE_SCHEDULE entry 0). Frozen: change a genre's styles with a new STYLE_SCHEDULE entry. */
+const LAUNCH_STYLES: Record<GenreId, readonly GenreStyle[]> = {
   // Listed in play order: a genre's appearances walk its styles 1, 2, 3, 1, 2, 3 ... (owner's order, 2026-10-18).
   liquid: [
     { id: "classic", name: "Keys", trim: 0.955 },
@@ -108,44 +120,97 @@ export const GENRE_STYLES: Record<GenreId, readonly GenreStyle[]> = {
   ],
 };
 
+export interface StyleScheduleEntry {
+  /** First epoch the lists apply to. Strictly increasing over the schedule; entry 0 starts at 0. */
+  fromEpoch: number;
+  /** The whole new style list of each genre this entry changes; genres left out keep their list. */
+  styles: Partial<Record<GenreId, readonly GenreStyle[]>>;
+}
+
+/** Append-only (see the comment at the top). */
+export const STYLE_SCHEDULE: readonly StyleScheduleEntry[] = [{ fromEpoch: 0, styles: LAUNCH_STYLES }];
+
+/** A genre's style list in force at an epoch, and the epoch its rotation counts from. */
+export interface StyleList {
+  styles: readonly GenreStyle[];
+  fromEpoch: number;
+}
+
+/**
+ * The list `genre` plays from at `epoch`: the last entry that has started and names the genre. A genre with no list
+ * yet at that epoch (a genre added later, auditioned at an earlier epoch) uses its first list.
+ */
+export function styleListAt(genre: GenreId, epoch: number, schedule: readonly StyleScheduleEntry[] = STYLE_SCHEDULE): StyleList {
+  let hit: StyleList | null = null;
+  for (const entry of schedule) {
+    const list = entry.styles[genre];
+    if (!list || list.length === 0) continue;
+    if (entry.fromEpoch <= epoch || !hit) hit = { styles: list, fromEpoch: entry.fromEpoch };
+    if (entry.fromEpoch > epoch) break;
+  }
+  if (!hit) throw new Error(`no styles for genre ${genre}`);
+  return hit;
+}
+
+/** The styles of a genre in force at `epoch` (the rack, galleries). */
+export function stylesAt(genre: GenreId, epoch: number): readonly GenreStyle[] {
+  return styleListAt(genre, epoch).styles;
+}
+
+/** Every style a genre has ever had, in order of first definition (ids are unique per genre). */
+export function allStyles(genre: GenreId, schedule: readonly StyleScheduleEntry[] = STYLE_SCHEDULE): readonly GenreStyle[] {
+  const out: GenreStyle[] = [];
+  for (const entry of schedule) for (const st of entry.styles[genre] ?? []) if (!out.some((s) => s.id === st.id)) out.push(st);
+  return out;
+}
+
+/** Every style ever defined, per genre (allStyles). With one schedule entry, the launch lists. */
+export const GENRE_STYLES: Record<GenreId, readonly GenreStyle[]> = Object.fromEntries(
+  (Object.keys(LAUNCH_STYLES) as GenreId[]).map((g) => [g, allStyles(g)]),
+) as Record<GenreId, readonly GenreStyle[]>;
+
 export interface StyleChoice {
+  /** Index into the list in force at the epoch (styleListAt). */
   index: number;
   style: GenreStyle;
 }
 
-const appearanceCache = new Map<number, number>();
+const appearanceCache = new Map<string, number>();
 
-/** How many times this epoch's genre appeared before it (0 = first appearance). */
-function appearance(epoch: number): number {
-  const hit = appearanceCache.get(epoch);
+/** How many times this epoch's genre appeared in [from, epoch) (0 = first appearance since `from`). */
+function appearance(epoch: number, from: number): number {
+  const key = `${from}:${epoch}`;
+  const hit = appearanceCache.get(key);
   if (hit !== undefined) return hit;
   const idx = eraOf(epoch).index;
   let k = 0;
-  for (let e = 0; e < epoch; e++) if (eraOf(e).index === idx) k++;
-  appearanceCache.set(epoch, k);
+  for (let e = from; e < epoch; e++) if (eraOf(e).index === idx) k++;
+  appearanceCache.set(key, k);
   return k;
 }
 
 /**
- * The style of a genre instance. When `era` is the epoch's own genre, its appearances walk the list in order; for a
- * forced genre (gallery, sketches) the epoch hash picks one.
+ * The style of a genre instance. When `era` is the epoch's own genre, its appearances since the list's fromEpoch
+ * walk the list in force in order; for a forced genre (gallery, sketches) the epoch hash picks from that list.
+ * `schedule` is for tests (a dummy appended entry); everything else uses STYLE_SCHEDULE.
  */
-export function styleOf(era: Era, epoch: number): StyleChoice {
-  const list = GENRE_STYLES[era.id];
-  const n = list.length;
+export function styleOf(era: Era, epoch: number, schedule: readonly StyleScheduleEntry[] = STYLE_SCHEDULE): StyleChoice {
   const e = Number.isFinite(epoch) ? Math.max(0, Math.floor(epoch)) : 0;
+  const { styles: list, fromEpoch } = styleListAt(era.id, e, schedule);
+  const n = list.length;
   let index: number;
   if (n === 1) index = 0;
   else if (eraOf(e).index !== era.index) index = hash32(e, era.index, 0x5717) % n;
-  else index = appearance(e) % n;
+  else index = appearance(e, Math.min(fromEpoch, e)) % n;
   return { index, style: list[index] };
 }
 
-/** Style by id within a genre (sketch scripts, tests). */
+/** Style by id within a genre, from every list ever defined (sketch scripts, tests). `index` is its position in GENRE_STYLES. */
 export function styleById(era: Era, id: string): StyleChoice {
-  const index = GENRE_STYLES[era.id].findIndex((s) => s.id === id);
+  const all = allStyles(era.id);
+  const index = all.findIndex((s) => s.id === id);
   if (index < 0) throw new Error(`unknown style ${era.id}/${id}`);
-  return { index, style: GENRE_STYLES[era.id][index] };
+  return { index, style: all[index] };
 }
 
 /** Genre values with the style's overrides applied. */

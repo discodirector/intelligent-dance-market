@@ -7,9 +7,11 @@ import { fileURLToPath } from "node:url";
 import { arrange, encode, initialState, isOn, type SequencerState } from "../../packages/synth/src/index.ts";
 import { mutate } from "../../packages/core/src/index.ts";
 
-const E = 10n ** 18n;
+/** 1 IMD-equivalent at the ETH calibration (1/400): 0.0025 ETH in wei. */
+
+const E = 10n ** 18n / 400n;
 const SIZE = { hat: E / 4n, glitch: 2n * E, snare: 10n * E, kick: 40n * E, whale: 160n * E };
-type Swap = { isBuy: boolean; imdAmt: bigint; tick?: number };
+type Swap = { isBuy: boolean; quoteAmt: bigint; tick?: number };
 
 function rng(seed: number) {
   let a = seed >>> 0;
@@ -25,16 +27,16 @@ function rng(seed: number) {
 const repeat = (n: number, s: Swap): Swap[] => Array.from({ length: n }, () => s);
 const r = rng(7);
 const SCENARIOS: Record<string, Swap[]> = {
-  "50-small-buys": repeat(50, { isBuy: true, imdAmt: SIZE.hat }),
-  "50-snare-buys": repeat(50, { isBuy: true, imdAmt: SIZE.snare }),
-  "50-kick-buys": repeat(50, { isBuy: true, imdAmt: SIZE.kick }),
-  "50-glitch-buys": repeat(50, { isBuy: true, imdAmt: SIZE.glitch }),
-  "50-sells": repeat(50, { isBuy: false, imdAmt: SIZE.snare }),
-  "whales-only": Array.from({ length: 20 }, (_, i) => ({ isBuy: i % 3 !== 2, imdAmt: SIZE.whale })),
-  "same-tick-buys": repeat(50, { isBuy: true, imdAmt: SIZE.snare, tick: 1200 }),
+  "50-small-buys": repeat(50, { isBuy: true, quoteAmt: SIZE.hat }),
+  "50-snare-buys": repeat(50, { isBuy: true, quoteAmt: SIZE.snare }),
+  "50-kick-buys": repeat(50, { isBuy: true, quoteAmt: SIZE.kick }),
+  "50-glitch-buys": repeat(50, { isBuy: true, quoteAmt: SIZE.glitch }),
+  "50-sells": repeat(50, { isBuy: false, quoteAmt: SIZE.snare }),
+  "whales-only": Array.from({ length: 20 }, (_, i) => ({ isBuy: i % 3 !== 2, quoteAmt: SIZE.whale })),
+  "same-tick-buys": repeat(50, { isBuy: true, quoteAmt: SIZE.snare, tick: 1200 }),
   "mixed-random": Array.from({ length: 60 }, () => ({
     isBuy: r() < 0.6,
-    imdAmt: [SIZE.hat, SIZE.glitch, SIZE.snare, SIZE.kick][Math.floor(r() * 4)],
+    quoteAmt: [SIZE.hat, SIZE.glitch, SIZE.snare, SIZE.kick][Math.floor(r() * 4)],
   })),
 };
 
@@ -86,7 +88,7 @@ for (const [name, swaps] of Object.entries(SCENARIOS)) {
     block += 1n;
     const next = mutate(state, {
       isBuy: swap.isBuy,
-      imdAmt: swap.imdAmt,
+      quoteAmt: swap.quoteAmt,
       tick: swap.tick ?? 600 + ((i * 397) % 2400),
       blockNumber: block,
       timestamp: ts,
@@ -103,7 +105,7 @@ for (const [name, swaps] of Object.entries(SCENARIOS)) {
       on: e.on,
       bassNote: e.bassNote,
       isBuy: e.isBuy,
-      imdAmount: e.imdAmount.toString(),
+      quoteAmount: e.quoteAmount.toString(),
       tick: e.tick,
       swapCount: e.swapCount,
       ...(e.drop ? { drop: e.drop } : {}),

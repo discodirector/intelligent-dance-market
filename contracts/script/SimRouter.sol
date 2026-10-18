@@ -5,15 +5,17 @@ import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {IUnlockCallback} from "v4-core/src/interfaces/callback/IUnlockCallback.sol";
 import {IERC20Minimal} from "v4-core/src/interfaces/external/IERC20Minimal.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
-import {Currency} from "v4-core/src/types/Currency.sol";
+import {Currency, CurrencyLibrary} from "v4-core/src/types/Currency.sol";
 import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {ModifyLiquidityParams, SwapParams} from "v4-core/src/types/PoolOperation.sol";
 import {TransientStateLibrary} from "v4-core/src/libraries/TransientStateLibrary.sol";
 
 /// @notice Sepolia rehearsal router (testnet only). Swaps / adds liquidity for msg.sender and settles
-///         both currencies inside the unlock callback; the caller pays via ERC20 allowance.
+///         both currencies inside the unlock callback; the caller pays ERC20s via allowance and native ETH
+///         via msg.value (any unspent ETH is refunded to the caller).
 contract SimRouter is IUnlockCallback {
     using TransientStateLibrary for IPoolManager;
+    using CurrencyLibrary for Currency;
 
     IPoolManager public immutable manager;
 
@@ -27,6 +29,7 @@ contract SimRouter is IUnlockCallback {
     /// @param amountSpecified v4 convention: negative = exact input, positive = exact output.
     function swap(PoolKey calldata key, bool zeroForOne, int256 amountSpecified, uint160 sqrtPriceLimitX96)
         external
+        payable
         returns (BalanceDelta delta)
     {
         bytes memory res = manager.unlock(
@@ -41,16 +44,19 @@ contract SimRouter is IUnlockCallback {
             )
         );
         delta = abi.decode(res, (BalanceDelta));
+        _refund();
     }
 
     function addLiquidity(PoolKey calldata key, int24 tickLower, int24 tickUpper, int256 liquidityDelta)
         external
+        payable
         returns (BalanceDelta delta)
     {
         bytes memory res = manager.unlock(
             abi.encode(msg.sender, key, true, SwapParams(false, 0, 0), tickLower, tickUpper, liquidityDelta)
         );
         delta = abi.decode(res, (BalanceDelta));
+        _refund();
     }
 
     function unlockCallback(bytes calldata data) external returns (bytes memory) {
@@ -79,12 +85,24 @@ contract SimRouter is IUnlockCallback {
         int256 d = manager.currencyDelta(address(this), currency);
         if (d < 0) {
             manager.sync(currency);
+            if (currency.isAddressZero()) {
+                manager.settle{value: uint256(-d)}();
+                return;
+            }
             if (!IERC20Minimal(Currency.unwrap(currency)).transferFrom(payer, address(manager), uint256(-d))) {
                 revert TransferFailed();
             }
             manager.settle();
         } else if (d > 0) {
             manager.take(currency, payer, uint256(d));
+        }
+    }
+
+    function _refund() private {
+        uint256 left = address(this).balance;
+        if (left > 0) {
+            (bool ok,) = msg.sender.call{value: left}("");
+            if (!ok) revert TransferFailed();
         }
     }
 }

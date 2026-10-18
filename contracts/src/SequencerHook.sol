@@ -13,8 +13,9 @@ import {BeforeSwapDelta} from "v4-core/src/types/BeforeSwapDelta.sol";
 import {ModifyLiquidityParams, SwapParams} from "v4-core/src/types/PoolOperation.sol";
 import {SequencerState} from "./SequencerState.sol";
 
-/// @notice One factory-created IDM/IMD pool; swaps compose music without moving funds.
+/// @notice One factory-created IDM/quote pool (launch: IDM/ETH, native ETH); swaps compose music without moving funds.
 /// @dev Implements IHooks directly like IMD launch examples; disabled callbacks always refuse.
+///      The quote may be native ETH (address(0), always currency0) or an ERC20; the hook never holds either.
 contract SequencerHook is IHooks {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
@@ -28,11 +29,13 @@ contract SequencerHook is IHooks {
     IPoolManager public immutable poolManager;
     address public immutable token;
     address public immutable factory;
-    address public immutable imd;
+    /// @notice Paired currency whose |delta| drives the rules; address(0) = native ETH.
+    address public immutable quote;
     uint128 public immutable T_HAT;
     uint128 public immutable T_GLITCH;
     uint128 public immutable T_SNARE;
-    uint128 public immutable T_KICK;
+    /// @notice True when the quote is currency0 (always for native ETH): orients the FDV read of the tick.
+    bool public immutable quoteIs0;
     uint160 public constant HOOK_FLAGS = 0x3040;
     uint24 public constant LP_FEE = 12500;
     int24 public constant TICK_SPACING = 60;
@@ -51,7 +54,7 @@ contract SequencerHook is IHooks {
         bool on,
         uint8 bassNote,
         bool isBuy,
-        uint128 imdAmount,
+        uint128 quoteAmount,
         int24 tick,
         uint256 slot0,
         uint256 slot1
@@ -79,24 +82,25 @@ contract SequencerHook is IHooks {
         IPoolManager manager_,
         address token_,
         address factory_,
-        address imd_,
+        address quote_,
         uint128 hat_,
         uint128 glitch_,
-        uint128 snare_,
-        uint128 kick_
+        uint128 snare_
     ) {
+        // quote_ == address(0) is native ETH and is allowed; the token itself must be a real ERC20.
         if (
-            address(manager_) == address(0) || token_ == address(0) || factory_ == address(0) || imd_ == address(0)
-                || token_ == imd_ || hat_ == 0 || hat_ >= glitch_ || glitch_ >= snare_ || snare_ >= kick_
+            address(manager_) == address(0) || token_ == address(0) || factory_ == address(0) || token_ == quote_
+                || hat_ == 0 || hat_ >= glitch_ || glitch_ >= snare_
         ) revert InvalidConfiguration();
         poolManager = manager_;
         token = token_;
         factory = factory_;
-        imd = imd_;
+        quote = quote_;
         T_HAT = hat_;
         T_GLITCH = glitch_;
         T_SNARE = snare_;
-        T_KICK = kick_;
+        // Sorted pair: the quote is currency0 iff its address is lower (native ETH = address(0) always is).
+        quoteIs0 = quote_ < token_;
         Hooks.validateHookPermissions(this, getHookPermissions());
     }
 
@@ -113,11 +117,12 @@ contract SequencerHook is IHooks {
 
     function _validateInitialization(address sender, PoolKey calldata key) private view {
         if (initialized) revert AlreadyInitialized();
+        // Sorted pair: native ETH (address(0)) is always currency0, an ERC20 quote may be either side.
         address a = Currency.unwrap(key.currency0);
         address b = Currency.unwrap(key.currency1);
         if (
             sender != factory || a >= b || address(key.hooks) != address(this) || key.fee != LP_FEE
-                || key.tickSpacing != TICK_SPACING || !((a == token && b == imd) || (a == imd && b == token))
+                || key.tickSpacing != TICK_SPACING || !((a == token && b == quote) || (a == quote && b == token))
         ) revert InvalidPool();
     }
 
@@ -151,14 +156,15 @@ contract SequencerHook is IHooks {
         PoolId id = key.toId();
         if (!initialized || PoolId.unwrap(id) != PoolId.unwrap(poolId)) revert InvalidPool();
         bool seqIs0 = Currency.unwrap(key.currency0) == token;
-        int256 imdDelta = seqIs0 ? int256(delta.amount1()) : int256(delta.amount0());
+        int256 quoteDelta = seqIs0 ? int256(delta.amount1()) : int256(delta.amount0());
         bool isBuy = (seqIs0 ? delta.amount0() : delta.amount1()) > 0;
-        uint128 amount = uint128(uint256(imdDelta < 0 ? -imdDelta : imdDelta));
+        uint128 amount = uint128(uint256(quoteDelta < 0 ? -quoteDelta : quoteDelta));
         (, int24 tick,,) = poolManager.getSlot0(id);
+        // Whale threshold from the post-swap tick, i.e. the FDV this swap left behind (SPEC §3.1).
         (SequencerState.State memory s, SequencerState.Mutation memory m) = SequencerState.mutateV2(
             SequencerState.decode(slot0, slot1),
             SequencerState.Input(isBuy, amount, tick, uint64(block.number), uint40(block.timestamp)),
-            SequencerState.Thresholds(T_HAT, T_GLITCH, T_SNARE, T_KICK)
+            SequencerState.Thresholds(T_HAT, T_GLITCH, T_SNARE, SequencerState.whaleThreshold(tick, quoteIs0))
         );
         (slot0, slot1) = SequencerState.encode(s);
         if (m.whale) {
@@ -181,6 +187,18 @@ contract SequencerHook is IHooks {
 
     function raw() external view returns (uint256, uint256) {
         return (slot0, slot1);
+    }
+
+    /// @notice Whale threshold (quote wei) for a swap that would leave the pool at `tick`.
+    function whaleThresholdAt(int24 tick) external view returns (uint128) {
+        return SequencerState.whaleThreshold(tick, quoteIs0);
+    }
+
+    /// @notice Whale threshold at the pool's current tick (before initialization: at tick 0).
+    function whaleThreshold() external view returns (uint128) {
+        int24 tick;
+        if (initialized) (, tick,,) = poolManager.getSlot0(poolId);
+        return SequencerState.whaleThreshold(tick, quoteIs0);
     }
 
     function beforeAddLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, bytes calldata)

@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 import {SequencerTestBase} from "./SequencerState.t.sol";
 import {SequencerState as S} from "../src/SequencerState.sol";
+import {QuoteCalibration as Q} from "../src/QuoteCalibration.sol";
 
 contract SequencerV2Test is SequencerTestBase {
     function test_LayoutV2() public pure {
@@ -26,6 +27,24 @@ contract SequencerV2Test is SequencerTestBase {
         assertEq(S.log2Fixed(type(uint128).max), 2047);
     }
 
+    function test_EthCalibration() public pure {
+        // 1/400 of the IMD calibration, exact in wei; the whale threshold scales with FDV (test_WhaleThreshold*).
+        assertEq(Q.T_HAT * 400, 0.5 ether);
+        assertEq(Q.T_GLITCH * 400, 5 ether);
+        assertEq(Q.T_SNARE * 400, 25 ether);
+        assertEq(Q.EMA_FLOOR * 400, 0.01 ether);
+        assertEq(Q.INITIAL_SIZE * 400, 5 ether);
+        // log2Fixed pins (1/16 octave): rounding differs from the IMD values since 400 is not a power of two.
+        assertEq(S.log2Fixed(Q.INITIAL_SIZE), 854);
+        assertEq(S.log2Fixed(Q.EMA_FLOOR), 710);
+        assertEq(S.log2Fixed(Q.T_HAT), 801);
+        assertEq(S.log2Fixed(Q.T_SNARE), 891);
+        assertEq(S.log2Fixed(Q.WHALE_MIN), 833); // lowest possible EMA upper clamp
+        assertEq(S.log2Fixed(Q.WHALE_MAX), 1045); // highest
+        assertEq(S.initialV2().sizeLogEma, 854);
+        assertEq(S.initialV2().sizeLogEma, S.log2Fixed(Q.INITIAL_SIZE));
+    }
+
     function test_SilenceBoundaryAndSellCooling() public pure {
         for (uint256 i; i < 4; ++i) {
             S.State memory s = S.initialV2();
@@ -33,9 +52,9 @@ contract SequencerV2Test is SequencerTestBase {
             s.lastTs = 10000;
             s.heat = 10;
             s.pattern = type(uint64).max;
-            S.Input memory x = input(i != 3, 1 ether, 0);
+            S.Input memory x = input(i != 3, UNIT, 0);
             x.timestamp = i == 0 ? 13599 : i == 1 ? 13600 : i == 2 ? 9999 : 10001;
-            (S.State memory a,) = S.mutateV2(s, x, thresholds());
+            (S.State memory a,) = v2(s, x);
             assertEq(a.heat, i == 0 || i == 2 ? 11 : i == 1 ? 1 : 9);
         }
     }
@@ -50,7 +69,7 @@ contract SequencerV2Test is SequencerTestBase {
         s.patternId = type(uint32).max;
         s.trackNo = type(uint16).max;
         s.releaseCount = 77;
-        (S.State memory a, S.Mutation memory m) = S.mutateV2(s, input(true, 1 ether, 0), thresholds());
+        (S.State memory a, S.Mutation memory m) = v2(s, input(true, UNIT, 0));
         assertTrue(m.completed);
         S.State memory snapshot = S.decode(m.snapshot0, m.snapshot1);
         assertEq(snapshot.heat, 16);
@@ -73,25 +92,69 @@ contract SequencerV2Test is SequencerTestBase {
             S.State memory s = S.initialV2();
             s.heat = 15;
             s.lastTs = 1000;
-            S.Input memory x = input(i % 2 == 0, 100 ether, 0);
+            S.Input memory x = input(i % 2 == 0, Q.WHALE_MAX, 0); // tick 0: FDV 1e9 ETH, top clamp
             x.timestamp = i < 2 ? 4599 : 4600;
-            (S.State memory a, S.Mutation memory m) = S.mutateV2(s, x, thresholds());
+            (S.State memory a, S.Mutation memory m) = v2(s, x);
             assertEq(a.heat, i < 2 ? 15 : 0);
             assertFalse(m.completed);
             assertTrue(m.whale);
         }
     }
 
-    function test_SaturationUsesPostWritePopcount48() public pure {
-        S.Input memory x = input(true, 1 ether, 0);
+    function test_SaturationUsesPostWritePopcount44() public pure {
+        S.Input memory x = input(true, UNIT, 0);
         uint256 step = uint256(keccak256(abi.encodePacked(uint32(1), int24(0), uint64(20_000_000)))) % 16;
         S.State memory s = S.initialV2();
-        // 47 on, relative hat write raises it to exactly 48.
-        s.pattern = 0x0000ffffffffffff ^ (uint64(1) << (32 + step));
+        // 43 on, relative hat write raises it to exactly 44 (SAT_BITS).
+        s.pattern = 0x0000ffff0fffffff ^ (uint64(1) << (32 + step)); // full kick + hat rows, 12 snare bits
         s.sizeLogEma = 1100;
-        (S.State memory a,) = S.mutateV2(s, x, thresholds());
-        assertEq(S.popcount64(a.pattern), 48);
+        (S.State memory a,) = v2(s, x);
+        assertEq(S.popcount64(a.pattern), 44);
         assertEq(a.heat, 1);
+        // 42 on -> 43 after the write: below saturation, and the write changed a bit, so no heat.
+        // (mutateV2 updates the memory state in place: rebuild it.)
+        s = S.initialV2();
+        s.pattern = 0x0000ffff0ffffffe ^ (uint64(1) << (32 + step));
+        s.sizeLogEma = 1100;
+        (a,) = v2(s, x);
+        assertEq(S.popcount64(a.pattern), 43);
+        assertEq(a.heat, 0);
+    }
+
+    function test_WhaleThresholdCalibrationAndClamps() public pure {
+        assertEq(Q.WHALE_C * Q.WHALE_C <= Q.WHALE_K * Q.WHALE_K * Q.SUPPLY, true);
+        assertGt((Q.WHALE_C + 1) * (Q.WHALE_C + 1), Q.WHALE_K * Q.WHALE_K * Q.SUPPLY);
+        // FDV 4 / 40 / 400 / 4000 ETH (ticks nearest 1e9 / FDV IDM per ETH) -> 0.04 / 0.1265 / 0.4 / 1.265 ETH.
+        assertEq(S.whaleThreshold(193380, true), 39_998_766_246_454_331);
+        assertEq(S.whaleThreshold(193379, true), 40_000_766_134_770_696);
+        assertApproxEqRel(S.whaleThreshold(170352, true), 0.12649110640673517 ether, 1e14);
+        assertApproxEqRel(S.whaleThreshold(147325, true), 0.4 ether, 1e14);
+        assertApproxEqRel(S.whaleThreshold(124298, true), 1.2649110640673518 ether, 1e14);
+        // Clamp boundaries (pinned): 50 ETH for tick <= 50754, 0.005 ETH for tick >= 234971.
+        assertEq(Q.WHALE_MIN, 0.005 ether);
+        assertEq(Q.WHALE_MAX, 50 ether);
+        assertEq(S.whaleThreshold(50754, true), Q.WHALE_MAX);
+        assertEq(S.whaleThreshold(50755, true), 49_998_189_365_703_816_076);
+        assertEq(S.whaleThreshold(234970, true), 5_000_073_327_709_522);
+        assertEq(S.whaleThreshold(234971, true), Q.WHALE_MIN);
+        // Tick extremes and out-of-range int24 saturate instead of reverting.
+        assertEq(S.whaleThreshold(type(int24).min, true), Q.WHALE_MAX);
+        assertEq(S.whaleThreshold(-887272, true), Q.WHALE_MAX);
+        assertEq(S.whaleThreshold(887272, true), Q.WHALE_MIN);
+        assertEq(S.whaleThreshold(type(int24).max, true), Q.WHALE_MIN);
+        assertEq(S.whaleThreshold(type(int24).min, false), Q.WHALE_MIN);
+        assertEq(S.whaleThreshold(type(int24).max, false), Q.WHALE_MAX);
+    }
+
+    /// @dev Higher tick = more IDM per ETH = lower FDV = lower threshold; a currency1 quote mirrors the tick.
+    function testFuzz_WhaleThresholdMonotoneBoundedSymmetric(int24 a, int24 b) public pure {
+        (int24 lo, int24 hi) = a <= b ? (a, b) : (b, a);
+        uint128 wLo = S.whaleThreshold(lo, true);
+        uint128 wHi = S.whaleThreshold(hi, true);
+        assertGe(wLo, wHi);
+        assertGe(wHi, Q.WHALE_MIN);
+        assertLe(wLo, Q.WHALE_MAX);
+        if (a > type(int24).min) assertEq(S.whaleThreshold(-a, false), S.whaleThreshold(a, true));
     }
 
     function testFuzz_CodecV2(uint256 a, uint256 b) public pure {
@@ -150,7 +213,7 @@ contract SequencerV2Test is SequencerTestBase {
     ) public pure {
         S.State memory s = S.decode(a, b);
         uint32 release = s.releaseCount;
-        (S.State memory next, S.Mutation memory m) = S.mutateV2(s, S.Input(buy, amount, tick, n, ts), thresholds());
+        (S.State memory next, S.Mutation memory m) = v2(s, S.Input(buy, amount, tick, n, ts));
         assertEq(next.releaseCount, release);
         assertLe(next.heat, 15);
         assertGe(next.bpm, 72);

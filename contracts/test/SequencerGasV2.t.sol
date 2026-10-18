@@ -28,9 +28,9 @@ contract SequencerGasV2Test is SequencerTestBase {
             s.lastTs = 1_799_999_999;
             s.heat = 7;
             if (i == 1) s.pattern = type(uint64).max;
-            S.Input memory x = input(i != 2, 1 ether, 0);
-            (uint256 base, bytes memory a) = meter.measure(s, x, thresholds(), false);
-            (uint256 v2, bytes memory b) = meter.measure(s, x, thresholds(), true);
+            S.Input memory x = input(i != 2, UNIT, 0);
+            (uint256 base, bytes memory a) = meter.measure(s, x, v2Thresholds(x.tick), false);
+            (uint256 v2, bytes memory b) = meter.measure(s, x, v2Thresholds(x.tick), true);
             emit log_named_uint(
                 i == 0
                     ? "heat/drop increment normal buy"

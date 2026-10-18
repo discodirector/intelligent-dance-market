@@ -1,12 +1,13 @@
 // Live feed: backfills every Mutated event since the deployment block, then polls new blocks.
-import { createPublicClient, defineChain, http, parseAbi, type PublicClient } from "viem";
+import { createPublicClient, defineChain, fallback, http, parseAbi, type PublicClient } from "viem";
+import { isPulse } from "@swarm-sequencer/core";
 import type { Network } from "../config";
 import { decodeSlots, RULES } from "../rules";
-import { fromWei, WHALE_WEI, type Feed, type SwapEvent } from "./types";
+import { fromWei, whaleWeiFor, type Feed, type SwapEvent } from "./types";
 
 const abi = parseAbi([
   "function raw() view returns (uint256 slot0, uint256 slot1)",
-  "event Mutated(address indexed sender, uint32 indexed swapCount, uint8 track, uint8 step, bool on, uint8 bassNote, bool isBuy, uint128 imdAmount, int24 tick, uint256 slot0, uint256 slot1)",
+  "event Mutated(address indexed sender, uint32 indexed swapCount, uint8 track, uint8 step, bool on, uint8 bassNote, bool isBuy, uint128 quoteAmount, int24 tick, uint256 slot0, uint256 slot1)",
   // v2 hook only. TrackComplete: slot0/slot1 = the finished track before the reset; the rest is after the movement.
   "event TrackComplete(uint16 indexed trackNo, uint32 patternId, uint8 root, uint256 slot0, uint256 slot1, uint32 swapCount, uint64 seed)",
   // v2 hook only, emitted only when promoted or noop; absent = the write landed on Mutated.track/step.
@@ -26,7 +27,9 @@ export function startLive(net: Network, feed: Feed): () => void {
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
     rpcUrls: { default: { http: [net.rpcUrl] } },
   });
-  const client = createPublicClient({ chain, transport: http(net.rpcUrl, { retryCount: 3, batch: true }) }) as PublicClient;
+  const urls = [net.rpcUrl, ...(net.rpcFallbacks ?? [])];
+  const transport = urls.length > 1 ? fallback(urls.map((u) => http(u, { retryCount: 1, batch: true }))) : http(net.rpcUrl, { retryCount: 3, batch: true });
+  const client = createPublicClient({ chain, transport }) as PublicClient;
   const hook = net.hook;
   const rules = RULES[net.rules];
   // v2: swaps since the previous TrackComplete (backfill starts at the deployment block, so this is exact).
@@ -64,12 +67,14 @@ export function startLive(net: Network, feed: Feed): () => void {
           block: Number(l.blockNumber),
           tx: l.transactionHash,
           isBuy: a.isBuy,
-          imd: fromWei(a.imdAmount),
+          quote: fromWei(a.quoteAmount),
+          quoteSymbol: net.quoteSymbol,
           track: a.track,
           step: accBy.get(a.swapCount)?.writeStep ?? a.step,
           on: a.on,
           bassNote: a.bassNote,
-          whale: a.imdAmount >= WHALE_WEI,
+          whale: a.quoteAmount >= whaleWeiFor(net.quoteSymbol, a.tick),
+          pulse: isPulse(a.sender, net.treasury),
           state: decodeSlots(a.slot0, a.slot1, rules),
         };
         const tc = tcBy.get(a.swapCount);

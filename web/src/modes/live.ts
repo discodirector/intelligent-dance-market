@@ -2,10 +2,11 @@ import { createPublicClient, defineChain, http, parseAbi } from "viem";
 import { decode, type SequencerState } from "@swarm-sequencer/synth";
 import { ROBINHOOD_EXPLORER, type AppConfig } from "../config";
 import type { AppliedSwap } from "./demo";
+import { whaleWeiFor } from "../timeline";
 
 const abi = parseAbi([
   "function raw() view returns (uint256 slot0, uint256 slot1)",
-  "event Mutated(address indexed sender, uint32 indexed swapCount, uint8 track, uint8 step, bool on, uint8 bassNote, bool isBuy, uint128 imdAmount, int24 tick, uint256 slot0, uint256 slot1)",
+  "event Mutated(address indexed sender, uint32 indexed swapCount, uint8 track, uint8 step, bool on, uint8 bassNote, bool isBuy, uint128 quoteAmount, int24 tick, uint256 slot0, uint256 slot1)",
 ]);
 
 export interface LiveHooks {
@@ -62,8 +63,9 @@ export function startLive(cfg: AppConfig, hooks: LiveHooks): () => void {
         const args = log.args;
         if (args.slot0 == null || args.slot1 == null) continue;
         const track = Number(args.track ?? 0);
-        const amount = BigInt(args.imdAmount ?? 0);
-        const whale = amount >= 100n * 10n ** 18n;
+        const amount = BigInt(args.quoteAmount ?? 0);
+        // The Robinhood hook pairs with native ETH; its whale threshold scales with FDV (post-swap tick).
+        const whale = amount >= whaleWeiFor("ETH", Number(args.tick ?? 0))!;
         hooks.onState(decode(args.slot0, args.slot1), {
           track,
           step: Number(args.step ?? 0),

@@ -6,6 +6,7 @@
   <title>Intelligent Dance Market — $IDM</title>
   <meta name="description" content="Intelligent Dance Market ($IDM): a Uniswap v4 hook whose on-chain state is a 16-step drum machine. Every trade is a note." />
   <meta name="theme-color" content="#050605" />
+  <meta name="twitter:site" content="@theidmfun" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23050605'/%3E%3Crect x='2' y='9' width='3' height='5' fill='%2365f08c'/%3E%3Crect x='6.5' y='5' width='3' height='9' fill='%23e8e2cf'/%3E%3Crect x='11' y='2' width='3' height='12' fill='%2365f08c'/%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -25,8 +26,9 @@
       <a href="#how">HOW</a>
       <a href="#eras">GENRES</a>
       <a href="#onchain">ONCHAIN</a>
+      <a href="https://x.com/theidmfun" target="_blank" rel="noopener">X ↗</a>
     </nav>
-    <a class="btn-outline" id="src-switch" href="?replay=imd-week">REPLAY IMD WEEK</a>
+    <a class="btn-outline" id="src-switch" href="?replay=imd-week">REPLAY IMD/ETH WEEK</a>
   </header>
 
   <main>
@@ -89,7 +91,7 @@
               <span class="silk">VOLUME</span>
             </div>
             <div class="era-lcd">
-              <span class="silk">GENRE</span>
+              <span class="silk">GENRE · STYLE</span>
               <div class="dotmatrix" id="era-name">—</div>
               <div class="era-sub" id="era-sub">EPOCH 0 · FOLLOWING CHAIN</div>
             </div>
@@ -108,7 +110,7 @@
           </div>
         </div>
         <div class="panel-foot">
-          <span>MODEL IDM-16 · HOOK FLAGS 0x3040 · 4 TRACKS · 16 STEPS · 10 GENRES</span>
+          <span>MODEL IDM-16 · HOOK FLAGS 0x3040 · 4 TRACKS · 16 STEPS · <span class="n-genres">10</span> GENRES</span>
           <span id="src-label">LIVE</span>
         </div>
       </div>
@@ -134,15 +136,15 @@
       <div class="pitch">
         <p class="big">every trade is a note.</p>
         <p>A Uniswap v4 hook stores a 16-step, 4-track drum pattern and a bass line in two storage slots.</p>
-        <p>Each swap in the IDM/IMD pool flips one step and moves the bass and the tempo. Nothing is off-chain.</p>
+        <p>Each swap in the IDM/ETH pool (native ETH, launched through IMD) flips one step and moves the bass and the tempo. Nothing is off-chain.</p>
       </div>
       <div class="table-term">
         <div class="tt-head">&gt; cat spec/mapping.txt <span class="tt-rules v1-only">· rules v1</span><span class="tt-rules v2-only">· rules v2</span></div>
         <table>
           <thead><tr><th>input</th><th>rule</th><th>sound</th></tr></thead>
           <tbody>
-            <tr class="v1-only"><td>trade size</td><td>&lt;0.5 · &lt;5 · &lt;25 · &lt;100 · ≥100 IMD</td><td><b>HAT</b> · <b>GLITCH</b> · <b>SNARE</b> · <b>KICK</b> · <b class="a">WHALE</b></td></tr>
-            <tr class="v2-only"><td>trade size</td><td>vs the market's typical size (log EMA): &lt;0.7× · &lt;1.5× · &lt;3× · ≥3× · ≥100 IMD</td><td><b>HAT</b> · <b>GLITCH</b> · <b>SNARE</b> · <b>KICK</b> · <b class="a">WHALE</b></td></tr>
+            <tr class="v1-only"><td>trade size</td><td>&lt;0.00125 · &lt;0.0125 · &lt;0.0625 · &lt;0.2 · ≥0.2 ETH (Sepolia v1 hook: ×400 in IMD)</td><td><b>HAT</b> · <b>GLITCH</b> · <b>SNARE</b> · <b>KICK</b> · <b class="a">WHALE</b></td></tr>
+            <tr class="v2-only"><td>trade size</td><td>vs the market's typical size (log EMA): &lt;0.7× · &lt;1.5× · &lt;3× · ≥3× · whale grows with √FDV: ≥0.04 ETH at $10k FDV, ≥0.4 ETH at $1M</td><td><b>HAT</b> · <b>GLITCH</b> · <b>SNARE</b> · <b>KICK</b> · <b class="a">WHALE</b></td></tr>
             <tr><td>step</td><td>keccak(swapCount, tick, block) % 16</td><td>where on the bar</td></tr>
             <tr><td>buy / sell</td><td>buy sets the bit · sell clears it</td><td><span class="g">+</span> adds · <span class="r">−</span> removes</td></tr>
             <tr class="v2-only"><td>repeat trades</td><td>buy on a set step climbs hat → glitch → snare → kick · sell clears the next rung up</td><td>the groove thickens · no trade is lost</td></tr>
@@ -153,7 +155,7 @@
             <tr class="v2-only"><td>heat</td><td>buy on a full grid (≥48 of 64 bits) + 1 · sell − 1 · 60 min silence → 0</td><td>filter opens · rolls · riser</td></tr>
             <tr class="v2-only"><td>heat 16</td><td>track #N complete: root + 7, page + 1, fresh seed</td><td><b class="a">DROP</b> · the swarm finishes a track</td></tr>
             <tr><td>64 swaps</td><td>page + 1</td><td>new page</td></tr>
-            <tr><td>4 pages</td><td>epoch = page / 4 → hash(epoch) % 10</td><td>a new <b>GENRE</b></td></tr>
+            <tr><td>4 pages</td><td>epoch = page / 4 → next genre in the cycle (<span class="n-genres">10</span> per cycle, shuffled, no repeats)</td><td>a new <b>GENRE</b> · its next <b>STYLE</b>, in turn</td></tr>
             <tr><td>silence</td><td>10 / 30 / 60 min since last swap</td><td>thinning → sparse → drone</td></tr>
           </tbody>
         </table>
@@ -161,7 +163,7 @@
     </section>
 
     <section class="eras" id="eras">
-      <div class="section-head"><h2>GENRES</h2><span>ten genres · an epoch picks one · audition them here</span><button class="btn-outline small" id="era-follow">FOLLOW CHAIN</button></div>
+      <div class="section-head"><h2>GENRES</h2><span><span class="n-genres">10</span> genres · each with its own styles · an epoch picks one · <span id="rack-note">audition them here</span></span><button class="btn-outline small" id="era-follow">FOLLOW CHAIN</button></div>
       <div class="rack" id="rack"></div>
     </section>
 

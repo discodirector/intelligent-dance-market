@@ -1,16 +1,20 @@
-import type { State } from "@swarm-sequencer/core";
+import { whaleThresholdFor, type State } from "@swarm-sequencer/core";
 
 export interface SwapEvent {
   ts: number; // unix seconds
   block: number;
   tx: string | null;
   isBuy: boolean;
-  imd: number; // display amount
+  quote: number; // display amount in quoteSymbol
+  /** ETH for the launch hook; IMD for the v1 Sepolia hook and legacy tapes. */
+  quoteSymbol: QuoteSymbol;
   track: number;
   step: number;
   on: boolean;
   bassNote: number;
   whale: boolean;
+  /** Mutated.sender is the network's pulse treasury: an automatic buy after 15 min of silence. */
+  pulse?: boolean;
   state: State;
   /** v2 only: this swap pushed heat to heatMax and finished the track. */
   trackComplete?: TrackDone;
@@ -35,5 +39,9 @@ export interface Feed {
   onClock(now: number | null): void;
 }
 
-export const WHALE_WEI = 100n * 10n ** 18n;
+export type QuoteSymbol = "ETH" | "IMD";
+/** Whale (drop) threshold per quote at the swap's post-swap tick: FDV-scaled for ETH (launch hook), 100 IMD (v1 hook). */
+export const whaleWeiFor = (q: QuoteSymbol, tick: number): bigint => whaleThresholdFor(q, tick);
+/** ETH amounts are small: four decimals below 1. */
+export const formatQuote = (v: number): string => (v >= 100 ? v.toFixed(0) : v >= 1 ? v.toFixed(2) : v.toFixed(4));
 export const fromWei = (w: bigint) => Number(w / 10n ** 12n) / 1e6;

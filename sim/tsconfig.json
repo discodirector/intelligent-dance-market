@@ -7,7 +7,12 @@
     "noEmit": true,
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
-    "types": ["node"]
+    "types": ["node"],
+    // Workspace packages resolve to this checkout's sources, not node_modules links.
+    "baseUrl": ".",
+    "paths": {
+      "@swarm-sequencer/core": ["../packages/core/src/index.ts"]
+    }
   },
   "include": ["src", "test"]
 }

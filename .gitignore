@@ -12,3 +12,7 @@ contracts/.env*
 !contracts/.env.example
 design-ref/
 sim/stress/
+sim/release/
+
+# Pulse keeper secrets (bot/pulse.env.example)
+pulse.env
