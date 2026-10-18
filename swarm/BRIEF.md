@@ -4,23 +4,19 @@ Launch an immutable Uniswap v4 music sequencer hook and its fixed-supply token o
 
 ## Source of truth and provenance
 
-Repository: **`https://github.com/discodirector/intelligent-dance-market`**. Immutable source commit: **`3bd29b0e7e1c154175cc6e9ee2f1f193ce7a5cdf`**.
+Repository: **`https://github.com/discodirector/intelligent-dance-market`**. Immutable source commit: **`b7e08ee6dd3edcc17ad1d93bb24e80729f567dc2`**.
 
-> **TODO (coordinator):** the pinned commit above predates the switch to the native-ETH pair. The coordinator will re-pin it (here and in the `objective` below) after publishing the ETH-pair branch.
-
-These are intentional placeholders approved by the coordinator: this repository is not public yet, and publication still requires the owner's approval. Before `launch.open`, the coordinator must pin the actual commit containing `contracts/`, `spec/vectors.json`, and `SPEC.md`, then replace both placeholders and import the repository. Do not use the initial planning commit as if it contained the implementation. The local source workspace is `IMD_vibe`; the Foundry project root is `contracts/`.
+The pinned commit is public and contains `contracts/`, `spec/vectors.json`, `spec/vectors-v2.json` and `SPEC.md`. Later commits on `main` (for example this pin) do not change the source under review. The local source workspace is `IMD_vibe`; the Foundry project root is `contracts/`.
 
 Read **SPEC.md §3 in full**. It is canonical. Use the reference implementation `contracts/src/SequencerHook.sol`, `SequencerState.sol`, `QuoteCalibration.sol` and `SequencerToken.sol`; the reviewed reference manifest is `contracts/launch.json`. Research and compatibility evidence are in `contracts/IMD_LAUNCH_NOTES.md`; exact dependency pins are in `contracts/DEPENDENCIES.md`. The Solidity-generated shared vector file is `spec/vectors.json`, validated by `contracts/scripts/validate-vectors.py` against `contracts/vectors.schema.json`.
 
 ## Launch request shape
 
-> **TODO (coordinator):** re-pin the commit hash in `objective` after publishing the ETH-pair branch; the current value predates the ETH pairing.
-
 Use the following fields in the final validated request; integrate the imported source reference using the live IMD import/check response rather than inventing an input format:
 
 ```json
 {
-  "objective": "Review and launch Intelligent Dance Market (IDM) from https://github.com/discodirector/intelligent-dance-market at 3bd29b0e7e1c154175cc6e9ee2f1f193ce7a5cdf on Robinhood Chain 4663 with its immutable zero-fee Uniswap v4 sequencer hook. Preserve SPEC.md section 3, the two packed state words, ABI and Solidity test vectors exactly. Use the supplied contracts/ Foundry project and launch.json. No owner, signer, upgrade, fee, return delta or fund handling in the hook. [TODO: coordinator re-pins the commit after publishing the ETH-pair branch.] Pair IDM with native ETH (IDM/ETH, pairWith eth) and provide verified deployed hook/token/pool addresses and launch receipts.",
+  "objective": "Review and launch Intelligent Dance Market (IDM) from https://github.com/discodirector/intelligent-dance-market at b7e08ee6dd3edcc17ad1d93bb24e80729f567dc2 on Robinhood Chain 4663 with its immutable zero-fee Uniswap v4 sequencer hook. Preserve SPEC.md section 3, the two packed state words, ABI and Solidity test vectors exactly. Use the supplied contracts/ Foundry project and launch.json. No owner, signer, upgrade, fee, return delta or fund handling in the hook. Pair IDM with native ETH (IDM/ETH, pairWith eth) and provide verified deployed hook/token/pool addresses and launch receipts.",
   "shape": "chain",
   "references": ["uniswap-v4-hooks", "uniswap-v4-security"],
   "steps": [{"skill": "build-contract-project"}, {"skill": "adversarial-review"}],
