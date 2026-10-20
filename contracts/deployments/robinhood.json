@@ -1,0 +1,22 @@
+{
+  "chainId": 4663,
+  "launchNumber": 2303,
+  "imdLaunch": "8122e3ef-fedd-466b-b884-ac647119946f",
+  "imdJob": "18ac1075-a6ce-4487-83f3-17e3d795c1f1",
+  "source": "https://github.com/identity-md-launches/launch-2303-review-launch-token-named@793513141b37fa52419c18a1398070e462badd1b",
+  "startBlock": 93576944,
+  "launchTx": "0x0d8422d441fb766e74ce291f728745f08533767547ebf032215f1e417b43a13d",
+  "token": "0x4fe9f3823791c8b187b81ab8b7398d793fed28f6",
+  "hook": "0x4ebe25e5b6493194a58ac8b62bb13b38156f7040",
+  "poolManager": "0x8366a39cc670b4001a1121b8f6a443a643e40951",
+  "poolId": "0x519387822812b11873eb51242f9dc80632d98144742b4ed0feea792af777d94b",
+  "distributor": "0x8d2435960178c622cb4a9ada17cb828a0ea6166d",
+  "launchFactory": "0xa25b02a1e93903b790e6aaf7da1b8b8d50294645",
+  "treasury": "0xab64b47daa0f68e50bdf776e73b4245d78575a6c",
+  "treasuryTx": "0x7683e41fa8989b5f9534a05a2cff01363e2b95ee570c9e4b6fb9d906274754e0",
+  "feeSplitter": "0x1651bb882aa97f2a06cd3f19f41e50d6d5c7123a",
+  "feeSplitterTx": "0x320c88adf98dffb26169f20c12096debc66ffaefacbb64fe652bbda066e9c3d3",
+  "team": "0x9ef17a987cb4a2355ec2782785d79d3db4b5fa8a",
+  "setRequesterTx": "0x64609d89cf6adf6a5696856b2a681f3fb4cfaa654f809f9d160eb9c34ada7491",
+  "keeper": "0x404361bebe7003824634c241dc2302d4c56f94bb"
+}

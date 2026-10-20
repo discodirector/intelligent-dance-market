@@ -13,6 +13,7 @@ import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {IUnlockCallback} from "v4-core/src/interfaces/callback/IUnlockCallback.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
+import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
@@ -357,23 +358,63 @@ contract PulseTreasuryTest is Test {
         treasury.pulse();
     }
 
-    // ---------------------------------------------------------------- price limit
+    // ---------------------------------------------------------------- price
 
-    function test_PriceLimitBoundsMoveAndKeepsUnspentEth() public {
-        // Thin pool: a max pulse would move the price by far more than 2%.
+    /// @dev A free sell: dumps IDM through the whole seed and parks the price at the top with no liquidity left.
+    function _park() internal {
+        router.swap(key, SwapParams(false, -int256(1e25), TickMath.MAX_SQRT_PRICE - 1));
+        (, int24 tick,,) = IPoolManager(address(manager)).getSlot0(key.toId());
+        assertGt(tick, 600, "parked past the seed");
+        assertEq(IPoolManager(address(manager)).getLiquidity(key.toId()), 0, "no active liquidity");
+        _idle();
+    }
+
+    function test_PulseFillsFromParkedPrice() public {
+        _park();
+        (bool ready, uint256 amount,,) = treasury.nextPulse();
+        assertTrue(ready);
+        uint256 ethBefore = address(treasury).balance;
+        (uint256 amountIn, uint256 amountOut) = treasury.pulse();
+        assertEq(amountIn, amount, "full pulse, nothing stuck at a limit");
+        assertGt(amountOut, 0);
+        assertEq(address(treasury).balance, ethBefore - amountIn);
+        (, int24 tick,,) = IPoolManager(address(manager)).getSlot0(key.toId());
+        assertLe(tick, 600, "crossed the empty range back into the seed");
+        assertTrue(hook.state().pattern != 0, "the pulse wrote a note");
+    }
+
+    function test_PulseFillsThroughDustPositions() public {
+        _park();
+        // Dust positions between the parked price and the seed: liquidity 1 each, IDM-side only.
+        for (int24 lo = 1200; lo <= 4800; lo += 1200) router.liquidityRange(key, lo, lo + 60, 1);
+        (, uint256 amount,,) = treasury.nextPulse();
+        (uint256 amountIn,) = treasury.pulse();
+        assertEq(amountIn, amount, "dust does not cap the pulse");
+        (, int24 tick,,) = IPoolManager(address(manager)).getSlot0(key.toId());
+        assertLe(tick, 600, "filled from the seed");
+    }
+
+    function test_PulseWithNoLiquidityRevertsNoFill() public {
+        router.liquidity(key, -LIQ);
+        _idle();
+        S.State memory before = hook.state();
+        vm.expectRevert(PulseTreasury.NoFill.selector);
+        treasury.pulse();
+        assertEq(hook.state().swapCount, before.swapCount, "nothing recorded by the hook");
+    }
+
+    function test_ExhaustedSeedSpendsOnlyWhatFills() public {
+        // Thin pool: a max pulse buys out every IDM in range; the unspent ETH stays here.
         router.liquidity(key, -(LIQ - 5e16));
         S.State memory s = hook.state();
         s.sizeLogEma = 918;
         _store(s);
-        (uint160 p0,,,) = IPoolManager(address(manager)).getSlot0(key.toId());
+        (, uint256 amount,,) = treasury.nextPulse();
+        assertEq(amount, 0.002 ether);
         uint256 ethBefore = address(treasury).balance;
         (uint256 amountIn, uint256 amountOut) = treasury.pulse();
-        (uint160 p1,,,) = IPoolManager(address(manager)).getSlot0(key.toId());
-        assertLt(amountIn, 0.002 ether, "partial fill");
+        assertLt(amountIn, amount, "partial fill");
         assertGt(amountOut, 0);
-        assertEq(p1, uint160(uint256(p0) * 9900 / 10_000), "stopped at the limit");
-        // Price (sqrtP^2) fell by at most 1.99%.
-        assertGe(uint256(p1) * p1 * 10_000 / (uint256(p0) * p0), 9801 - 1);
         assertEq(address(treasury).balance, ethBefore - amountIn);
     }
 

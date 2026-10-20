@@ -92,7 +92,7 @@ restart it in a loop; that is why it sits behind the `pulse` profile and is star
 ## Pulse keeper (`src/pulse.ts`)
 Calls `PulseTreasury.pulse()` (`contracts/src/PulseTreasury.sol`, runbook `contracts/TREASURY-RUNBOOK.md`) when the hook
 has been silent for >= 15 min, so the track keeps playing. `pulse()` is permissionless and the contract enforces every
-rule (idle window, size, 1% budget, ~2% price limit); the keeper only pays gas and reads `nextPulse()` first.
+rule (idle window, size, 1% budget, no zero fill); the keeper only pays gas and reads `nextPulse()` first.
 ```sh
 PULSE_TREASURY=0x… LIVE_RPC_URL=… npm run pulse -w @swarm-sequencer/bot            # dry run (default): logs what it would send
 PULSE_TREASURY=0x… LIVE_RPC_URL=… PULSE_SEND=true PULSE_KEY=0x… npm run pulse -w @swarm-sequencer/bot   # sends

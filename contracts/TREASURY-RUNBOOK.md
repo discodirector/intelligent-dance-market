@@ -13,7 +13,7 @@ no withdrawal. Rules and numbers (Russian): `SPEC.md` §9 "Казна-пульс
 | `MIN_PULSE` | 0.000025 ETH | dust floor = hook EMA floor (L = 710); below it `pulse()` reverts `NoBudget` |
 | `HAT_OFFSET` | 24 (1.5 octaves) | pulse size = `2^((sizeLogEma - 24)/16)` in `log2Fixed` space |
 | `BUDGET_DIVISOR` | 100 | one pulse spends at most 1% of the ETH balance |
-| `SQRT_PRICE_LIMIT_BPS` | 9900 | price may fall at most 1.99% per pulse (partial fill at the limit) |
+| price limit | `MIN_SQRT_PRICE + 1` | open: the capped spend fills from wherever the IDM liquidity is (a parked price or dust cannot stall pulses); a zero fill reverts `NoFill` |
 
 Cadence in total silence: one pulse per 15 min, 96/day, at most 0.192 ETH/day (each pulse also <= 1% of the
 balance). Heat never resets during pulsed silence (15 min < 3600 s), so on a saturated grid 16 pulses finish a

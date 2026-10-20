@@ -237,7 +237,7 @@ package.json       — координатор (npm workspaces)
 **Правила `pulse()`** (вызвать может кто угодно):
 - revert `NotIdle`, если `block.timestamp - lastTs < PULSE_IDLE = 900 с` (15 мин), где `lastTs` читается из `slot0` хука через `raw()` (§3.2);
 - размер: `amount = 2^((sizeLogEma - 24)/16)` в пространстве `L()` (обратная к `log2Fixed` функция на её сетке), т.е. на 1.5 октавы ниже EMA рынка — relative-классификатор (§3.3 п.3, `r < -8`) относит его к **hat**; затем клэмп в `[0.000025 ETH (= пол EMA, L=710), MAX_PULSE = 0.002 ETH (L=812)]` и не больше 1% ETH-баланса; если меньше 0.000025 ETH — revert `NoBudget`;
-- своп exactInput `zeroForOne` (ETH → IDM) напрямую через `PoolManager.unlock` + `unlockCallback`; `sqrtPriceLimit = sqrtPrice · 0.99` (цена падает не более чем на 1.99%; при упоре — частичное исполнение, остаток ETH остаётся в казне);
+- своп exactInput `zeroForOne` (ETH → IDM) напрямую через `PoolManager.unlock` + `unlockCallback`; `sqrtPriceLimit = MIN_SQRT_PRICE + 1` (открытый лимит: расход и так ограничен MAX_PULSE и 1% баланса, поэтому «запаркованная» за сидом цена или dust-позиции не останавливают пульсы — своп проходит пустой диапазон и исполняется по реальной ликвидности; если IDM-ликвидности не хватает, неистраченный ETH остаётся в казне, а нулевое исполнение откатывается `NoFill`, и хук ничего не записывает; решение владельца 20.10 по аудиту роя IMD);
 - событие `Pulse(amountIn, amountOut, idleSec, heatBefore)`; купленный IDM остаётся в казне;
 - `burn()` (кто угодно) отправляет весь IDM-баланс казны на `0x…dEaD`, событие `Burned(amount)`.
 

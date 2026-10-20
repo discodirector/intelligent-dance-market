@@ -64,14 +64,33 @@ async function api(path: string, init: RequestInit & { token?: string; body?: st
 }
 
 /** Hidden prompt: echoes nothing while the key is typed or pasted. */
+// Raw-mode read with no echo: newer Node readline redraws the line and wipes a muted prompt.
 async function secret(question: string) {
-  const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-  const out = rl as unknown as { _writeToOutput: (s: string) => void };
+  const stdin = process.stdin;
+  if (!stdin.isTTY) throw new Error("no terminal for the hidden key prompt; set IMD_PAYER_KEY instead");
   process.stdout.write(question);
-  out._writeToOutput = () => {};
-  const v = await rl.question("");
-  rl.close();
-  process.stdout.write("\n");
+  stdin.setRawMode(true);
+  stdin.resume();
+  stdin.setEncoding("utf8");
+  const v = await new Promise<string>((resolve, reject) => {
+    let buf = "";
+    const onData = (chunk: string) => {
+      for (const ch of chunk) {
+        if (ch === "\r" || ch === "\n") return done(() => resolve(buf));
+        if (ch === "\u0003") return done(() => reject(new Error("cancelled")));
+        if (ch === "\u007f" || ch === "\b") buf = buf.slice(0, -1);
+        else if (ch >= " ") buf += ch;
+      }
+    };
+    const done = (f: () => void) => {
+      stdin.off("data", onData);
+      stdin.setRawMode(false);
+      stdin.pause();
+      process.stdout.write("\n");
+      f();
+    };
+    stdin.on("data", onData);
+  });
   return v.trim();
 }
 async function ask(question: string) {

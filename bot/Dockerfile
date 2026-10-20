@@ -15,7 +15,7 @@ COPY packages/synth/src packages/synth/src
 # bot.ts also plans releases (web/src/release.ts, the same plan web/render.html renders the WAV from).
 COPY web/src/timeline.ts web/src/release.ts web/src/trackSelect.ts web/src/build.d.ts web/src/
 COPY contracts/deployments contracts/deployments
-COPY site/index.html site/bot.html site/vite.config.ts site/tsconfig.json site/
+COPY site/index.html site/docs.html site/bot.html site/vite.config.ts site/tsconfig.json site/
 COPY site/src site/src
 COPY site/public site/public
 RUN cd site && npx vite build

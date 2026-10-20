@@ -1,7 +1,7 @@
 import "./style.css";
 import { initialState, type State } from "@swarm-sequencer/core";
 import { ERA_SCHEDULE, ERAS, epochOf, eraOf, FORM_BARS, genreKey, idleStage, NOTE_NAMES, sectionAt, stepDuration, styleOf, stylesAt, type Era, type SequencerState } from "@swarm-sequencer/synth";
-import { LINKS, NATIVE_ETH, NETWORKS, readSource } from "./config";
+import { LINKS, NATIVE_ETH, readSource } from "./config";
 import { RULES, toSynth } from "./rules";
 import { Audio } from "./audio";
 import { sevenSeg } from "./sevenseg";
@@ -331,11 +331,13 @@ $("oc-grid").innerHTML = [
   ocRow("X", LINKS.x ?? "account soon", LINKS.x ? [["x.com", LINKS.x]] : []),
 ].join("");
 $("onchain-sub").textContent =
-  source.kind === "replay" ? `showing a replay · live contracts on ${net.label.toLowerCase()}` : `live on ${net.label.toLowerCase()} · switch to ${NETWORKS.robinhood.label.toLowerCase()} at launch`;
+  source.kind === "replay" ? `showing a replay · live contracts on ${net.label.toLowerCase()}` : `live on ${net.label.toLowerCase()}`;
 
 // ---------------------------------------------------------------- source switch + walls
+// Live is the only public view since launch; the button appears only on a ?replay= URL, to get back to live.
 const switchLink = $<HTMLAnchorElement>("src-switch");
 if (source.kind === "replay") {
+  switchLink.hidden = false;
   switchLink.textContent = `LIVE ${net.label}`;
   switchLink.href = `${location.pathname}?net=${net.key}`;
   $("src-label").textContent = source.replay.label + (v2 ? " · RULES V2" : "");

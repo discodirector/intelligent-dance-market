@@ -87,7 +87,8 @@ export const NETWORKS: Record<string, Network> = {
     // PulseTreasury rehearsal (contracts/TREASURY-RUNBOOK.md), deployed 2026-10-18 with the then 45-minute window.
     treasury: "0xbBb7357f7a97Ed73E717924a617ccB6a2aB49e80",
   },
-  // Filled in at launch: hook/token/pool from the IMD swarm deployment on Robinhood Chain (pairWith "eth").
+  // IMD launch #2303 (2026-10-20): hook/token/pool deployed by the IMD swarm on Robinhood Chain (pairWith "eth"),
+  // one tx at block 93576944; source identity-md-launches/launch-2303-review-launch-token-named@7935131.
   robinhood: {
     key: "robinhood",
     mainnet: true,
@@ -96,24 +97,25 @@ export const NETWORKS: Record<string, Network> = {
     rpcUrl: "https://rpc.mainnet.chain.robinhood.com",
     explorer: "https://robinhoodchain.blockscout.com",
     explorerName: "Blockscout",
-    hook: null,
-    rules: "v2", // planned launch rules; confirm against the deployed hook before filling in `hook`
-    token: null,
+    hook: "0x4ebe25e5b6493194a58ac8b62bb13b38156f7040",
+    rules: "v2", // the delivered SequencerState.sol is byte-identical to ours (v2 rules)
+    token: "0x4fe9f3823791c8b187b81ab8b7398d793fed28f6",
     quote: NATIVE_ETH,
     quoteSymbol: "ETH",
-    poolManager: null,
-    poolId: null,
-    startBlock: 0,
-    launchedBy: "launched by the IMD swarm · job id pending",
-    launchUrl: null,
-    treasury: null,
+    poolManager: "0x8366a39cc670b4001a1121b8f6a443a643e40951",
+    poolId: "0x519387822812b11873eb51242f9dc80632d98144742b4ed0feea792af777d94b",
+    startBlock: 93576944,
+    launchedBy: "launched by the IMD swarm · launch #2303",
+    launchUrl: "https://explorer.imd.fun/jobs/18ac1075-a6ce-4487-83f3-17e3d795c1f1",
+    // PulseTreasury 8cb07cf (open price limit), deployed 2026-10-20 with FeeSplitter 0x1651…123A in front of it.
+    treasury: "0xab64b47daa0f68e50bdf776e73b4245d78575a6c",
   },
 };
 
 /** Live network shown by default. */
-export const ACTIVE_NETWORK = "sepolia-v2";
+export const ACTIVE_NETWORK = "robinhood";
 /** Replay a bare URL opens until launch (the live hook has no market yet); null = live. At launch: null + robinhood. */
-export const DEFAULT_REPLAY: string | null = "sepolia";
+export const DEFAULT_REPLAY: string | null = null;
 
 export interface Replay {
   url: string;

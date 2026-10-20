@@ -43,10 +43,16 @@ interface ISequencerHookView {
 ///      At MIN_PULSE the hat class needs sizeLogEma > L(MIN_PULSE) + 8 = 718; at the EMA floor (710) a
 ///      pulse files as glitch instead. The pool fee (1.25%) is paid like any other trader's.
 ///
+///      Price. The pulse is an exact-input swap with an open price limit (MIN_SQRT_PRICE + 1): the spend is
+///      already capped (MAX_PULSE, 1% of the balance), so the pulse buys wherever the pool has liquidity. A
+///      price parked past the seed (a free sell into an empty range) or dust positions under it cannot stall
+///      pulses: the swap crosses the empty range and the dust and fills from the real liquidity. If nothing
+///      fills at all (no liquidity on the IDM side), pulse() reverts NoFill and the hook records nothing.
+///
 ///      MEV. Pulses are tiny (<= 0.002 ETH) and every leg pays the 1.25% pool fee, so sandwiching a pulse
-///      costs the attacker ~2.5% of their own size for a profit bounded by the pulse's price impact: it is
-///      unprofitable. sqrtPriceLimit bounds the worst case at a ~2% price move (the swap fills partially
-///      at the limit and the unspent ETH stays here). The timing is public by design.
+///      costs the attacker ~2.5% of their own size for a profit bounded by the pulse itself: it is
+///      unprofitable. The bought IDM is only ever burned, so the fill price is not the treasury's goal.
+///      The timing is public by design.
 ///
 ///      Transparency. The treasury calls PoolManager.swap itself, so Mutated.sender == address(this) for every
 ///      pulse; clients label these swaps as treasury pulses.
@@ -64,8 +70,6 @@ contract PulseTreasury is IUnlockCallback {
     uint256 public constant HAT_OFFSET = 24;
     /// @notice A pulse spends at most balance / BUDGET_DIVISOR (1%).
     uint256 public constant BUDGET_DIVISOR = 100;
-    /// @notice sqrtPriceLimit = sqrtPrice * 9900 / 10000, so the price may fall at most 1 - 0.99^2 = 1.99%.
-    uint256 public constant SQRT_PRICE_LIMIT_BPS = 9900;
     address public constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
     IPoolManager public immutable poolManager;
@@ -89,6 +93,7 @@ contract PulseTreasury is IUnlockCallback {
     error Reentrant();
     error NotPulsing();
     error NothingToBurn();
+    error NoFill();
 
     /// @dev Deploy after launch: the hook must already be initialized on this exact pool.
     constructor(IPoolManager manager_, PoolKey memory key_, address hook_, address idm_) {
@@ -125,7 +130,8 @@ contract PulseTreasury is IUnlockCallback {
         if (amount < MIN_PULSE) amount = 0;
     }
 
-    /// @notice What pulse() would do now: keepers and clients read this before sending.
+    /// @notice What pulse() would do now: keepers and clients read this before sending. With the open price limit,
+    ///         ready matches pulse() unless the pool holds no IDM-side liquidity at all (then pulse() reverts NoFill).
     function nextPulse() public view returns (bool ready, uint256 amount, uint256 idleSec, uint8 heat) {
         (uint256 a, uint256 b) = hook.raw();
         // SPEC §3.2 packed layout: lastTs = slot0[160..200), sizeLogEma = slot1[152..168), heat = slot1[168..176).
@@ -142,11 +148,8 @@ contract PulseTreasury is IUnlockCallback {
         (, uint256 amount, uint256 idleSec, uint8 heat) = nextPulse();
         if (idleSec < PULSE_IDLE) revert NotIdle(idleSec);
         if (amount == 0) revert NoBudget();
-        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(poolId);
-        uint160 limit = uint160(uint256(sqrtPriceX96) * SQRT_PRICE_LIMIT_BPS / 10_000);
-        if (limit <= TickMath.MIN_SQRT_PRICE) limit = TickMath.MIN_SQRT_PRICE + 1;
         _setPulsing(true);
-        (amountIn, amountOut) = abi.decode(poolManager.unlock(abi.encode(amount, limit)), (uint256, uint256));
+        (amountIn, amountOut) = abi.decode(poolManager.unlock(abi.encode(amount)), (uint256, uint256));
         _setPulsing(false);
         emit Pulse(amountIn, amountOut, idleSec, heat);
     }
@@ -155,10 +158,12 @@ contract PulseTreasury is IUnlockCallback {
     function unlockCallback(bytes calldata data) external returns (bytes memory) {
         if (msg.sender != address(poolManager)) revert OnlyPoolManager();
         if (!_pulsing()) revert NotPulsing();
-        (uint256 amount, uint160 limit) = abi.decode(data, (uint256, uint160));
-        BalanceDelta d = poolManager.swap(poolKey(), SwapParams(true, -int256(amount), limit), "");
+        uint256 amount = abi.decode(data, (uint256));
+        BalanceDelta d = poolManager.swap(poolKey(), SwapParams(true, -int256(amount), TickMath.MIN_SQRT_PRICE + 1), "");
         uint256 paid = uint256(-int256(d.amount0()));
         uint256 got = uint256(int256(d.amount1()));
+        // A zero fill would still reach the hook as a sell of nothing; revert so a pulse never removes a note.
+        if (got == 0) revert NoFill();
         poolManager.settle{value: paid}();
         poolManager.take(Currency.wrap(idm), address(this), got);
         return abi.encode(paid, got);

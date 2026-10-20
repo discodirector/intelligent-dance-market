@@ -1,5 +1,5 @@
 // Pulse keeper: when the hook has been silent for >= 15 min, calls PulseTreasury.pulse() so the track keeps playing.
-// pulse() is permissionless and the contract enforces every rule (idle, size, budget, price limit); the keeper only
+// pulse() is permissionless and the contract enforces every rule (idle, size, budget, no zero fill); the keeper only
 // pays gas. Dry-run by default: it reads nextPulse() and logs what it would send.
 //
 // Env:
