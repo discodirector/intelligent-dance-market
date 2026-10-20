@@ -47,15 +47,15 @@ await session("v1-live", { width: 1440, height: 900 }, base, async (page) => {
   await page.screenshot({ path: `${out}v2-v1-live-fold.png` });
 });
 
-// v1 replay: recorded slots, no heat.
-await session("v1-replay", { width: 1440, height: 900 }, `${base}?replay=imd-week`, async (page) => {
+// v1: the Sepolia tape re-simulated under v1 rules, no heat.
+await session("v1-replay", { width: 1440, height: 900 }, `${base}?replay=sepolia&rules=v1`, async (page) => {
   await page.waitForTimeout(5000);
   report.v1Replay = await ui(page);
   await page.screenshot({ path: `${out}v2-v1-replay-fold.png` });
 });
 
-// v2 preview: the same tape re-simulated under V2_RULES, sped up so the first drop (swap 1145) comes in seconds.
-await session("v2-replay", { width: 1440, height: 900 }, `${base}?replay=imd-week&rules=v2&speed=20000`, async (page) => {
+// v2: the recorded Sepolia tape, sped up so TRACK #1 (swap 70) comes in seconds.
+await session("v2-replay", { width: 1440, height: 900 }, `${base}?replay=sepolia&speed=200`, async (page) => {
   await page.click("#play");
   const heat = [];
   let shotHeat = false;
@@ -79,7 +79,7 @@ await session("v2-replay", { width: 1440, height: 900 }, `${base}?replay=imd-wee
   report.v2Replay = r;
 });
 
-await session("v2-mobile", { width: 390, height: 844 }, `${base}?replay=imd-week&rules=v2&speed=20000`, async (page) => {
+await session("v2-mobile", { width: 390, height: 844 }, `${base}?replay=sepolia&speed=200`, async (page) => {
   await page.waitForFunction(() => window.__site.drops() >= 1, null, { timeout: 60_000 }).catch(() => {});
   report.v2Mobile = { ...(await ui(page)), horizontalOverflowPx: await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth) };
   await page.screenshot({ path: `${out}v2-mobile-390-fold.png` });

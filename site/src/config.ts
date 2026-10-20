@@ -113,7 +113,7 @@ export const NETWORKS: Record<string, Network> = {
 /** Live network shown by default. */
 export const ACTIVE_NETWORK = "sepolia-v2";
 /** Replay a bare URL opens until launch (the live hook has no market yet); null = live. At launch: null + robinhood. */
-export const DEFAULT_REPLAY: string | null = "imd-week";
+export const DEFAULT_REPLAY: string | null = "sepolia";
 
 export interface Replay {
   url: string;
@@ -122,11 +122,14 @@ export interface Replay {
   speed: number;
   /** Rules the tape's slot0/slot1 were recorded under. Another version re-simulates the tape from its inputs. */
   rules: RulesVersion;
+  /** Seconds each genre (epoch) plays; default EPOCH_PLAY (data/replay.ts). */
+  epochPlay?: readonly [number, number];
 }
 
 export const REPLAYS: Record<string, Replay> = {
-  // W3 bot tape: 7 days of the IMD/ETH POOL4 market on Ethereum mainnet (ETH-side amounts), each genre 45–75 s (data/replay.ts EPOCH_PLAY), ~35 min per loop.
-  "imd-week": { url: "timelines/imd-week.json", label: "REPLAY · IMD/ETH MAINNET 7D", explorer: "https://etherscan.io", speed: 840, rules: "v1" },
+  // Sepolia v2 rehearsal (2026-10-18/19): 117 swaps on the v2 hook, TRACK #1 at swap 70. One epoch, ~37 real minutes
+  // played in ~3.7 min per loop.
+  sepolia: { url: "timelines/sepolia-rehearsal.json", label: "REPLAY · SEPOLIA REHEARSAL", explorer: "https://sepolia.etherscan.io", speed: 10, rules: "v2", epochPlay: [180, 240] },
 };
 
 export const LINKS = {

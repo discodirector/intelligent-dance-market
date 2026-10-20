@@ -47,7 +47,7 @@ for (const [name, viewport] of [["desktop-1440", { width: 1440, height: 900 }], 
     report[name] = r;
   });
 }
-await session("replay-1440", { width: 1440, height: 900 }, `${base}?replay=imd-week`, async (page) => {
+await session("replay-1440", { width: 1440, height: 900 }, `${base}?replay=sepolia`, async (page) => {
   await page.waitForTimeout(6000);
   report.replay = { swapsInTerminal: await swapLines(page), epochLines: await page.evaluate(() => document.querySelectorAll("#log li.epoch").length) };
   await page.screenshot({ path: `${out}replay-desktop-1440-fold.png` });

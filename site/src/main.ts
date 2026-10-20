@@ -456,7 +456,7 @@ systemLine(
 );
 requestAnimationFrame(frame);
 if (source.kind === "replay") {
-  startReplay(source.replay.url, source.speed, source.replay.label, feed, rules, source.resim).catch((e) => feed.onStatus(`replay failed: ${e.message}`, false));
+  startReplay(source.replay.url, source.speed, source.replay.label, feed, rules, source.resim, source.replay.epochPlay).catch((e) => feed.onStatus(`replay failed: ${e.message}`, false));
 } else startLive(net, feed);
 
 // Hooks for the headless check (scripts/check.mjs).

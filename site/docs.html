@@ -145,7 +145,7 @@
         <ul>
           <li>A pulse spends at most 0.002 ETH and never more than 1% of the treasury balance. It can move the price by about 2% at most.</li>
           <li>Any real swap resets the 15-minute wait, so pulses only happen in quiet periods.</li>
-          <li>Once a day, the IDM the treasury has collected is burned. That includes tokens bought by pulses and the IDM part of its fee income.</li>
+          <li>Once a day, the IDM the pulses bought is burned. The IDM from fees is burned by the fee splitter (see Token and fees).</li>
           <li>Pulses are marked as PULSE on the site and in posts.</li>
         </ul>
       </section>
@@ -172,7 +172,7 @@
         <h3>My swap failed with "out of gas". Why?</h3>
         <p>How much work the hook does depends on the block your swap ends up in, so a gas estimate made a block earlier can come up a few thousand gas short. Most wallets add a buffer. If yours doesn't, set a slightly higher gas limit.</p>
         <h3>Can I pick the genre?</h3>
-        <p>Not in the live player, where the chain decides. In the demo replay you can listen to every genre.</p>
+        <p>No. The chain decides, one genre per epoch.</p>
         <h3>Are all buys real trades?</h3>
         <p>All of them except pulses, which come from the treasury after 15 minutes of silence and are marked as such.</p>
       </section>

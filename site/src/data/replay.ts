@@ -1,6 +1,6 @@
 // Replay feed: W3's timeline.json (bot/TIMELINE.md) played on a virtual clock; loops.
 // Under the tape's own rules the recorded slots are decoded as-is; under other rules (dev preview,
-// ?replay=imd-week&rules=v2) the tape's swap inputs are re-simulated through core mutate().
+// ?replay=sepolia&rules=v1) the tape's swap inputs are re-simulated through core mutate().
 // Tapes carry quoteAmt/quote (ETH); legacy tapes carry imdAmt/imd (IMD-quoted) and are still accepted.
 import { ETH_THRESHOLDS, IMD_WHALE_WEI, mutate } from "@swarm-sequencer/core";
 import { amountWei, quoteOf, quoteSymbolOf, type RawTimelineEvent } from "../../../web/src/timeline";
@@ -11,13 +11,20 @@ import { type Feed, type SwapEvent } from "./types";
 type Entry = Pick<RawTimelineEvent, "quoteAmt" | "quote" | "quoteSymbol" | "imdAmt" | "imd"> & {
   ts: number; blockNumber: number; txHash?: string; isBuy: boolean; tick?: number;
   track: number; step: number; on: boolean; bassNote: number; whale: boolean; slot0: string; slot1: string;
+  /** v2 tapes (bot/src/lib/timeline.ts): this swap finished a track; slots = the finished track. */
+  trackComplete?: { trackNo: number; swaps?: number; slot0: string; slot1: string };
 };
 
 function recorded(rows: Entry[], rules: Rules): SwapEvent[] {
-  return rows.map((r) => ({
-    ts: r.ts, block: r.blockNumber, tx: r.txHash ?? null, isBuy: r.isBuy, quote: quoteOf(r), quoteSymbol: quoteSymbolOf(r),
-    track: r.track, step: r.step, on: r.on, bassNote: r.bassNote, whale: r.whale, state: decodeSlots(r.slot0, r.slot1, rules),
-  }));
+  return rows.map((r) => {
+    const e: SwapEvent = {
+      ts: r.ts, block: r.blockNumber, tx: r.txHash ?? null, isBuy: r.isBuy, quote: quoteOf(r), quoteSymbol: quoteSymbolOf(r),
+      track: r.track, step: r.step, on: r.on, bassNote: r.bassNote, whale: r.whale, state: decodeSlots(r.slot0, r.slot1, rules),
+    };
+    const tc = r.trackComplete;
+    if (tc) e.trackComplete = { trackNo: tc.trackNo, swaps: tc.swaps ?? 0, held: decodeSlots(tc.slot0, tc.slot1, rules) };
+    return e;
+  });
 }
 
 /**
@@ -73,7 +80,7 @@ export function playTimes(ts: number[], epochs: number[], speed: number, t0: num
   return out;
 }
 
-export async function startReplay(url: string, speed: number, label: string, feed: Feed, rules: Rules, resim: boolean): Promise<() => void> {
+export async function startReplay(url: string, speed: number, label: string, feed: Feed, rules: Rules, resim: boolean, span: readonly [number, number] = EPOCH_PLAY): Promise<() => void> {
   feed.onStatus(`${label} · loading`, true);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`timeline ${res.status}`);
@@ -83,7 +90,7 @@ export async function startReplay(url: string, speed: number, label: string, fee
   const t0 = events[0].ts - 30;
   const t1 = events.at(-1)!.ts + 120;
   // Knots of a piecewise-linear map play seconds -> tape unix time: (0, t0), each event, (loop end, t1).
-  const P = [0, ...playTimes(events.map((e) => e.ts), events.map((e) => epochOf(e.state)), speed, t0, t1)];
+  const P = [0, ...playTimes(events.map((e) => e.ts), events.map((e) => epochOf(e.state)), speed, t0, t1, span)];
   const T = [t0, ...events.map((e) => e.ts), t1];
   let play = 0;
   let k = 0;

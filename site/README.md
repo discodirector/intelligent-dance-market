@@ -15,8 +15,9 @@ node site/scripts/check-v2.mjs [--bot-timeline v2-window.json]  # v1 unchanged +
 Data (`src/config.ts`):
 - default: live on `ACTIVE_NETWORK` (Sepolia rehearsal from `contracts/deployments/sepolia.json`). It backfills every
   `Mutated` since `startBlock`, then polls every 8 s.
-- `?replay=imd-week`: the W3 bot tape of the IMD/ETH mainnet pool (`public/timelines/imd-week.json`; ETH-side amounts, `quoteAmt`) on a virtual clock.
-- `?replay=imd-week&rules=v2` (dev preview of the next hook): re-simulates the tape's swaps through core `mutate(..., V2_RULES)`: relative tiers, accumulation, heat and drops (3 drops in this tape; the first at swap 1145). `&speed=20000` gets there in seconds. HEAT ladder, TRACK # and the drop moment only show under v2.
+- `?replay=sepolia` (the default until launch): the Sepolia v2 rehearsal tape (`public/timelines/sepolia-rehearsal.json`, 117 swaps,
+  TRACK #1 at swap 70) on a virtual clock, ~3.7 min per loop. HEAT ladder, TRACK # and the drop moment show under v2.
+- `&rules=v1` re-simulates the tape's swaps through core `mutate()` under other rules; `&speed=N` overrides the pace.
 - Rules versions live in `src/config.ts` (`rules` per network/replay, helpers in `src/rules.ts`). The deployed Sepolia hook is v1; `sepolia-v2` is a placeholder (hook `null`) and falls back to v1 until its address is filled in.
 - `?net=robinhood`: once the IMD swarm launch exists, fill `NETWORKS.robinhood` (hook/token/pool/startBlock) and flip
   `ACTIVE_NETWORK`. No other code changes.
