@@ -2,15 +2,18 @@
 // history from its timeline, one swap per bar by default, WAV + metadata JSON (+ optional square mp4).
 //   tsx src/release/index.ts [--timeline web/public/release-test.timeline.json] [--meta tape.meta.json]
 //     [--track N (default: latest completed)] [--out sim/release] [--pace 1] [--max-seconds 360] [--min-seconds 180]
-//     [--mp4] [--fps 30] [--size 1080] [--web-dir web/dist]
-// The page is web/render.html: from a built web (--web-dir / RENDER_WEB_DIR) or, in a checkout, a Vite dev server.
+//     [--mp4] [--stills] [--fps 30] [--size 1080] [--web-dir web/dist] [--site-dir site/dist]
+// Audio: web/render.html (__renderRelease) from a built web (--web-dir / RENDER_WEB_DIR) or, in a checkout, a Vite
+// dev server. Frames: the IDM-16 module of site/bot.html (__setupRelease + __frame), the same look as the other
+// posts, from a built site (--site-dir / RENDER_SITE_DIR) or the site's Vite dev server; it plans the same release
+// and reads the WAV for its scope and spectrum. --stills also writes PNGs of representative moments next to the mp4.
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium } from "playwright";
+import { chromium, type Browser } from "playwright";
 import { selectTrack, wavLevels, type TrackEntry, type WavLevels } from "../lib/release.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -31,12 +34,21 @@ export interface ReleaseOpts {
   fps?: number;
   size?: number;
   webDir?: string;
+  /** Built site (vite build) with bot.html; default RENDER_SITE_DIR, else the site's Vite dev server. */
+  siteDir?: string;
+  /** Write PNG stills of representative moments (intro, build, heat, drop, outro) next to the mp4. */
+  stills?: boolean;
+  /** Console lines under the module (defaults: the page's own). */
+  title?: string;
+  subtitle?: string;
 }
 
 export interface ReleaseResult {
   trackNo: number;
   wav: string;
   mp4: string | null;
+  /** --stills: moment name → PNG path. */
+  stills: Record<string, string>;
   meta: string;
   seconds: number;
   levels: WavLevels;
@@ -48,16 +60,21 @@ const MIME: Record<string, string> = {
   ".svg": "image/svg+xml", ".png": "image/png", ".woff2": "font/woff2", ".woff": "font/woff",
 };
 
-/** A built web/ (vite build) on loopback, plus the tape. */
-async function serveStatic(dir: string, tape: string): Promise<{ base: string; close: () => Promise<void> }> {
+/** Extra files served next to a page (the tape, the release WAV). */
+type Routes = Record<string, () => string | Buffer>;
+const WAV_PATH = "/__release/audio.wav";
+
+/** A built web/ or site/ (vite build) on loopback, plus the routes. */
+async function serveStatic(dir: string, routes: Routes): Promise<{ base: string; close: () => Promise<void> }> {
   const server: Server = createServer((req, res) => {
     const path = normalize(decodeURIComponent((req.url ?? "/").split("?")[0])).replace(/^(\.\.[/\\])+/, "");
-    if (path === TAPE_PATH) {
-      res.writeHead(200, { "content-type": "application/json" }).end(tape);
+    const route = routes[path];
+    if (route) {
+      res.writeHead(200, { "content-type": MIME[extname(path)] ?? "application/octet-stream" }).end(route());
       return;
     }
-    const file = join(dir, path === "/" ? "render.html" : path);
-    if (!file.startsWith(dir) || !existsSync(file)) {
+    const file = join(dir, path);
+    if (!file.startsWith(dir) || !existsSync(file) || !statSync(file).isFile()) {
       res.writeHead(404).end();
       return;
     }
@@ -67,26 +84,28 @@ async function serveStatic(dir: string, tape: string): Promise<{ base: string; c
   return { base: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, close: () => new Promise((r) => server.close(() => r())) };
 }
 
-/** Checkout fallback: web/ through Vite's dev server (same as web/scripts/*.mjs). */
-async function serveDev(tape: string): Promise<{ base: string; close: () => Promise<void> }> {
+/** Checkout fallback: web/ or site/ through its Vite dev server (same as web/scripts/*.mjs). */
+async function serveDev(app: "web" | "site", routes: Routes): Promise<{ base: string; close: () => Promise<void> }> {
   const vite = await import("vite");
   const allow = [REPO];
   const nm = join(REPO, "node_modules");
   if (existsSync(nm)) allow.push(realpathSync(nm));
   const server = await vite.createServer({
-    configFile: join(REPO, "web/vite.config.ts"),
-    root: join(REPO, "web"),
+    configFile: join(REPO, app, "vite.config.ts"),
+    root: join(REPO, app),
     logLevel: "error",
     // No HMR or watching: an edit in the checkout must not reload the page mid-render.
     server: { port: 0, host: "127.0.0.1", fs: { allow }, hmr: false, watch: null },
     plugins: [
       {
-        name: "release-tape",
+        name: "release-routes",
         configureServer(s) {
           s.middlewares.use((req, res, next) => {
-            if (req.url?.split("?")[0] !== TAPE_PATH) return next();
-            res.setHeader("content-type", "application/json");
-            res.end(tape);
+            const path = req.url?.split("?")[0] ?? "";
+            const route = routes[path];
+            if (!route) return next();
+            res.setHeader("content-type", MIME[extname(path)] ?? "application/octet-stream");
+            res.end(route());
           });
         },
       },
@@ -105,7 +124,7 @@ async function serveDev(tape: string): Promise<{ base: string; close: () => Prom
 export function gitStamp(cwd = REPO): { commit: string; dirty: boolean } | null {
   try {
     const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-    const status = execFileSync("git", ["status", "--porcelain", "--", "packages/synth", "web"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    const status = execFileSync("git", ["status", "--porcelain", "--", "packages/synth", "web", "site"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
     return { commit, dirty: status.trim().length > 0 };
   } catch {
     return null;
@@ -120,13 +139,81 @@ function ffmpeg(args: string[]) {
   return { p, done };
 }
 
+/**
+ * The release video: site/bot.html's IDM-16 module planned from the same tape and options as the WAV, one screenshot
+ * per frame, muxed with the release WAV. The page's plan must match the WAV's length exactly (same planRelease input).
+ */
+async function renderFrames(
+  o: Omit<ReleaseOpts, "mp4"> & { mp4: string },
+  browser: Browser,
+  req: Record<string, unknown>,
+  wav: string,
+  wavBuf: Buffer,
+  seconds: number,
+  size: number,
+  fps: number,
+): Promise<Record<string, string>> {
+  const siteDir = o.siteDir ?? process.env.RENDER_SITE_DIR;
+  const routes: Routes = { [WAV_PATH]: () => wavBuf };
+  const srv = siteDir ? await serveStatic(resolve(siteDir), routes) : await serveDev("site", routes);
+  const ctx = await browser.newContext({ viewport: { width: size, height: size }, deviceScaleFactor: 1 });
+  try {
+    const page = await ctx.newPage();
+    page.on("console", (m) => m.type() === "error" && log("bot page:", m.text()));
+    page.on("pageerror", (e) => log("bot pageerror:", e.message));
+    await page.goto(`${srv.base}/bot.html`, { waitUntil: "load" });
+    await page.waitForFunction(() => typeof (window as any).__setupRelease === "function", null, { timeout: 120_000 });
+    const info = await page.evaluate((a) => (window as any).__setupRelease(a), {
+      ...req, timeline: o.timeline, width: size, height: size, fps, wavUrl: WAV_PATH, title: o.title, subtitle: o.subtitle,
+    });
+    if (Math.abs(info.seconds - seconds) > 1e-6) throw new Error(`bot.html planned ${info.seconds}s, the WAV is ${seconds}s (site and web out of sync?)`);
+    const frames = Math.round(fps * seconds);
+    const still = new Map<number, string>();
+    if (o.stills) {
+      const marks: Record<string, number> = await page.evaluate(() => (window as any).__releaseMarks());
+      for (const [name, t] of Object.entries(marks)) still.set(Math.min(frames - 1, Math.max(0, Math.round(t * fps))), name);
+    }
+    const ff = ffmpeg([
+      "-y", "-loglevel", "error",
+      "-f", "image2pipe", "-framerate", String(fps), "-c:v", "mjpeg", "-i", "-",
+      "-i", wav,
+      "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-r", String(fps),
+      "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart",
+      o.mp4,
+    ]);
+    const out: Record<string, string> = {};
+    const t1 = Date.now();
+    for (let f = 0; f < frames; f++) {
+      await page.evaluate((n) => (window as any).__frame(n), f);
+      const name = still.get(f);
+      if (name) {
+        const png = o.mp4.replace(/\.mp4$/, `.${name}.png`);
+        await page.screenshot({ type: "png", path: png });
+        out[name] = png;
+      }
+      const buf = await page.screenshot({ type: "jpeg", quality: 90 });
+      if (!ff.p.stdin!.write(buf)) await new Promise((r) => ff.p.stdin!.once("drain", r));
+      if (f % (fps * 10) === 0) process.stderr.write(`\r[release] frame ${f}/${frames}   `);
+    }
+    ff.p.stdin!.end();
+    await ff.done;
+    process.stderr.write("\n");
+    log(`${o.mp4} in ${((Date.now() - t1) / 1000).toFixed(1)}s`);
+    return out;
+  } finally {
+    await ctx.close();
+    await srv.close();
+  }
+}
+
 export async function renderRelease(o: ReleaseOpts): Promise<ReleaseResult> {
   const sel = selectTrack(o.timeline, o.track);
   log(`track #${sel.trackNo}: entries ${sel.start}..${sel.end} (${sel.end - sel.start + 1} swaps)${sel.complete ? "" : " unfinished"}`);
   mkdirSync(o.outDir, { recursive: true });
   const tape = JSON.stringify(o.timeline);
   const webDir = o.webDir ?? process.env.RENDER_WEB_DIR;
-  const srv = webDir ? await serveStatic(resolve(webDir), tape) : await serveDev(tape);
+  const routes: Routes = { [TAPE_PATH]: () => tape };
+  const srv = webDir ? await serveStatic(resolve(webDir), routes) : await serveDev("web", routes);
   const size = o.size ?? 1080;
   const fps = o.fps ?? 30;
   const browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required", "--disable-dev-shm-usage", "--no-sandbox"] });
@@ -152,28 +239,11 @@ export async function renderRelease(o: ReleaseOpts): Promise<ReleaseResult> {
     log(`audio ${((Date.now() - t0) / 1000).toFixed(1)}s -> ${wav} (${levels.seconds.toFixed(2)}s, peak ${levels.peakDb.toFixed(2)}, loudest-3s ${levels.loudest3sDb.toFixed(2)} dBFS)`);
 
     let mp4: string | null = null;
+    const stills: Record<string, string> = {};
     if (o.mp4) {
       mp4 = join(o.outDir, `${sel.trackNo}.mp4`);
-      const frames = Math.round(fps * (res.seconds as number));
-      const ff = ffmpeg([
-        "-y", "-loglevel", "error",
-        "-f", "image2pipe", "-framerate", String(fps), "-c:v", "mjpeg", "-i", "-",
-        "-i", wav,
-        "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-r", String(fps),
-        "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart",
-        mp4,
-      ]);
-      const t1 = Date.now();
-      for (let f = 0; f < frames; f++) {
-        const url: string = await page.evaluate(([n, k]) => (window as any).__releaseFrame(n, k), [f, fps] as const);
-        const buf = Buffer.from(url.slice(url.indexOf(",") + 1), "base64");
-        if (!ff.p.stdin!.write(buf)) await new Promise((r) => ff.p.stdin!.once("drain", r));
-        if (f % (fps * 10) === 0) process.stderr.write(`\r[release] frame ${f}/${frames}   `);
-      }
-      ff.p.stdin!.end();
-      await ff.done;
-      process.stderr.write("\n");
-      log(`${mp4} in ${((Date.now() - t1) / 1000).toFixed(1)}s`);
+      const req = { track: sel.trackNo, swapsPerBar: o.swapsPerBar, maxSeconds: o.maxSeconds, minSeconds: o.minSeconds, initial: o.initial ?? null };
+      Object.assign(stills, await renderFrames({ ...o, mp4 }, browser, req, wav, wavBuf, res.seconds as number, size, fps));
     }
     const meta = join(o.outDir, `${sel.trackNo}.json`);
     const summary = res.summary as Record<string, unknown>;
@@ -184,11 +254,11 @@ export async function renderRelease(o: ReleaseOpts): Promise<ReleaseResult> {
       synth,
       pace: { requested: o.swapsPerBar ?? 1, maxSeconds: o.maxSeconds ?? 360, minSeconds: o.minSeconds ?? 180 },
       levels,
-      files: { wav, mp4 },
+      files: { wav, mp4, ...(Object.keys(stills).length ? { stills } : {}) },
     };
     writeFileSync(meta, JSON.stringify(out, null, 2) + "\n");
     await ctx.close();
-    return { trackNo: sel.trackNo, wav, mp4, meta, seconds: res.seconds, levels, summary };
+    return { trackNo: sel.trackNo, wav, mp4, stills, meta, seconds: res.seconds, levels, summary };
   } finally {
     await browser.close();
     await srv.close();
@@ -217,7 +287,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     swapsPerBar: numArg("pace"),
     maxSeconds: numArg("max-seconds"),
     minSeconds: numArg("min-seconds"),
-    mp4: process.argv.includes("--mp4"),
+    mp4: process.argv.includes("--mp4") || process.argv.includes("--stills"),
+    stills: process.argv.includes("--stills"),
+    siteDir: arg("site-dir"),
+    title: arg("title"),
+    subtitle: arg("subtitle"),
     fps: numArg("fps"),
     size: numArg("size"),
     webDir: arg("web-dir"),

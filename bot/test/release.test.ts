@@ -173,7 +173,7 @@ describe("release post", () => {
     expect(l).toEqual({ start: 275, seconds: 100 });
   });
   it("headline", () => {
-    expect(releaseHeadline(3, 142, "Lofi House", "Dusty Keys")).toBe("TRACK #3 COMPLETE · 142 SWAPS · Lofi House / Dusty Keys");
+    expect(releaseHeadline(3, 142, "Lofi House")).toBe("track #3 complete. 142 swaps, lofi house.");
   });
   it("live: reads earlier blocks until the track's start is on the tape", async () => {
     const window = live.slice(ends[2] - 40);
@@ -199,9 +199,9 @@ describe("release post", () => {
   it("template caption with release facts is valid and carries the headline", () => {
     const s = selectTrack(live, 2);
     const track = live.slice(s.start, s.end + 1);
-    const f = factsFromTimeline(track, { kind: "track", chain: "robinhood", pool: "IDM/IMD", videoSeconds: 140 });
-    f.headline = releaseHeadline(2, track.length, "Trip-Hop", "Cold 808");
-    f.release = { seconds: 349, bars: 136, swaps: track.length, swapsPerBar: 3.2, genre: "Trip-Hop", style: "Cold 808", chainGenres: ["Liquid DnB", "Wonky", "Trip-Hop"], clip: { from: 209, seconds: 140 } };
+    const f = factsFromTimeline(track, { kind: "track", chain: "robinhood", pool: "IDM/ETH", videoSeconds: 140 });
+    f.headline = releaseHeadline(2, track.length, "Trip-Hop");
+    f.release = { seconds: 349, bars: 136, swaps: track.length, swapsPerBar: 3.2, genre: "Trip-Hop", chainGenres: ["Liquid DnB", "Wonky", "Trip-Hop"], clip: { from: 209, seconds: 140 } };
     const t = templateCaption(f);
     expect(t.split("\n")[0]).toBe(f.headline);
     expect(validateCaption(t, f)).toEqual([]);

@@ -22,7 +22,7 @@ forge build
 forge test
 ```
 
-`forge test` regenerates `../spec/vectors.json` (v1) and `../spec/vectors-v2.json` (v2). Both tracked JSON files must be present: Foundry permissions are scoped to those exact files. The generator is `test/Vectors.t.sol`; rerun both with `forge test --match-contract VectorsTest`. The v1 transition remains available as `initial/mutate`; the new hook uses `initialV2/mutateV2`. The extended codec reads/writes v2 fields in the formerly unused slot1 bits without shifting any v1 field.
+`FOUNDRY_PROFILE=vectors forge test --match-contract VectorsTest` regenerates `../spec/vectors.json` (v1) and `../spec/vectors-v2.json` (v2); only that profile has write access, scoped to those exact files, and plain `forge test` runs the generators without writing. The generator is `test/Vectors.t.sol`. The v1 transition remains available as `initial/mutate`; the new hook uses `initialV2/mutateV2`. The extended codec reads/writes v2 fields in the formerly unused slot1 bits without shifting any v1 field.
 
 - `src/SequencerState.sol`: v1/v2 codec and deterministic transitions; uint32 counter wrapping, widened signed arithmetic, bounded BPM/modes and timestamp edge semantics from SPEC.
 - `src/SequencerHook.sol`: direct IHooks interface, factory-only initialization, immutable exact pair (`token` + `quote`; `quote = address(0)` is native ETH, always currency0) and full poolId binding, rules read the absolute quote-currency delta, state in physical slots 0 and 1, manager-only callbacks. Flags `0x3040`.

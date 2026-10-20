@@ -12,7 +12,8 @@ COPY site/package.json site/
 RUN npm install --no-audit --no-fund
 COPY packages/core/src packages/core/src
 COPY packages/synth/src packages/synth/src
-COPY web/src/timeline.ts web/src/timeline.ts
+# bot.ts also plans releases (web/src/release.ts, the same plan web/render.html renders the WAV from).
+COPY web/src/timeline.ts web/src/release.ts web/src/trackSelect.ts web/src/build.d.ts web/src/
 COPY contracts/deployments contracts/deployments
 COPY site/index.html site/bot.html site/vite.config.ts site/tsconfig.json site/
 COPY site/src site/src
@@ -52,13 +53,15 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-RUN echo '{"name":"swarm-sequencer","private":true,"workspaces":["packages/core","bot"]}' > package.json
+RUN echo '{"name":"swarm-sequencer","private":true,"workspaces":["packages/core","packages/synth","bot"]}' > package.json
 COPY packages/core/package.json packages/core/
+COPY packages/synth/package.json packages/synth/
 COPY bot/package.json bot/
 RUN npm install --omit=dev --no-audit --no-fund \
  && npx playwright install --with-deps chromium-headless-shell \
  && rm -rf /var/lib/apt/lists/* /root/.npm
 
+COPY packages/synth/src packages/synth/src
 COPY packages/core/src packages/core/src
 COPY bot/src bot/src
 COPY bot/data bot/data

@@ -6,7 +6,8 @@ render  : Playwright/Chromium page -> JPEG frames + WAV -> ffmpeg -> mp4 1080x10
 caption : facts.json -> claude-sonnet-5-5 (validated, <=240 chars) | template fallback
 post    : DRY_RUN=true (default) -> out/queue/<ts>_<kind>/{video.mp4,caption.txt,facts.json,post.json}
           DRY_RUN=false -> X API v2 chunked media upload + POST /2/tweets
-release : finished v2 track (SPEC §4.6) -> web/render.html release mode -> <trackNo>.wav + .json (+ .mp4 1080x1080)
+release : finished v2 track (SPEC §4.6) -> web/render.html release mode -> <trackNo>.wav + .json
+          (+ .mp4 1080x1080: frames from site/bot.html, the IDM-16 module of the other posts)
 schedule: SPEC §5 rules (src/rules.ts): pre-launch teaser every 6h; live snapshot every 6h,
           Movement/whale max 1/h, cap 6 posts / rolling 24h; v2 track complete -> release post
 ```
@@ -62,7 +63,8 @@ track posts: `TRACK_POST` (`release` default | `clip`), `X_VIDEO_MAX_SECONDS` (1
 `TRACK_LOOKBACK_STEPS`; render pages: `RENDER_SITE_DIR`, `RENDER_WEB_DIR` (set in the image, override only to test
 another build). Never put `PULSE_KEY` here.
 **Env (`pulse.env`, keeper).** `PULSE_TREASURY`, `LIVE_RPC_URL`, `LIVE_CHAIN_ID`, `PULSE_TICK_SEC`, `PULSE_SEND`
-(false), `PULSE_KEY` (only read when `PULSE_SEND=true`). The keeper needs nothing else: no X / Anthropic keys, no
+(false), `PULSE_KEY` (only read when `PULSE_SEND=true`); fee harvest: `FEE_FACTORY`, `LAUNCH_NUMBER`, `HARVEST_HOURS`,
+`FEE_SPLITTER` (split() after each harvest), `BURN_HOURS`. The keeper needs nothing else: no X / Anthropic keys, no
 volume. Both env files live outside the image (`.dockerignore` drops `.env*` and `pulse.env`).
 
 **Release CLI in the container** (uses the built web; output in the `out/` volume):
@@ -106,9 +108,18 @@ PULSE_TREASURY=0x… LIVE_RPC_URL=… PULSE_SEND=true PULSE_KEY=0x… npm run pu
 ## Track releases (v2)
 A release is a finished track played whole, from its seed to its `TrackComplete`, one swap per bar (SPEC §4.6,
 `web/RENDER.md` "Release"). `src/release/index.ts` drives `web/render.html?release=1&track=N` in Chromium: it serves
-the tape on loopback, calls `__renderRelease` (WAV) and, with `--mp4`, `__releaseFrame(i)` per frame into ffmpeg.
-The page comes from a built web (`--web-dir` / `RENDER_WEB_DIR`, `npm run build -w web`) or, in a checkout, from a
-Vite dev server. Options: `--track` (default latest completed), `--pace` (swaps per bar, default 1),
+the tape on loopback and calls `__renderRelease` (the WAV, unchanged by the video). With `--mp4` the frames come from
+`site/bot.html`, the same IDM-16 module as the teaser/snapshot/movement posts: `__setupRelease` plans the same release
+from the same tape and options (the CLI checks the length matches the WAV to the microsecond), reads the WAV for the
+scope/spectrum/OUT meter, and `__frame(i)` + a viewport screenshot per frame go into ffmpeg with the WAV. In the frame:
+BPM/KEY/MODE/EPOCH of the release's genre instance, SWAP #, PAGE, TRACK #, the HEAT ladder (16/16 on the climb and
+the drop bar), the genre LCD with the **genre only** (style names are internal, never in a frame) and the sub-line
+`TRACK #N · SECTION · m:ss / m:ss` (`TRACK #N COMPLETE · …` from the drop), the RELEASE block (INTRO/BUILD/DROP/OUTRO
+LEDs, `BAR b/B`, progress bar), the swap tape under the module scrolling the swaps as they land and ending with
+`TRACK #N COMPLETE · K SWAPS`; at the drop the panel rings and the grid flashes, then the outro shows the new seed.
+`--stills` also writes PNGs of representative moments next to the mp4 (`<N>.intro.png`, `.build.png`, `.body.png`,
+`.heat.png`, `.climb.png`, `.drop.png`, `.outro.png`). Pages come from built dists (`--web-dir` / `RENDER_WEB_DIR`,
+`--site-dir` / `RENDER_SITE_DIR`) or, in a checkout, from Vite dev servers. Options: `--track` (default latest completed), `--pace` (swaps per bar, default 1),
 `--max-seconds` / `--min-seconds` (360 / 180), `--fps`, `--size`, `--meta` (a `.meta.json` with `initial`, for a
 track that starts the tape). The whole release plays one genre and style, the ones of the epoch the track finished
 in. Output: `<out>/<trackNo>.wav`, `.json` (trackNo, swaps, bars, seconds, `genre` (genre/style played), `chainGenres`
@@ -126,8 +137,8 @@ newer synth may sound different. Test tape: `web/public/release-test.timeline.js
 2. renders the release WAV + 1080x1080 mp4;
 3. if it is longer than `X_VIDEO_MAX_SECONDS` (140), cuts the climb into the drop: the last 140 s, ending at most
    105 s after the drop (so the drop and the start of the outro are in), audio faded in over 0.4 s;
-4. captions from facts only: `facts.headline` = `TRACK #N COMPLETE · K SWAPS · Genre / Style` (the genre and style
-   the track ended in, which the whole release plays) and `facts.release` (seconds, bars, swaps, swaps per bar,
+4. captions from facts only: `facts.headline` = `track #N complete. K swaps, genre.` (the genre the track ended in,
+   which the whole release plays; never the style) and `facts.release` (seconds, bars, swaps, swaps per bar,
    genre, style, `chainGenres` passed on chain, clip); the template
    caption starts with the headline;
 5. queues `out/queue/<ts>_track/` with `video.mp4` (the post video), `caption.txt`, `facts.json`, and as artifacts

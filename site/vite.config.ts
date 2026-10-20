@@ -19,7 +19,7 @@ export default defineConfig({
   build: {
     target: "es2022",
     chunkSizeWarningLimit: 900,
-    // bot.html is the bot's render page (bot/src/render); index.html is the public site.
-    rollupOptions: { input: { main: fileURLToPath(new URL("index.html", import.meta.url)), bot: fileURLToPath(new URL("bot.html", import.meta.url)) } },
+    // bot.html is the bot's render page (bot/src/render); index.html and docs.html are the public site.
+    rollupOptions: { input: { main: fileURLToPath(new URL("index.html", import.meta.url)), docs: fileURLToPath(new URL("docs.html", import.meta.url)), bot: fileURLToPath(new URL("bot.html", import.meta.url)) } },
   },
 });

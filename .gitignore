@@ -16,3 +16,4 @@ sim/release/
 
 # Pulse keeper secrets (bot/pulse.env.example)
 pulse.env
+bot/.imd-launch.json

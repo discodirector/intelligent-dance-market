@@ -12,17 +12,21 @@
 //   FEE_FACTORY      LaunchFactory that seeded the pool (Robinhood 0xa25b02a1e93903b790e6aaf7da1b8b8d50294645)
 //   LAUNCH_NUMBER    the launch's launchNumber (GET /launches/:id); with FEE_FACTORY enables the fee harvest
 //   HARVEST_HOURS    hours between claimFees calls, default 24
+//   FEE_SPLITTER     FeeSplitter that receives the fee (setRequester target); split() runs right after each harvest
 //   BURN_HOURS       hours between treasury.burn() calls (sends all its IDM to 0x…dEaD), default 24; 0 = off
 //
 // Harvest: the factory's claimFees(launchNumber) pays out the pool fee, and anyone may call it. After the owner's
 // setRequester(launchNumber, treasury) the 1% launcher share is pushed to the treasury (its receive() takes ETH,
-// IDM arrives by transfer), so the keeper calling it once a day keeps the pulse budget topped up. The selector
+// IDM arrives by transfer), so the keeper calling it once a day keeps the pulse budget topped up. With FEE_SPLITTER
+// the fee goes to the splitter instead, and split() right after the harvest sends half the ETH to the treasury, half
+// to the team, and burns all the IDM. The selector
 // was read from the factory's bytecode (its source is not verified): the call is simulated before it is sent.
 import { createPublicClient, createWalletClient, defineChain, http, parseAbi, type PublicClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { PULSE_IDLE_SEC } from "@swarm-sequencer/core";
 
 export const FACTORY_ABI = parseAbi(["function claimFees(uint64 launchNumber)"]);
+export const SPLITTER_ABI = parseAbi(["function split() returns (uint256 toTreasury, uint256 toTeam, uint256 burned)"]);
 
 export const TREASURY_ABI = parseAbi([
   "function nextPulse() view returns (bool ready, uint256 amount, uint256 idleSec, uint8 heat)",
@@ -40,6 +44,8 @@ export interface PulseConfig {
   send: boolean;
   tickSec: number;
   harvest: { factory: `0x${string}`; launchNumber: bigint; everySec: number } | null;
+  /** FeeSplitter to split() after each harvest; null = the fee goes straight to the treasury. */
+  splitter: `0x${string}` | null;
   /** Seconds between burn() calls; 0 = off. */
   burnEverySec: number;
 }
@@ -61,6 +67,7 @@ export function pulseConfigFromEnv(env: NodeJS.ProcessEnv = process.env): PulseC
       env.FEE_FACTORY && env.LAUNCH_NUMBER
         ? { factory: env.FEE_FACTORY as `0x${string}`, launchNumber: BigInt(env.LAUNCH_NUMBER), everySec: Number(env.HARVEST_HOURS ?? 24) * 3600 }
         : null,
+    splitter: (env.FEE_SPLITTER as `0x${string}` | undefined) || null,
     burnEverySec: Number(env.BURN_HOURS ?? 24) * 3600,
   };
 }
@@ -119,11 +126,19 @@ export async function harvestTick(c: PulseConfig, client: PublicClient, lastAt: 
   const h = c.harvest;
   if (!h || now - lastAt < h.everySec) return lastAt;
   const what = `claimFees(${h.launchNumber}) on ${h.factory}`;
-  if (!c.send) return log(`DRY RUN would call ${what}`), now;
+  if (!c.send) return log(`DRY RUN would call ${what}${c.splitter ? `, then split() on ${c.splitter}` : ""}`), now;
   const account = sendAccount(env);
   const { request } = await client.simulateContract({ address: h.factory, abi: FACTORY_ABI, functionName: "claimFees", args: [h.launchNumber], account });
   const wallet = createWalletClient({ account, chain: chainFor(c), transport: http(c.rpcUrl) });
-  log(`sent ${what} from ${account.address}: ${await wallet.writeContract(request)}`);
+  const hash = await wallet.writeContract(request);
+  log(`sent ${what} from ${account.address}: ${hash}`);
+  if (c.splitter) {
+    // split() only after the payout is mined, so it sees the fresh balances.
+    await client.waitForTransactionReceipt({ hash });
+    const sim = await client.simulateContract({ address: c.splitter, abi: SPLITTER_ABI, functionName: "split", account });
+    const [toTreasury, toTeam, burned] = sim.result;
+    log(`sent split on ${c.splitter}: ${eth(toTreasury)} to treasury, ${eth(toTeam)} to team, ${Number(burned / 10n ** 15n) / 1e3} IDM burned: ${await wallet.writeContract(sim.request)}`);
+  }
   return now;
 }
 

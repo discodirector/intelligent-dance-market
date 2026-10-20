@@ -149,7 +149,8 @@ function drawRelease(r: BuiltRelease, t: number) {
   }
   const g = plan.genre;
   viz.resize();
-  viz.setGenreLine(`EPOCH #${g.epoch} · ${g.eraName} / ${g.styleName}`);
+  // Genre only: style names are internal and never appear in a frame.
+  viz.setGenreLine(`EPOCH #${g.epoch} · ${g.eraName}`);
   viz.setFrame(view.state, view.step, view.phase, view.bar);
   viz.setFlashes(flashes);
   viz.draw(t * 1000);

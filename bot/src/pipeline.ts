@@ -18,13 +18,13 @@ const log = (...a: unknown[]) => console.error("[pipeline]", ...a);
 
 export async function producePost(
   entries: TimelineEntry[],
-  o: { kind: Facts["kind"]; chain: string; pool: string; title: string; subtitle: string; seconds?: number; hook?: string; startPage?: number },
+  o: { kind: Facts["kind"]; chain: string; pool: string; title: string; subtitle: string; seconds?: number; hook?: string; startPage?: number; windowHours?: number },
 ) {
   const work = mkdtempSync(join(tmpdir(), "seq-render-"));
   try {
     const seconds = o.seconds ?? Number(process.env.VIDEO_SECONDS ?? 32);
     const r = await render({ timeline: entries, outDir: work, seconds, title: o.title, subtitle: o.subtitle });
-    const facts = factsFromTimeline(entries, { kind: o.kind, chain: o.chain, pool: o.pool, videoSeconds: r.seconds, hook: o.hook, startPage: o.startPage });
+    const facts = factsFromTimeline(entries, { kind: o.kind, chain: o.chain, pool: o.pool, videoSeconds: r.seconds, hook: o.hook, startPage: o.startPage, windowHours: o.windowHours });
     const cap = await caption(facts);
     if (cap.errors?.length) log("caption fell back to template:", cap.errors.join("; "));
     const square = r.videos.find((v) => v.width === v.height) ?? r.videos[0];
@@ -81,17 +81,15 @@ export async function produceRelease(
     const track = entries.slice(sel.start, sel.end + 1).map((e) => (e.state ? e : { ...e, state: toTimelineState(decodeFor(e.slot0, e.slot1, e.rules ?? "v2")) }));
     const facts = factsFromTimeline(track, { kind: "track", chain: o.chain, pool: o.pool, hook: o.hook, videoSeconds: Math.round(cut ? cut.seconds : r.seconds) });
     if (facts.track && facts.track.swaps == null && !o.partial) facts.track.swaps = track.length;
-    // The release plays one genre and style, the ones the track finished in (SPEC §4.6).
+    // The release plays one genre and style, the ones the track finished in (SPEC §4.6); posts name the genre only.
     const genre = sum.genre.eraName as string;
-    const style = sum.genre.styleName as string;
-    facts.headline = releaseHeadline(sel.trackNo, facts.track?.swaps ?? track.length, genre, style);
+    facts.headline = releaseHeadline(sel.trackNo, facts.track?.swaps ?? track.length, genre);
     facts.release = {
       seconds: Math.round(r.seconds),
       bars: sum.bars,
       swaps: track.length,
       swapsPerBar: Math.round(sum.swapsPerBar * 10) / 10,
       genre,
-      style,
       chainGenres: (sum.chainGenres as { eraName: string }[]).map((g) => g.eraName),
       clip: cut ? { from: Math.round(cut.start), seconds: Math.round(cut.seconds) } : null,
       ...(o.partial ? { partial: true } : {}),
@@ -112,7 +110,7 @@ export async function produceRelease(
   }
 }
 
-/** Pre-launch teaser: replay the Ethereum IMD/ETH pool (ETH-side amounts, like the IDM/ETH hook) for `days` and queue a post. */
+/** Pre-launch teaser: the IMD/ETH pool on Ethereum mainnet (its ETH-side amounts) replayed through the IDM hook for `days`. */
 export async function teaser(days = Number(process.env.TEASER_DAYS ?? 7)) {
   const { entries, meta } = await replay({ days, pools: process.env.REPLAY_POOLS ?? "main", out: join(process.env.OUT_DIR ?? "out", "timeline.json") });
   if (entries.length < 10) throw new Error(`only ${entries.length} swaps in window`);
@@ -121,8 +119,9 @@ export async function teaser(days = Number(process.env.TEASER_DAYS ?? 7)) {
     kind: "teaser",
     chain: "ethereum",
     pool: "IMD/ETH",
-    title: "IMD/ETH · ETHEREUM · UNISWAP V4 · REPLAY",
-    subtitle: `${span} · ${meta.count} SWAPS · POOL4 CAPPEDBURNHOOK`,
+    title: "IMD/ETH · ETHEREUM · REPLAYED THROUGH THE IDM HOOK",
+    subtitle: `${span} · ${meta.count} SWAPS · ETHEREUM MAINNET`,
+    windowHours: Math.round(days * 24),
   });
 }
 
@@ -134,7 +133,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const tl = process.argv[3] ?? join(dirname(fileURLToPath(import.meta.url)), "../../web/public/release-test.timeline.json");
     if (!existsSync(tl)) throw new Error(`timeline not found: ${tl}`);
     const res = await produceRelease(JSON.parse(readFileSync(tl, "utf8")), {
-      chain: "robinhood", pool: "IDM/IMD", track: process.argv[4] ? Number(process.argv[4]) : null,
+      chain: "robinhood", pool: "IDM/ETH", track: process.argv[4] ? Number(process.argv[4]) : null,
     });
     console.log(JSON.stringify({ mode: res.mode, dir: res.dir, seconds: res.release.seconds, cut: res.cut }, null, 2));
   }

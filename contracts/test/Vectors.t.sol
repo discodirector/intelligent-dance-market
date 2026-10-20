@@ -6,6 +6,9 @@ import {QuoteCalibration as Q} from "../src/QuoteCalibration.sol";
 
 /// @dev Every output is produced by the same Solidity transition used by afterSwap.
 contract VectorsTest is SequencerTestBase {
+    // The generators always run; they write spec/ only under FOUNDRY_PROFILE=vectors, the one profile with write access.
+    bool internal write = keccak256(bytes(vm.envOr("FOUNDRY_PROFILE", string("default")))) == keccak256("vectors");
+
     function words(uint256 a, uint256 b) internal pure returns (string memory) {
         return string.concat('{"slot0":"', vm.toString(a), '","slot1":"', vm.toString(b), '"}');
     }
@@ -294,7 +297,7 @@ contract VectorsTest is SequencerTestBase {
         }
         all = string.concat(all, "]");
         assertEq(count, 130);
-        vm.writeJson(all, string.concat(vm.projectRoot(), "/../spec/vectors.json"));
+        if (write) vm.writeJson(all, string.concat(vm.projectRoot(), "/../spec/vectors.json"));
     }
 
     // External fixture entry prevents the IR optimizer from inlining the large JSON formatter into each loop.
@@ -314,15 +317,17 @@ contract VectorsTest is SequencerTestBase {
             body[i] = body[i + 1];
         }
         assembly ("memory-safe") { mstore(body, sub(mload(body), 1)) }
-        vm.writeLine(
-            string.concat(vm.projectRoot(), "/../spec/vectors-v2.json"),
-            string.concat(all, '{"name":"', name, '",', string(body))
-        );
+        if (write) {
+            vm.writeLine(
+                string.concat(vm.projectRoot(), "/../spec/vectors-v2.json"),
+                string.concat(all, '{"name":"', name, '",', string(body))
+            );
+        }
         return (",", a);
     }
 
     function test_GenerateVectorsV2() public {
-        vm.writeFile(string.concat(vm.projectRoot(), "/../spec/vectors-v2.json"), "");
+        if (write) vm.writeFile(string.concat(vm.projectRoot(), "/../spec/vectors-v2.json"), "");
         string memory all = "[";
         // Every exact relative boundary, including dust and the absolute whale boundary.
         int256[8] memory offsets = [int256(-9), -8, 9, 10, 24, 25, -100, 100];
@@ -511,6 +516,6 @@ contract VectorsTest is SequencerTestBase {
             x.blockNumber += uint64(i * 3);
             (all, running) = appendV2(all, "launch-market", running, x);
         }
-        vm.writeLine(string.concat(vm.projectRoot(), "/../spec/vectors-v2.json"), "]");
+        if (write) vm.writeLine(string.concat(vm.projectRoot(), "/../spec/vectors-v2.json"), "]");
     }
 }

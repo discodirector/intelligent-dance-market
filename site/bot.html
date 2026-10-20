@@ -9,7 +9,9 @@
 </head>
 <body class="bot">
   <!-- Bot render contract (bot/src/render): __setup(opts) → {frames, steps, swaps}; __frame(i) paints frame i
-       and returns null (the bot screenshots the viewport); __audio() → base64 WAV. Same timeline → same output. -->
+       and returns null (the bot screenshots the viewport); __audio() → base64 WAV. Same timeline → same output.
+       Release (bot/src/release, SPEC §4.6): __setupRelease(opts) → {frames, seconds, ...} instead of __setup; the
+       audio is the release WAV rendered by web/render.html, fetched from opts.wavUrl for the scope and spectrum. -->
   <div class="stage" id="stage">
     <div class="slot slot-module" id="slot-module">
       <div class="module" id="panel">
@@ -48,7 +50,7 @@
               <div class="era-sub" id="era-sub">EPOCH 0</div>
             </div>
             <div class="idle">
-              <span class="silk">IDLE STAGE</span>
+              <span class="silk" id="idle-silk">IDLE STAGE</span>
               <ul class="leds" id="idle-leds">
                 <li data-stage="full"><b></b>FULL</li>
                 <li data-stage="thinning"><b></b>THIN</li>
@@ -56,9 +58,10 @@
                 <li data-stage="drone"><b></b>DRONE</li>
               </ul>
               <span class="idle-label" id="idle-label">IDLE 0s</span>
+              <div class="rel-progress" id="rel-progress"><i></i></div>
             </div>
             <div class="heat v2-only"><span class="silk">HEAT</span><div class="heat-bar" id="heat-bar"></div><span class="heat-label" id="heat-label">00/16</span></div>
-            <div class="vu"><span class="silk">OUT</span><div class="vu-bars" id="vu"></div></div>
+            <div class="vu" aria-hidden="true"><span class="silk">OUT</span><div class="vu-bars" id="vu"></div><span class="heat-label">&nbsp;</span></div>
           </div>
         </div>
         <div class="panel-foot">

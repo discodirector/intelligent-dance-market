@@ -1,0 +1,47 @@
+/* docs.html: one long readable page in the site's console palette. */
+body.docs-page { background: var(--black); }
+.docs {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 760px);
+  gap: 48px;
+  justify-content: center;
+  padding: 24px clamp(var(--gutter), 2.5vw, 36px) 96px;
+}
+.toc { position: sticky; top: 24px; align-self: start; display: grid; gap: 10px; }
+.toc .silk { color: var(--muted); }
+.toc ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; counter-reset: toc; }
+.toc li { counter-increment: toc; font-size: 12px; }
+.toc li::before { content: counter(toc, decimal-leading-zero) " "; color: var(--phos-dim); }
+.toc a { text-decoration: none; color: var(--text); }
+.toc a:hover { color: var(--phos); }
+
+.doc { font-size: 14px; line-height: 1.7; color: var(--text); min-width: 0; }
+.doc .eyebrow { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.24em; color: var(--muted); }
+.doc h1 { margin: 6px 0 12px; font-size: clamp(34px, 6vw, 56px); line-height: 1; font-weight: 800; letter-spacing: -0.02em; color: var(--bone); }
+.doc .lede { font-family: var(--lcd); font-size: 24px; line-height: 1.25; color: var(--phos); margin: 0 0 32px; }
+.doc section { border-top: 1px solid var(--line-2); padding-top: 22px; margin-top: 30px; scroll-margin-top: 16px; }
+.doc h2 { margin: 0 0 12px; font-size: 20px; font-weight: 800; color: var(--bone); letter-spacing: -0.01em; }
+.doc h2 span { font-family: var(--lcd); font-weight: 400; font-size: 24px; color: var(--phos-dim); margin-right: 8px; }
+.doc h3 { margin: 18px 0 4px; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--bone-3); }
+.doc p { margin: 0 0 12px; }
+.doc b { color: var(--bone); font-weight: 700; }
+.doc a { color: var(--phos); }
+.doc code { font-size: 12.5px; background: var(--console); border: 1px solid var(--line-2); padding: 1px 5px; color: var(--phos); overflow-wrap: anywhere; }
+.doc ul { margin: 0 0 12px; padding-left: 18px; }
+.doc li { margin: 4px 0; }
+.doc table { width: 100%; border-collapse: collapse; margin: 6px 0 14px; font-size: 13px; }
+.doc th, .doc td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.doc th { font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; border-bottom-color: var(--line-2); }
+.doc td:first-child { white-space: nowrap; }
+.doc .formula { font-family: var(--lcd); font-size: 24px; color: var(--amber); background: var(--console); border: 1px solid var(--line-2); padding: 10px 14px; overflow-x: auto; }
+.doc .genres { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; }
+.doc .genres li { margin: 0; display: flex; justify-content: space-between; gap: 12px; border: 1px solid var(--line-2); background: var(--console); padding: 7px 10px; }
+.doc .genres span { color: var(--muted); font-size: 12px; }
+.nav a[aria-current="page"] { color: var(--phos); }
+
+@media (max-width: 860px) {
+  .docs { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .toc { position: static; }
+  .toc ol { grid-template-columns: 1fr 1fr; }
+  .doc td:first-child { white-space: normal; }
+}

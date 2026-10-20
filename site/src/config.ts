@@ -84,7 +84,8 @@ export const NETWORKS: Record<string, Network> = {
     startBlock: sepoliaV2.startBlock,
     launchedBy: "self-deployed rehearsal · v2 rules",
     launchUrl: null,
-    treasury: null,
+    // PulseTreasury rehearsal (contracts/TREASURY-RUNBOOK.md), deployed 2026-10-18 with the then 45-minute window.
+    treasury: "0xbBb7357f7a97Ed73E717924a617ccB6a2aB49e80",
   },
   // Filled in at launch: hook/token/pool from the IMD swarm deployment on Robinhood Chain (pairWith "eth").
   robinhood: {

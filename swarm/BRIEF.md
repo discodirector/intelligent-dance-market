@@ -4,9 +4,9 @@ Launch an immutable Uniswap v4 music sequencer hook and its fixed-supply token o
 
 ## Source of truth and provenance
 
-Repository: **`https://github.com/discodirector/intelligent-dance-market`**. Immutable source commit: **`b7e08ee6dd3edcc17ad1d93bb24e80729f567dc2`**.
+Imported repository: **`https://github.com/discodirector/idm-hook`**. Immutable source commit: **`69cddfddd0e0bf5903e3e19eab38aebc70285e3a`** (`POST /requests/import` kind `contracts`: ok).
 
-The pinned commit is public and contains `contracts/`, `spec/vectors.json`, `spec/vectors-v2.json` and `SPEC.md`. Later commits on `main` (for example this pin) do not change the source under review. The local source workspace is `IMD_vibe`; the Foundry project root is `contracts/`.
+It is the `contracts/` Foundry project of `https://github.com/discodirector/intelligent-dance-market` moved to the repository root, with `SPEC.md` and `spec/vectors.json`, `spec/vectors-v2.json` beside it. Only paths differ (`../spec` -> `spec`), and plain `forge test` is read-only (vectors regenerate under `FOUNDRY_PROFILE=vectors`); the compiled hook, token and treasury bytecode is identical. Below, `contracts/X` means `X` at the root of the imported repository.
 
 Read **SPEC.md §3 in full**. It is canonical. Use the reference implementation `contracts/src/SequencerHook.sol`, `SequencerState.sol`, `QuoteCalibration.sol` and `SequencerToken.sol`; the reviewed reference manifest is `contracts/launch.json`. Research and compatibility evidence are in `contracts/IMD_LAUNCH_NOTES.md`; exact dependency pins are in `contracts/DEPENDENCIES.md`. The Solidity-generated shared vector file is `spec/vectors.json`, validated by `contracts/scripts/validate-vectors.py` against `contracts/vectors.schema.json`.
 
@@ -16,15 +16,17 @@ Use the following fields in the final validated request; integrate the imported 
 
 ```json
 {
-  "objective": "Review and launch Intelligent Dance Market (IDM) from https://github.com/discodirector/intelligent-dance-market at b7e08ee6dd3edcc17ad1d93bb24e80729f567dc2 on Robinhood Chain 4663 with its immutable zero-fee Uniswap v4 sequencer hook. Preserve SPEC.md section 3, the two packed state words, ABI and Solidity test vectors exactly. Use the supplied contracts/ Foundry project and launch.json. No owner, signer, upgrade, fee, return delta or fund handling in the hook. Pair IDM with native ETH (IDM/ETH, pairWith eth) and provide verified deployed hook/token/pool addresses and launch receipts.",
+  "objective": "Review and launch the token named Intelligent Dance Market with token symbol IDM, from https://github.com/discodirector/idm-hook at 69cddfddd0e0bf5903e3e19eab38aebc70285e3a on Robinhood Chain 4663 with its immutable zero-fee Uniswap v4 sequencer hook. Preserve SPEC.md section 3, the two packed state words, ABI and Solidity test vectors exactly. Use the imported Foundry project (repository root) and its launch.json. No owner, signer, upgrade, fee, return delta or fund handling in the hook. Pair IDM with native ETH (IDM/ETH, pairWith eth) and provide verified deployed hook/token/pool addresses and launch receipts.",
   "shape": "chain",
   "references": ["uniswap-v4-hooks", "uniswap-v4-security"],
-  "steps": [{"skill": "build-contract-project"}, {"skill": "adversarial-review"}],
+  "steps": [{"skill": "audit-imported-code"}, {"skill": "adapt-contract-project"}, {"skill": "adversarial-review"}],
   "onchain": "univ4_hook",
   "chainId": 4663,
   "pairWith": "eth",
   "economics": {"poolBps": 9000},
-  "github": true
+  "github": true,
+  "repoUrl": "https://github.com/discodirector/idm-hook.git",
+  "baseCommit": "69cddfddd0e0bf5903e3e19eab38aebc70285e3a"
 }
 ```
 

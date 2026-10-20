@@ -30,11 +30,19 @@ export PATH="$PWD/bin:$PATH" FOUNDRY_SOLC="$PWD/bin/solc"
 export POOL_MANAGER=0x8366a39cc670b4001a1121b8f6a443a643e40951   # Robinhood Chain 4663 (docs table, recheck)
 export HOOK=0x...   # deployed SequencerHook
 export IDM=0x...    # launched IDM token
+export TEAM=0x9eF17A987CB4a2355Ec2782785d79d3Db4B5fA8A   # team half of the fee ETH (the paying wallet, an EOA)
 # Simulate first (no --broadcast). Broadcasting is a separate, owner-approved step with the owner's own signer.
 forge script script/DeployTreasury.s.sol --rpc-url "$RPC_URL"
 ```
 
-Record the address in `deployments/` and set it as the treasury address in the clients (see 4).
+With `TEAM=0x...` (the team wallet) set, the same script also deploys `FeeSplitter(team, treasury, idm)` right after
+the treasury and prints both addresses. Record them in `deployments/` and set the treasury address in the clients
+(see 4).
+
+`FeeSplitter` (`src/FeeSplitter.sol`, owner's decision 2026-10-20) sits between the factory and the treasury:
+immutable, no owner. Its `split()` (anyone; the keeper calls it right after each harvest) sends half of its ETH to
+the treasury (first, rounded down), the rest to the team, and burns all of its IDM to `0x…dEaD`. The team never
+receives IDM from fees. The team wallet must accept plain ETH transfers, or `split()` reverts.
 
 ## 2. Point the launcher's fee share at the treasury
 
@@ -42,7 +50,7 @@ IMD pays 1% of the 1.25% pool fee to the launch's requester, in both pool curren
 The owner redirects it with the LaunchFactory (Robinhood: `0xa25b02a1e93903b790e6aaf7da1b8b8d50294645`):
 
 ```text
-LaunchFactory.setRequester(uint64 launchNumber, address next)   // next = treasury; called by the paying wallet
+LaunchFactory.setRequester(uint64 launchNumber, address next)   // next = splitter (or treasury without one); paying wallet
 ```
 
 What we know (IMD docs + the factory bytecode, 2026-10-18; the source is not verified on the explorer):
@@ -54,7 +62,8 @@ What we know (IMD docs + the factory bytecode, 2026-10-18; the source is not ver
   on the factory, not lost" (`owed(address,address)`, `withdraw(address,address)`). The treasury's empty `receive()`
   takes pushed ETH, and IDM arrives by transfer, so nothing should stay owed.
 - The pulse keeper calls `claimFees` once a day when `FEE_FACTORY` and `LAUNCH_NUMBER` are set (bot/src/pulse.ts),
-  so the treasury tops itself up without a manual step.
+  so the treasury tops itself up without a manual step; with `FEE_SPLITTER` set it calls `split()` once the claim is
+  mined.
 
 Still to confirm on the first real payout: whether `setRequester` applies to fees accrued before it (call
 `claimFees` once **before** redirecting to keep those on the paying wallet if they matter), and that both treasury

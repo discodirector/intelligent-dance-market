@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>How it works — Intelligent Dance Market</title>
+  <meta name="description" content="How Intelligent Dance Market ($IDM) works. A Uniswap v4 hook stores a 16-step drum pattern, and every swap changes it." />
+  <meta name="theme-color" content="#050605" />
+  <meta name="twitter:site" content="@theidmfun" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23050605'/%3E%3Crect x='2' y='9' width='3' height='5' fill='%2365f08c'/%3E%3Crect x='6.5' y='5' width='3' height='9' fill='%23e8e2cf'/%3E%3Crect x='11' y='2' width='3' height='12' fill='%2365f08c'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=VT323&display=swap" rel="stylesheet" />
+</head>
+<body class="docs-page">
+  <header class="top">
+    <a class="brand" href="/" aria-label="Intelligent Dance Market home">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><rect x="3" y="14" width="4" height="7"/><rect x="10" y="8" width="4" height="13" class="mid"/><rect x="17" y="3" width="4" height="18"/><rect x="1" y="22.4" width="22" height="1.2" class="base"/></svg>
+      </span>
+      <span class="word">IDM</span>
+    </a>
+    <nav class="nav">
+      <a href="/">PLAYER</a>
+      <a href="/docs.html" aria-current="page">DOCS</a>
+      <a href="https://x.com/theidmfun" target="_blank" rel="noopener">X ↗</a>
+    </nav>
+    <a class="btn-outline" href="/">OPEN THE PLAYER</a>
+  </header>
+
+  <main class="docs">
+    <aside class="toc" aria-label="Contents">
+      <span class="silk">CONTENTS</span>
+      <ol>
+        <li><a href="#idea">The idea</a></li>
+        <li><a href="#swap">What a swap does</a></li>
+        <li><a href="#whales">Whales</a></li>
+        <li><a href="#heat">Heat and finished tracks</a></li>
+        <li><a href="#genres">Pages, epochs and genres</a></li>
+        <li><a href="#sound">How it sounds</a></li>
+        <li><a href="#releases">Releases and posts</a></li>
+        <li><a href="#treasury">Pulse treasury</a></li>
+        <li><a href="#token">Token and fees</a></li>
+        <li><a href="#contracts">Contracts</a></li>
+        <li><a href="#faq">FAQ</a></li>
+      </ol>
+    </aside>
+
+    <article class="doc">
+      <p class="eyebrow">INTELLIGENT DANCE MARKET · DOCS</p>
+      <h1>How it works</h1>
+      <p class="lede">$IDM trades on a Uniswap v4 pool with a hook that works like a 16-step drum machine. Each swap changes the pattern stored in the contract, and the player on this site plays it back.</p>
+
+      <section id="idea">
+        <h2><span>01</span> The idea</h2>
+        <p>The hook keeps a small sequencer in contract storage. There is a 4 × 16 drum grid (kick, snare, hat, glitch), a 16-step bass line, tempo, key, mode, a page counter and a heat value. After each swap in the IDM/ETH pool the hook looks at the trade, whether it was a buy or a sell, how much ETH moved and where the price ended up, and updates the sequencer.</p>
+        <p>The contract only stores notes. The sound is made by the synth in your browser. It reads the same state for everyone, so everyone hears the same music.</p>
+        <p>The hook has no owner and can't be upgraded. It takes no fee and never holds funds. It was launched through <a href="https://imd.fun" target="_blank" rel="noopener">IMD</a>, and their agent swarm reviewed and deployed the contracts.</p>
+      </section>
+
+      <section id="swap">
+        <h2><span>02</span> What a swap does</h2>
+        <h3>Step</h3>
+        <p>The step, 1 to 16, is picked by a hash of the swap count, the price tick and the block number, so you can't choose where your trade lands.</p>
+        <h3>Drum</h3>
+        <p>The drum depends on how big the trade is compared with recent trades in the same pool. The hook keeps a running average of trade sizes, so the rules work the same way for a tiny pool and a big one.</p>
+        <table>
+          <thead><tr><th>Trade size vs. average</th><th>Drum</th></tr></thead>
+          <tbody>
+            <tr><td>below ~0.7×</td><td>hat</td></tr>
+            <tr><td>~0.7× to 1.5×</td><td>glitch</td></tr>
+            <tr><td>~1.5× to 3×</td><td>snare</td></tr>
+            <tr><td>above ~3×</td><td>kick</td></tr>
+          </tbody>
+        </table>
+        <h3>Buys and sells</h3>
+        <p>A buy turns its cell on. If that cell is already on, it moves up to the next drum on the same step (hat, glitch, snare, kick). If the whole step is full, it goes to the next free step on its own drum.</p>
+        <p>A sell turns a cell off. It can remove hats, glitches and snares, but never a kick, so selling thins the beat without breaking it.</p>
+        <h3>Bass, tempo and mode</h3>
+        <ul>
+          <li>A buy also writes a bass note on its step, pitched by the price. A sell removes it about half the time.</li>
+          <li>Tempo follows how often people trade. The chain value runs from 72 to 118 and each genre maps it into its own range, so a busy pool plays faster.</li>
+          <li>Mode follows buying and selling pressure. Heavy buying plays in Lydian, light buying in Dorian, light selling in Phrygian and heavy selling in Locrian.</li>
+        </ul>
+      </section>
+
+      <section id="whales">
+        <h2><span>03</span> Whales</h2>
+        <p>A whale is any trade above a size threshold. The threshold isn't a fixed number. The hook works it out after every swap from the pool's fully diluted value, which it gets from the price.</p>
+        <p class="formula">whale = 2·10⁷ · √FDV  (FDV in wei, kept between 0.005 and 50 ETH)</p>
+        <table>
+          <thead><tr><th>Pool FDV</th><th>Whale threshold</th></tr></thead>
+          <tbody>
+            <tr><td>4 ETH</td><td>0.04 ETH</td></tr>
+            <tr><td>10 ETH</td><td>~0.063 ETH</td></tr>
+            <tr><td>40 ETH</td><td>0.126 ETH</td></tr>
+            <tr><td>400 ETH</td><td>0.4 ETH</td></tr>
+            <tr><td>4,000 ETH</td><td>1.26 ETH</td></tr>
+          </tbody>
+        </table>
+        <p>Because it follows the square root, the threshold rises more slowly than the pool, and whales stay fairly rare as the project grows. You can read the current value from <code>whaleThreshold()</code> on the hook.</p>
+        <p>A whale changes a whole drum instead of one cell. A whale buy fills a drum with an evenly spaced rhythm of 3 to 8 hits. A whale sell clears a drum completely. In both cases the key moves up a fifth and the page turns. Whales don't change heat.</p>
+      </section>
+
+      <section id="heat">
+        <h2><span>04</span> Heat and finished tracks</h2>
+        <p>When 44 or more of the 64 cells are on, each buy adds 1 heat, including a buy that has nowhere left to go, and each sell takes 1 away. You can see it on the HEAT meter. As heat goes up the music gets busier, with the filter opening, hat rolls and a riser.</p>
+        <p>At 16 heat the track is finished. The hook emits <code>TrackComplete</code> with the final pattern and starts a new track. The new track gets a starting beat from a fixed set, keeps only the bass notes on the main beats, moves up a fifth and gets the next track number.</p>
+        <p>If nobody trades for an hour, heat goes back to 0, but the grid stays as it is. In practice a track finishes when buyers keep coming into a full grid. In a flat or falling market a track can stay open for a long time.</p>
+      </section>
+
+      <section id="genres">
+        <h2><span>05</span> Pages, epochs and genres</h2>
+        <p>The page number goes up every 64 swaps, on every whale and on every finished track. Four pages make an epoch, and each epoch has one genre. Genres play in rounds. Every round plays each genre once in a shuffled order, and the same genre never plays twice in a row. Each genre also has a few variations that rotate between its appearances.</p>
+        <p>Genres currently in rotation:</p>
+        <ul class="genres" id="genre-list"></ul>
+        <p>New genres can be added later, starting from a future epoch. Earlier epochs keep the music they had.</p>
+      </section>
+
+      <section id="sound">
+        <h2><span>06</span> How it sounds</h2>
+        <p>The synth arranges the pattern into a 32-bar song form with an intro, build, full section, breakdown and rebuild. The pool decides the notes and how dense they are, the form decides which parts play. Every genre has its own drums, bass, chords and effects.</p>
+        <p>When trading stops, the music winds down gradually.</p>
+        <table>
+          <thead><tr><th>Time since last swap</th><th>What plays</th></tr></thead>
+          <tbody>
+            <tr><td>under 10 min</td><td>everything</td></tr>
+            <tr><td>10 to 30 min</td><td>glitch and hats fade out, then the snare</td></tr>
+            <tr><td>30 to 60 min</td><td>pad, bass and a soft kick</td></tr>
+            <tr><td>over 60 min</td><td>a held drone</td></tr>
+          </tbody>
+        </table>
+        <p>The next swap brings it all back, since the grid itself never resets.</p>
+      </section>
+
+      <section id="releases">
+        <h2><span>07</span> Releases and posts</h2>
+        <p>Every finished track becomes a release. It replays the whole track from its on-chain history, from its first swap to the finish, at about one swap per bar, in the genre it ended on. Most releases run 3 to 5 minutes, and anyone can rebuild one from the chain data.</p>
+        <p>Our bot renders the releases and posts them on <a href="https://x.com/theidmfun" target="_blank" rel="noopener">@theidmfun</a>, along with snapshots of the live pattern and whale moments. It posts at most six times a day.</p>
+      </section>
+
+      <section id="treasury">
+        <h2><span>08</span> Pulse treasury</h2>
+        <p>The pulse treasury is a separate contract, also with no owner. Its job is to keep the music going when nobody trades. If there has been no swap for 15 minutes, anyone can call <code>pulse()</code> and the treasury makes a small IDM buy with ETH. The hook treats it like any other buy, usually as a hat, and on a full grid it adds heat.</p>
+        <ul>
+          <li>A pulse spends at most 0.002 ETH and never more than 1% of the treasury balance. It can move the price by about 2% at most.</li>
+          <li>Any real swap resets the 15-minute wait, so pulses only happen in quiet periods.</li>
+          <li>Once a day, the IDM the treasury has collected is burned. That includes tokens bought by pulses and the IDM part of its fee income.</li>
+          <li>Pulses are marked as PULSE on the site and in posts.</li>
+        </ul>
+      </section>
+
+      <section id="token">
+        <h2><span>09</span> Token and fees</h2>
+        <ul>
+          <li>$IDM has a fixed supply of 1,000,000,000. At launch 10% goes to the IMD swarm that built and deployed it, and the other 90% goes into the pool. There is no team allocation.</li>
+          <li>The pool fee is 1.25% per trade, set by IMD's launch rules. 0.25% goes to the IMD network. The other 1% is the launcher's share and goes to a fee splitter contract with no owner: half of the ETH goes to the pulse treasury, half goes to the team, and every IDM token from fees is burned. The team never receives IDM from fees.</li>
+          <li>The hook adds no fee of its own.</li>
+        </ul>
+      </section>
+
+      <section id="contracts">
+        <h2><span>10</span> Contracts</h2>
+        <div id="contract-list"></div>
+        <p>The source code is on <a href="https://github.com/discodirector/intelligent-dance-market" target="_blank" rel="noopener">GitHub</a>. The Solidity hook and the TypeScript model share a set of test vectors and produce exactly the same state.</p>
+      </section>
+
+      <section id="faq">
+        <h2><span>11</span> FAQ</h2>
+        <h3>Can anyone change the rules?</h3>
+        <p>No. The hook has no owner and can't be upgraded. The only thing that changes the pattern is trading.</p>
+        <h3>My swap failed with "out of gas". Why?</h3>
+        <p>How much work the hook does depends on the block your swap ends up in, so a gas estimate made a block earlier can come up a few thousand gas short. Most wallets add a buffer. If yours doesn't, set a slightly higher gas limit.</p>
+        <h3>Can I pick the genre?</h3>
+        <p>Not in the live player, where the chain decides. In the demo replay you can listen to every genre.</p>
+        <h3>Are all buys real trades?</h3>
+        <p>All of them except pulses, which come from the treasury after 15 minutes of silence and are marked as such.</p>
+      </section>
+    </article>
+  </main>
+  <script type="module" src="/src/docs.ts"></script>
+</body>
+</html>

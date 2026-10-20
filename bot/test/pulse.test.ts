@@ -10,7 +10,7 @@ const TREASURY = "0x00000000000000000000000000000000000000aB" as const;
 // Well-known test key (anvil #0): must never appear in any log line.
 const KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 const next = (o: Partial<NextPulse> = {}): NextPulse => ({ ready: true, amount: 2_000_000_000_000_000n, idleSec: 900n, heat: 3, ...o });
-const cfg = (o: Partial<PulseConfig> = {}): PulseConfig => ({ treasury: TREASURY, rpcUrl: "http://x", chainId: 4663, send: false, tickSec: 60, harvest: null, burnEverySec: 86400, ...o });
+const cfg = (o: Partial<PulseConfig> = {}): PulseConfig => ({ treasury: TREASURY, rpcUrl: "http://x", chainId: 4663, send: false, tickSec: 60, harvest: null, splitter: null, burnEverySec: 86400, ...o });
 const fakeClient = (n: NextPulse, simulate = vi.fn().mockRejectedValue(new Error("NotIdle(10)"))) =>
   ({ readContract: vi.fn().mockResolvedValue([n.ready, n.amount, n.idleSec, n.heat]), simulateContract: simulate }) as unknown as PublicClient;
 
@@ -73,12 +73,16 @@ describe("pulse labels in facts and captions", () => {
 describe("fee harvest", () => {
   const FACTORY = "0xa25b02a1e93903b790e6aaf7da1b8b8d50294645" as const;
   const harvest = { factory: FACTORY, launchNumber: 2200n, everySec: 86400 };
+  const SPLITTER = "0x00000000000000000000000000000000000000eF" as const;
 
   it("is configured only with a factory and a launch number", () => {
     const base = { PULSE_TREASURY: TREASURY, LIVE_RPC_URL: "http://x" };
     expect(pulseConfigFromEnv(base)!.harvest).toBeNull();
     expect(pulseConfigFromEnv({ ...base, FEE_FACTORY: FACTORY })!.harvest).toBeNull();
     expect(pulseConfigFromEnv({ ...base, FEE_FACTORY: FACTORY, LAUNCH_NUMBER: "2200", HARVEST_HOURS: "12" })!.harvest).toEqual({ factory: FACTORY, launchNumber: 2200n, everySec: 43200 });
+    expect(pulseConfigFromEnv(base)!.splitter).toBeNull();
+    expect(pulseConfigFromEnv({ ...base, FEE_SPLITTER: "" })!.splitter).toBeNull();
+    expect(pulseConfigFromEnv({ ...base, FEE_SPLITTER: SPLITTER })!.splitter).toBe(SPLITTER);
   });
 
   it("waits out the interval, and a dry run neither reads the key nor sends", async () => {
@@ -98,6 +102,17 @@ describe("fee harvest", () => {
     const client = { simulateContract: sim } as unknown as PublicClient;
     await expect(harvestTick(cfg({ harvest, send: true }), client, 0, 86400, { PULSE_KEY: KEY })).rejects.toThrow("reverted");
     expect(sim).toHaveBeenCalledWith(expect.objectContaining({ address: FACTORY, functionName: "claimFees", args: [2200n] }));
+  });
+
+  it("with a splitter, the dry run names split() and a failed claim never splits", async () => {
+    const lines: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((...a) => void lines.push(a.join(" ")));
+    const sim = vi.fn().mockRejectedValue(new Error("reverted"));
+    const client = { simulateContract: sim } as unknown as PublicClient;
+    await harvestTick(cfg({ harvest, splitter: SPLITTER }), client, 0, 86400, { PULSE_KEY: KEY });
+    expect(lines.join("\n")).toContain(`then split() on ${SPLITTER}`);
+    await expect(harvestTick(cfg({ harvest, splitter: SPLITTER, send: true }), client, 0, 86400, { PULSE_KEY: KEY })).rejects.toThrow("reverted");
+    expect(sim).toHaveBeenCalledTimes(1);
   });
 });
 

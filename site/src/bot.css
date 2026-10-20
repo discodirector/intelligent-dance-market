@@ -17,3 +17,10 @@ body.bot *, body.bot *::before, body.bot *::after { animation: none !important; 
 .bot.rules-v2 .bot-controls { grid-template-columns: minmax(0, 1.4fr) auto auto auto; }
 .bot .log li { flex: none; }
 .bot .console-intro span { color: #7d867f; }
+/* Release mode (__setupRelease): the idle block shows the release's progress instead. */
+.bot .rel-progress { display: none; }
+.bot.release .rel-progress { display: block; height: 6px; background: var(--ink); border: 1px solid #000; padding: 1px; }
+.bot.release .rel-progress i { display: block; height: 100%; width: 0; background: var(--phos); box-shadow: 0 0 4px var(--phos); }
+.bot.release .rel-progress.dropped i { background: var(--amber); box-shadow: 0 0 4px var(--amber); }
+.bot.release .leds li[data-stage="drop"].on b { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+.bot.release .leds li[data-stage="outro"].on b { background: var(--phos); box-shadow: 0 0 6px var(--phos); }

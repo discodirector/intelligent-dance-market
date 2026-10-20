@@ -6,19 +6,23 @@ export const MAX_LEN = 240;
 export const MODEL = process.env.CAPTION_MODEL ?? "claude-sonnet-5-5";
 
 const SYSTEM = `You write one short post for X for "Intelligent Dance Market": a Uniswap v4 hook whose on-chain state is a 16-step drum + bass pattern that every swap mutates. The attached video plays that state as an IDM track.
+"playing" is the genre the video ends in; you may name it ("now playing: trip-hop"), except in a teaser, whose video passes through several genres. Never name styles.
+When kind is "teaser": the hook is not live yet; the video replays the IMD/ETH pool on Ethereum (facts.pool, facts.chain) through the IDM hook's rules. Name that pool as the source; do not name any other token, project or pool. Keep it to the swaps, the whales and one line of character.
 When kind is "track": buys kept landing on a full grid until its heat peaked, so the hook finished the track (track.no), archived it and started the next one from a fresh seed.
 If "pulses" is present: that many of the buys were treasury pulses, small automatic buys by the project's own immutable treasury contract after 15 minutes without trades, to keep the track playing. If you mention them, call them treasury pulses; never present them as outside demand or trading activity.
-When "release" is present, the video is the release: the whole track replayed from its seed to the drop at a fixed pace (release.swapsPerBar swaps per bar), release.seconds long; when release.clip is set the video is only its last release.clip.seconds (the climb into the drop) and the full track is a separate file. The whole release plays one genre and style, release.genre / release.style (where the track finished); release.chainGenres are only the genres live playback passed through while the track was built. "headline" is the post's title line; you may start with it verbatim.
+When "release" is present, the video is the release: the whole track replayed from its seed to the drop at a fixed pace (release.swapsPerBar swaps per bar), release.seconds long; when release.clip is set the video is only its last release.clip.seconds (the climb into the drop) and the full track is a separate file. The whole release plays one genre, release.genre (where the track finished); release.chainGenres are only the genres live playback passed through while the track was built. "headline" is the post's title line; you may start with it verbatim.
 
 Rules (hard):
 - Use ONLY facts present in the JSON. Every number you write must appear in the JSON. Do not invent events, people, dates or numbers.
 - No price, market cap, returns, charts or trading talk. No calls to action to buy/sell/ape. No promises, predictions or roadmap claims ("soon", "will", "next").
+- Few numbers: two or three at most. No arrows (→, ->), no "@", no internal labels like page or state.
 - Max ${MAX_LEN} characters total. Plain text, lowercase-friendly, terse, machine/terminal tone. At most 1 emoji. No hashtags except optionally #IMD.
 - Output only the post text, nothing else.`;
 
 const BANNED = [
   /\bprice\b/i, /\bmcap\b/i, /market ?cap/i, /\$\s?\d/, /\busd\b/i, /\bpump/i, /\bmoon/i, /\bape\b/i,
   /\bbuy (now|it|this|the dip|some)\b/i, /\bsoon\b/i, /\bwill\b/i, /going to/i, /\bguarantee/i, /\bprofit/i,
+  /→|->/, /\bstate @/i,
   /\bnfa\b/i, /\bgem\b/i, /\b\d+x\b/i, /\bwen\b/i, /\broadmap\b/i,
 ];
 
@@ -35,27 +39,25 @@ export function validateCaption(text: string, facts: Facts): string[] {
 }
 
 export function templateCaption(f: Facts): string {
-  const k = f.key.start === f.key.end ? f.key.end.toLowerCase() : `${f.key.start.toLowerCase()} → ${f.key.end.toLowerCase()}`;
   const lines: string[] = [];
+  const playing = (f.playing ?? "").toLowerCase();
   if (f.kind === "teaser") {
-    const span = f.window.hours >= 48 ? `${f.window.days} days` : `${f.window.hours}h`;
-    lines.push(`how the ${f.pool} pool sounded: last ${span} on ${f.chain}.`);
-    lines.push(`${f.swaps} swaps → ${f.swaps} mutations of a 16-step pattern. ${f.whales} whale moves, key ${k}, ${f.bpm.min}–${f.bpm.max} bpm.`);
-    lines.push("every trade is a note.");
+    const span = f.window.hours >= 48 ? `${f.window.days} days` : f.window.hours === 24 ? "24 hours" : f.window.hours >= 2 ? `${f.window.hours} hours` : "an hour";
+    lines.push(`${span} of the ${f.pool.toLowerCase()} pool on ${f.chain}, played through the idm hook.`);
+    lines.push(`${f.swaps} swaps, ${f.whales} whales. every trade is a note.`);
   } else if (f.kind === "track" && f.track && f.headline && f.release) {
-    const r = f.release;
     lines.push(f.headline);
-    lines.push(`the whole track from its seed to the drop: ${r.seconds} s, ${r.bars} bars, all in ${r.genre.toLowerCase()} / ${r.style.toLowerCase()}.`);
-    lines.push(`fresh seed in ${f.track.key.toLowerCase()}, page #${f.track.page}.`);
+    lines.push("the whole track, from the first swap to the drop.");
+    lines.push(`the next one starts in ${f.track.key.toLowerCase()}.`);
   } else if (f.kind === "track" && f.track) {
-    lines.push(`track #${f.track.no} complete.${f.track.swaps != null ? ` ${f.track.swaps} swaps filled the grid and the swarm dropped it.` : " the swarm filled the grid and dropped it."}`);
-    lines.push(`fresh seed in ${f.track.key.toLowerCase()}, page #${f.track.page}. swap #${f.track.swapCount}.`);
+    lines.push(`track #${f.track.no} complete.${f.track.swaps != null ? ` ${f.track.swaps} swaps filled the grid.` : ""}`);
+    lines.push(`the next one starts in ${f.track.key.toLowerCase()}.`);
   } else if (f.kind === "movement") {
-    lines.push(`movement. a whale swap rotated the root: now ${f.key.end.toLowerCase()}, page #${f.page}.`);
-    lines.push(`swap #${f.swapCount} · ${f.bpm.end} bpm.`);
+    lines.push(`a whale moved the key to ${f.key.end.toLowerCase()}.`);
+    if (playing) lines.push(`now playing: ${playing}.`);
   } else {
-    lines.push(`state @ swap #${f.swapCount}: ${f.bpm.end} bpm, ${f.key.end.toLowerCase()}, page #${f.page}.`);
-    lines.push(`last ${f.window.hours}h: ${f.swaps} swaps, ${f.whales} whales, busiest track: ${f.busiestTrack}.`);
+    if (playing) lines.push(`now playing: ${playing}.`);
+    lines.push(`${f.swaps} swaps in the ${f.window.hours >= 1 ? `last ${f.window.hours}h` : "last hour"}, ${f.bpm.end} bpm, ${f.key.end.toLowerCase()}.`);
   }
   if (f.pulses) lines.push(`${f.pulses} buys were treasury pulses: the silence kept playing.`);
   let out = lines.join("\n");

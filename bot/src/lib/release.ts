@@ -78,8 +78,9 @@ export function postCut(seconds: number, dropTime: number | null, max = X_VIDEO_
 }
 
 /** `TRACK #N COMPLETE · K SWAPS · Genre / Style` */
-export const releaseHeadline = (trackNo: number, swaps: number, genre: string, style: string) =>
-  `TRACK #${trackNo} COMPLETE · ${swaps} SWAPS · ${genre} / ${style}`;
+/** Posts name the genre only: style names are internal. */
+export const releaseHeadline = (trackNo: number, swaps: number, genre: string) =>
+  `track #${trackNo} complete. ${swaps} swaps, ${genre.toLowerCase()}.`;
 
 /** True when the selected track starts inside `entries`: after a TrackComplete, or at the hook's first swap. */
 export function trackStartKnown(entries: readonly TimelineEntry[], trackNo?: number | null): boolean {
