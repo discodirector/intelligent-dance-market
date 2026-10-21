@@ -340,6 +340,11 @@ interface ReleaseSetup extends ReleaseRequest {
   wavUrl?: string;
   title?: string;
   subtitle?: string;
+  /** A station's release (bot/src/station.ts): its name on the module and the blue LCD theme, so its tracks never
+   *  pass for $IDM ones. Absent = the $IDM hook. The music follows `program` (ReleaseOptions, synth program.ts),
+   *  not this name: IMD/ETH plays the house program; a station passes its own, and the plan carries it (plan.program),
+   *  so web/render.html must be given the same one for the WAV. */
+  station?: string;
 }
 
 interface ReleaseInfo {
@@ -436,7 +441,7 @@ function releaseTape(r: BuiltRelease, n: number, dropped: boolean) {
 
 function paintRelease(r: BuiltRelease, t: number) {
   const plan = r.plan;
-  const view = viewAt(plan.hits, t, r.seed);
+  const view = viewAt(plan.hits, t, r.seed, plan.program);
   const st: SequencerState = view.state;
   const n = landed(r, t);
   const dropT = plan.dropTime;
@@ -454,7 +459,7 @@ function paintRelease(r: BuiltRelease, t: number) {
 
   // The release plays one genre instance (plan.genre); the readouts follow it, never a style.
   const g = plan.genre;
-  const era = eraOf(g.epoch);
+  const era = eraOf(g.epoch, plan.program);
   const note = NOTE_NAMES[genreKey(era, g.epoch)];
   seg.bpm(String(Math.round(view.bpm)));
   seg.key(note[0] + " ", note.includes("#") ? [0] : []);
@@ -488,7 +493,7 @@ function paintRelease(r: BuiltRelease, t: number) {
   if (age >= 0 && age < 1.6) {
     const k = 1 - age / 1.6;
     const ring = age < 0.3 && Math.floor(age / 0.1) % 2 === 1 ? "var(--amber)" : "var(--phos)";
-    panel.style.boxShadow = `inset 0 0 0 ${(2 + 2 * k).toFixed(1)}px ${ring}, 0 0 0 4px var(--black), 0 0 ${Math.round(60 * k)}px ${Math.round(14 * k)}px rgba(108, 245, 149, ${(0.55 * k).toFixed(2)})`;
+    panel.style.boxShadow = `inset 0 0 0 ${(2 + 2 * k).toFixed(1)}px ${ring}, 0 0 0 4px var(--black), 0 0 ${Math.round(60 * k)}px ${Math.round(14 * k)}px rgba(var(--phos-rgb), ${(0.55 * k).toFixed(2)})`;
     lcdCanvas.style.filter = `brightness(${(1 + 1.6 * k * k).toFixed(2)})${age < 0.12 ? " saturate(0.4)" : ""}`;
   } else {
     panel.style.boxShadow = "";
@@ -513,7 +518,7 @@ function paceText(r: BuiltRelease): string {
 }
 
 window.__setupRelease = async (o) => {
-  const { timeline, width, height, fps, wavUrl, title, subtitle, ...req } = o;
+  const { timeline, width, height, fps, wavUrl, title, subtitle, station, ...req } = o;
   rel = buildRelease(timeline, cleanRequest(req));
   const r = rel;
   const no = r.selection.trackNo;
@@ -522,11 +527,17 @@ window.__setupRelease = async (o) => {
     height: height ?? 1080,
     fps: fps ?? 30,
     seconds: r.plan.seconds,
-    title: title ?? `IDM/ETH · TRACK #${no} · ${r.entries.length} SWAPS IN ORDER`,
+    title: title ?? `${station ? `${station.toUpperCase()} · ETHEREUM` : "$IDM · ROBINHOOD CHAIN"} · TRACK #${no} · ${r.entries.length} SWAPS IN ORDER`,
     subtitle: subtitle ?? `${paceText(r)} · ${r.plan.dropTime != null ? `DROP AT ${mmss(r.plan.dropTime)}` : "UNFINISHED"}`,
   };
   v2 = true;
   document.body.classList.add("rules-v2", "release");
+  // The canvases read their colours from the CSS variables, so the theme class recolours every LCD.
+  document.documentElement.classList.toggle("station-alt", !!station);
+  if (station) {
+    $("model-sub").textContent = station;
+    $("foot-left").textContent = `EVERY TRADE IS A NOTE · ${station.toUpperCase()}`;
+  }
   $("title").textContent = opts.title;
   $("subtitle").textContent = opts.subtitle;
   $("net-status").textContent = "RELEASE";

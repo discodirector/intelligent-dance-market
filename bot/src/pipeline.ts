@@ -63,12 +63,12 @@ function ffmpegCut(src: string, dst: string, start: number, seconds: number) {
  */
 export async function produceRelease(
   entries: TimelineEntry[],
-  o: { chain: string; pool: string; hook?: string; track?: number | null; partial?: boolean; initial?: { slot0: string; slot1: string } | null; maxPostSeconds?: number },
+  o: { chain: string; pool: string; hook?: string; track?: number | null; partial?: boolean; initial?: { slot0: string; slot1: string } | null; maxPostSeconds?: number; station?: string },
 ) {
   const work = mkdtempSync(join(tmpdir(), "seq-release-"));
   try {
     const sel = selectTrack(entries, o.track);
-    const r = await renderRelease({ timeline: entries, track: sel.trackNo, initial: o.initial, outDir: work, mp4: true });
+    const r = await renderRelease({ timeline: entries, track: sel.trackNo, initial: o.initial, outDir: work, mp4: true, station: o.station });
     const sum = r.summary as any;
     const max = o.maxPostSeconds ?? Number(process.env.X_VIDEO_MAX_SECONDS ?? X_VIDEO_MAX_SECONDS);
     const cut = postCut(r.seconds, sum.dropTime ?? null, max);
@@ -83,7 +83,8 @@ export async function produceRelease(
     if (facts.track && facts.track.swaps == null && !o.partial) facts.track.swaps = track.length;
     // The release plays one genre and style, the ones the track finished in (SPEC §4.6); posts name the genre only.
     const genre = sum.genre.eraName as string;
-    facts.headline = releaseHeadline(sel.trackNo, facts.track?.swaps ?? track.length, genre);
+    // A station's track numbers are its own: the headline names the station so they never read as $IDM tracks.
+    facts.headline = (o.station ? `${o.station} · ` : "") + releaseHeadline(sel.trackNo, facts.track?.swaps ?? track.length, genre);
     facts.release = {
       seconds: Math.round(r.seconds),
       bars: sum.bars,

@@ -1,0 +1,79 @@
+{
+  "chains": {
+    "1": {
+      "name": "Ethereum", "explorer": "https://etherscan.io", "explorerName": "Etherscan",
+      "rpcUrls": ["https://mainnet.gateway.tenderly.co", "https://ethereum-rpc.publicnode.com"],
+      "logChunk": 20000,
+      "weth": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "poolManager": "0x000000000004444c5dc75cB358380D2e3dE08A90"
+    },
+    "8453": {
+      "name": "Base", "explorer": "https://basescan.org", "explorerName": "Basescan",
+      "rpcUrls": ["https://base.gateway.tenderly.co", "https://base-rpc.publicnode.com"],
+      "logChunk": 1000,
+      "weth": "0x4200000000000000000000000000000000000006",
+      "poolManager": "0x498581fF718922c3f8e6A244956aF099B2652b2b"
+    },
+    "42161": {
+      "name": "Arbitrum", "explorer": "https://arbiscan.io", "explorerName": "Arbiscan",
+      "rpcUrls": ["https://arbitrum.gateway.tenderly.co", "https://arb1.arbitrum.io/rpc"],
+      "logChunk": 50000,
+      "weth": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+      "poolManager": "0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32"
+    },
+    "4663": {
+      "name": "Robinhood Chain", "explorer": "https://robinhoodchain.blockscout.com", "explorerName": "Blockscout",
+      "rpcUrls": ["https://rpc.mainnet.chain.robinhood.com"],
+      "logChunk": 20000,
+      "weth": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
+      "poolManager": "0x8366a39cc670b4001a1121b8f6a443a643e40951"
+    },
+    "143": {
+      "name": "Monad", "explorer": "https://monadvision.com", "explorerName": "MonadVision",
+      "rpcUrls": ["https://monad.gateway.tenderly.co"],
+      "logChunk": 1000,
+      "nativeSymbol": "MON",
+      "weth": "0xEE8c0E9f1BFFb4Eb878d8f15f368A02a35481242",
+      "poolManager": "0x188d586ddcf52439676ca21a244753fa19f9ea8e"
+    }
+  },
+  "stations": [
+    {
+      "key": "idm",
+      "label": "$IDM",
+      "ticker": "IDM",
+      "chainId": 4663,
+      "rpcUrls": ["https://rpc.mainnet.chain.robinhood.com"],
+      "poolManager": "0x8366a39cc670b4001a1121b8f6a443a643e40951",
+      "poolId": "0x519387822812b11873eb51242f9dc80632d98144742b4ed0feea792af777d94b",
+      "genesisBlock": 93576944,
+      "token": "0x4fe9f3823791c8b187b81ab8b7398d793fed28f6",
+      "quoteSymbol": "ETH",
+      "kind": "hook",
+      "hook": "0x4ebe25e5b6493194a58ac8b62bb13b38156f7040",
+      "house": true,
+      "theme": { "phos": "#6cf595", "phosDim": "#2f8f4f", "ghost": "#0f2c19", "lcd": "#06150c" },
+      "program": "idm",
+      "status": "live"
+    },
+    {
+      "key": "imd-eth",
+      "label": "IMD/ETH",
+      "ticker": "IMD",
+      "chainId": 1,
+      "rpcUrls": ["https://mainnet.gateway.tenderly.co", "https://ethereum-rpc.publicnode.com"],
+      "poolManager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+      "poolId": "0x415829f72e9f54531c26eae76f107618540e898a45d6ae35959e143f5faca704",
+      "genesisBlock": 26185800,
+      "token": "0xd34a99bc0f67ae1bbd63c660e6d0b0dd03e263b7",
+      "quote": "0x0000000000000000000000000000000000000000",
+      "ethSide": 0,
+      "quoteSymbol": "ETH",
+      "kind": "v4",
+      "house": true,
+      "theme": { "phos": "#6fd8ff", "phosDim": "#2a7f9c", "ghost": "#0b2530", "lcd": "#041218" },
+      "program": "idm",
+      "status": "live"
+    }
+  ]
+}

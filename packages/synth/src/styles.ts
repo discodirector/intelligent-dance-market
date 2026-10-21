@@ -1,5 +1,8 @@
-import { eraOf, type Era, type GenreId } from "./eras.ts";
+import { ERA_SCHEDULE, eraOf, type Era, type EraScheduleEntry, type GenreId } from "./eras.ts";
 import { hash32 } from "./hash.ts";
+import type { LeadPatch } from "./leads.ts";
+import type { Program } from "./program.ts";
+import type { StyleData } from "./styledata.ts";
 
 /**
  * Styles: each genre has several distinct sound worlds (kit, groove, bass, harmony treatment, processing).
@@ -33,6 +36,15 @@ export interface GenreStyle {
   trim?: number;
   /** Lead patch ids (leads.ts) this style picks from; overrides the genre list. */
   leads?: readonly string[];
+  /** Station styles: the pack's own lead patches by id (pack.ts `patches`), which `leads` may name. */
+  patches?: Readonly<Record<string, LeadPatch>>;
+  /**
+   * The style whose renderer (engine.ts) plays this one; default its own id. Station styles (stations/<key>.ts) are
+   * variants of a house style: a new id, `base` the house id, and `data` for the tables they change.
+   */
+  base?: string;
+  /** Overrides for the tables the base renderer reads (styledata.ts); a table left out keeps the house one. */
+  data?: StyleData;
 }
 
 /** The launch lists (STYLE_SCHEDULE entry 0). Frozen: change a genre's styles with a new STYLE_SCHEDULE entry. */
@@ -137,12 +149,32 @@ export interface StyleList {
 }
 
 /**
- * The list `genre` plays from at `epoch`: the last entry that has started and names the genre. A genre with no list
- * yet at that epoch (a genre added later, auditioned at an earlier epoch) uses its first list.
+ * Where styles come from: a Program (its `styles`, and its `eras` for the rotation), or a bare style schedule (tests:
+ * a dummy appended entry over the house genre order). Omitted: the house program (STYLE_SCHEDULE over ERA_SCHEDULE),
+ * which is HOUSE_PROGRAM (program.ts); this module only imports the Program type, so program.ts can import it.
  */
-export function styleListAt(genre: GenreId, epoch: number, schedule: readonly StyleScheduleEntry[] = STYLE_SCHEDULE): StyleList {
+export type StyleSource = Program | readonly StyleScheduleEntry[];
+
+const isProgram = (src: StyleSource): src is Program => !Array.isArray(src);
+
+/** The style schedule of a source. */
+function scheduleOf(src: StyleSource | undefined): readonly StyleScheduleEntry[] {
+  return !src ? STYLE_SCHEDULE : isProgram(src) ? src.styles : src;
+}
+
+/** The genre schedule a source's rotation counts appearances in (a bare style schedule rotates over the house order). */
+function erasOf(src: StyleSource | undefined): { readonly eras: readonly EraScheduleEntry[] } {
+  return src && isProgram(src) ? src : { eras: ERA_SCHEDULE };
+}
+
+/**
+ * The list `genre` plays from at `epoch`: the last entry that has started and names the genre. A genre with no list
+ * yet at that epoch (a genre added later, auditioned at an earlier epoch) uses its first list. Throws when the
+ * source never names the genre (a station program auditioned on a genre outside its pool).
+ */
+export function styleListAt(genre: GenreId, epoch: number, source?: StyleSource): StyleList {
   let hit: StyleList | null = null;
-  for (const entry of schedule) {
+  for (const entry of scheduleOf(source)) {
     const list = entry.styles[genre];
     if (!list || list.length === 0) continue;
     if (entry.fromEpoch <= epoch || !hit) hit = { styles: list, fromEpoch: entry.fromEpoch };
@@ -153,14 +185,14 @@ export function styleListAt(genre: GenreId, epoch: number, schedule: readonly St
 }
 
 /** The styles of a genre in force at `epoch` (the rack, galleries). */
-export function stylesAt(genre: GenreId, epoch: number): readonly GenreStyle[] {
-  return styleListAt(genre, epoch).styles;
+export function stylesAt(genre: GenreId, epoch: number, source?: StyleSource): readonly GenreStyle[] {
+  return styleListAt(genre, epoch, source).styles;
 }
 
 /** Every style a genre has ever had, in order of first definition (ids are unique per genre). */
-export function allStyles(genre: GenreId, schedule: readonly StyleScheduleEntry[] = STYLE_SCHEDULE): readonly GenreStyle[] {
+export function allStyles(genre: GenreId, source?: StyleSource): readonly GenreStyle[] {
   const out: GenreStyle[] = [];
-  for (const entry of schedule) for (const st of entry.styles[genre] ?? []) if (!out.some((s) => s.id === st.id)) out.push(st);
+  for (const entry of scheduleOf(source)) for (const st of entry.styles[genre] ?? []) if (!out.some((s) => s.id === st.id)) out.push(st);
   return out;
 }
 
@@ -175,39 +207,47 @@ export interface StyleChoice {
   style: GenreStyle;
 }
 
-const appearanceCache = new Map<string, number>();
+/**
+ * Appearance counts, per genre schedule (the same array eraOf caches its walk under), then by `from:epoch`. Keyed by
+ * the genre order the count walks, so a station's rotation never reads the house counts and vice versa.
+ */
+const appearanceCaches = new WeakMap<readonly EraScheduleEntry[], Map<string, number>>();
 
-/** How many times this epoch's genre appeared in [from, epoch) (0 = first appearance since `from`). */
-function appearance(epoch: number, from: number): number {
+/** How many times this epoch's genre appeared in [from, epoch) (0 = first appearance since `from`), in `program`'s genre order. */
+function appearance(epoch: number, from: number, program: { readonly eras: readonly EraScheduleEntry[] }): number {
+  let cache = appearanceCaches.get(program.eras);
+  if (!cache) appearanceCaches.set(program.eras, (cache = new Map()));
   const key = `${from}:${epoch}`;
-  const hit = appearanceCache.get(key);
+  const hit = cache.get(key);
   if (hit !== undefined) return hit;
-  const idx = eraOf(epoch).index;
+  const idx = eraOf(epoch, program).index;
   let k = 0;
-  for (let e = from; e < epoch; e++) if (eraOf(e).index === idx) k++;
-  appearanceCache.set(key, k);
+  for (let e = from; e < epoch; e++) if (eraOf(e, program).index === idx) k++;
+  cache.set(key, k);
   return k;
 }
 
 /**
  * The style of a genre instance. When `era` is the epoch's own genre, its appearances since the list's fromEpoch
  * walk the list in force in order; for a forced genre (gallery, sketches) the epoch hash picks from that list.
- * `schedule` is for tests (a dummy appended entry); everything else uses STYLE_SCHEDULE.
+ * `source` is the program (default house): its style lists, and its genre order for "the epoch's own genre" and
+ * the appearance count. A bare style schedule is for tests (a dummy appended entry over the house genre order).
  */
-export function styleOf(era: Era, epoch: number, schedule: readonly StyleScheduleEntry[] = STYLE_SCHEDULE): StyleChoice {
+export function styleOf(era: Era, epoch: number, source?: StyleSource): StyleChoice {
   const e = Number.isFinite(epoch) ? Math.max(0, Math.floor(epoch)) : 0;
-  const { styles: list, fromEpoch } = styleListAt(era.id, e, schedule);
+  const program = erasOf(source);
+  const { styles: list, fromEpoch } = styleListAt(era.id, e, source);
   const n = list.length;
   let index: number;
   if (n === 1) index = 0;
-  else if (eraOf(e).index !== era.index) index = hash32(e, era.index, 0x5717) % n;
-  else index = appearance(e, Math.min(fromEpoch, e)) % n;
+  else if (eraOf(e, program).index !== era.index) index = hash32(e, era.index, 0x5717) % n;
+  else index = appearance(e, Math.min(fromEpoch, e), program) % n;
   return { index, style: list[index] };
 }
 
 /** Style by id within a genre, from every list ever defined (sketch scripts, tests). `index` is its position in GENRE_STYLES. */
-export function styleById(era: Era, id: string): StyleChoice {
-  const all = allStyles(era.id);
+export function styleById(era: Era, id: string, source?: StyleSource): StyleChoice {
+  const all = allStyles(era.id, source);
   const index = all.findIndex((s) => s.id === id);
   if (index < 0) throw new Error(`unknown style ${era.id}/${id}`);
   return { index, style: all[index] };

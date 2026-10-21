@@ -80,6 +80,10 @@ describe("fee harvest", () => {
     expect(pulseConfigFromEnv(base)!.harvest).toBeNull();
     expect(pulseConfigFromEnv({ ...base, FEE_FACTORY: FACTORY })!.harvest).toBeNull();
     expect(pulseConfigFromEnv({ ...base, FEE_FACTORY: FACTORY, LAUNCH_NUMBER: "2200", HARVEST_HOURS: "12" })!.harvest).toEqual({ factory: FACTORY, launchNumber: 2200n, everySec: 43200 });
+    expect(pulseConfigFromEnv({ ...base, FEE_FACTORY: FACTORY, LAUNCH_NUMBER: "2200" })!.harvest!.everySec).toBe(86400);
+    // empty or 0 = off, never "every 0 h"
+    expect(pulseConfigFromEnv({ ...base, FEE_FACTORY: FACTORY, LAUNCH_NUMBER: "2200", HARVEST_HOURS: "" })!.harvest).toBeNull();
+    expect(pulseConfigFromEnv({ ...base, FEE_FACTORY: FACTORY, LAUNCH_NUMBER: "2200", HARVEST_HOURS: "0" })!.harvest).toBeNull();
     expect(pulseConfigFromEnv(base)!.splitter).toBeNull();
     expect(pulseConfigFromEnv({ ...base, FEE_SPLITTER: "" })!.splitter).toBeNull();
     expect(pulseConfigFromEnv({ ...base, FEE_SPLITTER: SPLITTER })!.splitter).toBe(SPLITTER);

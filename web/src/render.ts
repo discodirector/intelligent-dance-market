@@ -132,7 +132,7 @@ const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec %
 /** One release frame at grid second `t`: the grid, the swaps' flashes, and a TRACK · SECTION · HEAT line on top. */
 function drawRelease(r: BuiltRelease, t: number) {
   const plan = r.plan;
-  const view = viewAt(plan.hits, t, r.seed);
+  const view = viewAt(plan.hits, t, r.seed, plan.program);
   const flashes = [];
   for (let i = 0; i < r.swaps.length; i++) {
     const flash = r.swaps[i].flash;

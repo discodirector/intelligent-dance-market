@@ -11,6 +11,8 @@ export default defineConfig({
       "@swarm-sequencer/core": fileURLToPath(new URL("../packages/core/src/index.ts", import.meta.url)),
       // Deployment records live with the contracts; switching chains = adding a file + a config entry.
       "@deployments": fileURLToPath(new URL("../contracts/deployments", import.meta.url)),
+      // Station registry, shared with the bot: adding a station = adding an entry there.
+      "@stations": fileURLToPath(new URL("../stations", import.meta.url)),
     },
   },
   optimizeDeps: { exclude: ["@swarm-sequencer/synth", "@swarm-sequencer/core"] },
@@ -19,7 +21,14 @@ export default defineConfig({
   build: {
     target: "es2022",
     chunkSizeWarningLimit: 900,
-    // bot.html is the bot's render page (bot/src/render); index.html and docs.html are the public site.
-    rollupOptions: { input: { main: fileURLToPath(new URL("index.html", import.meta.url)), docs: fileURLToPath(new URL("docs.html", import.meta.url)), bot: fileURLToPath(new URL("bot.html", import.meta.url)) } },
+    // bot.html is the bot's render page (bot/src/render); index.html, docs.html and stations.html are the public site.
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL("index.html", import.meta.url)),
+        docs: fileURLToPath(new URL("docs.html", import.meta.url)),
+        stations: fileURLToPath(new URL("stations.html", import.meta.url)),
+        bot: fileURLToPath(new URL("bot.html", import.meta.url)),
+      },
+    },
   },
 });

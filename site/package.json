@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "node scripts/check-stations.mjs && tsc --noEmit && vite build",
     "preview": "vite preview",
-    "check": "node scripts/check.mjs"
+    "check": "node scripts/check.mjs",
+    "check:stations": "node scripts/check-stations.mjs"
   },
   "dependencies": {
     "@swarm-sequencer/core": "*",

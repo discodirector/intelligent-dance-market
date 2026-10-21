@@ -55,6 +55,8 @@ export interface TimelineEntry {
   // mutation result (= Mutated event fields)
   track: number;
   step: number;
+  /** Accumulate mode: the pattern step actually written, when a spill moved it off `step` (core writeStep). */
+  writeStep?: number;
   on: boolean;
   bassNote: number;
   whale: boolean;
@@ -127,7 +129,8 @@ export function buildTimeline(swaps: RawSwap[], start?: State, rules: HookRules 
     const r = mutate(s, sw, undefined, opts);
     s = r.state;
     const tc = r.event.trackComplete;
-    const extra: Pick<TimelineEntry, "rules" | "trackComplete"> = rules === "v1" ? {} : { rules };
+    const extra: Pick<TimelineEntry, "rules" | "trackComplete" | "writeStep"> = rules === "v1" ? {} : { rules };
+    if (r.event.writeStep !== undefined && r.event.writeStep !== r.event.step) extra.writeStep = r.event.writeStep;
     if (tc) {
       extra.trackComplete = {
         trackNo: tc.trackNo, swaps: tc.swapCount - trackStart, swapCount: tc.swapCount, patternId: tc.patternId, root: tc.root,

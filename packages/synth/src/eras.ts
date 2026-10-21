@@ -259,39 +259,64 @@ export const ERAS: readonly Era[] = ERA_LIST;
  * owner's hand-picked opening); every later cycle is a seeded shuffle of the pool that never repeats a genre or
  * makes an A-B-A across the seam. Variations inside a genre (styles, timbres, phrases) do not touch this table.
  */
-export const ERA_SCHEDULE: readonly { fromEpoch: number; ids: readonly GenreId[] }[] = [
+/** One step of a genre schedule: from `fromEpoch` on, the cycles walk this pool. */
+export interface EraScheduleEntry {
+  fromEpoch: number;
+  ids: readonly GenreId[];
+}
+
+export const ERA_SCHEDULE: readonly EraScheduleEntry[] = [
   {
     fromEpoch: 0,
     ids: ["liquid", "wonky", "triphop", "lofihouse", "futuregarage", "electro", "drone", "ambientidm", "dubtechno", "acid"],
   },
 ];
 
-/** Genre pool in force at `epoch`: the last schedule entry that has started. */
-function poolAt(epoch: number): readonly Era[] {
-  let ids = ERA_SCHEDULE[0].ids;
-  for (const entry of ERA_SCHEDULE) if (entry.fromEpoch <= epoch) ids = entry.ids;
+/** Genre pool in force at `epoch` in `schedule`: the last entry that has started. */
+function poolAt(epoch: number, schedule: readonly EraScheduleEntry[]): readonly Era[] {
+  let ids = schedule[0].ids;
+  for (const entry of schedule) if (entry.fromEpoch <= epoch) ids = entry.ids;
   return ids.map(eraById);
 }
 
-const eraOrder: number[] = [];
+/**
+ * The genre index of every epoch walked so far, per genre schedule. Keyed by the schedule array itself (not by a
+ * program key): the order depends on nothing else, so two programs sharing a schedule share the walk, and a test
+ * program can never read the house cache. The house walk lives under ERA_SCHEDULE.
+ */
+const eraOrders = new WeakMap<readonly EraScheduleEntry[], number[]>();
 
 export function epochOf(state: { patternId: number }): number {
   return Math.floor((state.patternId >>> 0) / 4);
 }
 
-/** Deterministic era for an epoch: cycles of the pool in force, the first in schedule order, then shuffled. */
-export function eraOf(epoch: number): Era {
+/**
+ * Deterministic era for an epoch: cycles of the pool in force, the first in schedule order, then shuffled.
+ * `program` picks the genre schedule (a station plays a subset of the genres); omitted, the house program
+ * (ERA_SCHEDULE). Only `program.eras` is read, so this takes any Program (program.ts) without importing it.
+ * Any pool works. Three genres: the seam rule forces the same order every cycle. Two: no repeat, but A-B-A is
+ * unavoidable. One: the genre repeats.
+ */
+export function eraOf(epoch: number, program?: { readonly eras: readonly EraScheduleEntry[] }): Era {
+  const schedule = program?.eras ?? ERA_SCHEDULE;
+  let eraOrder = eraOrders.get(schedule);
+  if (!eraOrder) eraOrders.set(schedule, (eraOrder = []));
   const target = Number.isFinite(epoch) ? Math.max(0, Math.floor(epoch)) : 0;
   while (eraOrder.length <= target) {
     const start = eraOrder.length;
-    const pool = poolAt(start).map((era) => era.index);
+    const pool = poolAt(start, schedule).map((era) => era.index);
     const prev = start > 0 ? eraOrder[start - 1] : -1;
     const prev2 = start > 1 ? eraOrder[start - 2] : -1;
     // Across the seam: no repeat and no A-B-A. Reshuffle with the next seed until the cycle fits.
+    // Pools of 10 (house) take the first branch exactly as before launch: FROZEN_SHA256 pins it. Small station pools
+    // (2-3 genres) have few fitting orders (1 in 6 for three), so they get more tries, and two genres still avoid
+    // the repeat (an A-B-A cannot be avoided with two).
     let cycle = pool;
+    const small = pool.length < 4;
     for (let attempt = 0; start > 0; attempt++) {
       cycle = shuffledCycle(pool, start, attempt);
-      if (cycle.length < 3 || (cycle[0] !== prev && cycle[0] !== prev2 && cycle[1] !== prev) || attempt >= 63) break;
+      if (!small && ((cycle[0] !== prev && cycle[0] !== prev2 && cycle[1] !== prev) || attempt >= 63)) break;
+      if (small && (cycle.length < 2 || (cycle[0] !== prev && (cycle.length < 3 || (cycle[0] !== prev2 && cycle[1] !== prev))) || attempt >= 255)) break;
     }
     eraOrder.push(...cycle);
   }

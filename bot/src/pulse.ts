@@ -63,8 +63,9 @@ export function pulseConfigFromEnv(env: NodeJS.ProcessEnv = process.env): PulseC
     chainId: Number(env.LIVE_CHAIN_ID ?? 4663),
     send: (env.PULSE_SEND ?? "").toLowerCase() === "true",
     tickSec: Number(env.PULSE_TICK_SEC ?? 60),
+    // HARVEST_HOURS unset = 24 h; set but empty or 0 = harvest off (an empty value once meant "every 0 h").
     harvest:
-      env.FEE_FACTORY && env.LAUNCH_NUMBER
+      env.FEE_FACTORY && env.LAUNCH_NUMBER && Number(env.HARVEST_HOURS ?? 24) > 0
         ? { factory: env.FEE_FACTORY as `0x${string}`, launchNumber: BigInt(env.LAUNCH_NUMBER), everySec: Number(env.HARVEST_HOURS ?? 24) * 3600 }
         : null,
     splitter: (env.FEE_SPLITTER as `0x${string}` | undefined) || null,
@@ -109,9 +110,18 @@ export async function pulseTick(c: PulseConfig, client: PublicClient, env: NodeJ
   // Simulate first: a race with a real swap or another keeper reverts here (NotIdle) instead of on chain.
   const { request } = await client.simulateContract({ address: c.treasury, abi: TREASURY_ABI, functionName: "pulse", account });
   const wallet = createWalletClient({ account, chain: chainFor(c), transport: http(c.rpcUrl) });
-  const hash = await wallet.writeContract(request);
+  const hash = await send(client, wallet, request);
   log(`sent ${what} from ${account.address}: ${hash}`);
+  const { status } = await client.waitForTransactionReceipt({ hash });
+  if (status !== "success") log(`pulse ${hash} reverted on chain`);
   return hash;
+}
+
+/** Sends with the gas estimate + 30%. A pulse's swap can cross more ticks than when it was estimated, and a bare
+ *  estimate once ran out of gas on chain (119,765 of 122,645). */
+async function send(client: PublicClient, wallet: { writeContract: (r: any) => Promise<`0x${string}`> }, request: any) {
+  const gas = ((await client.estimateContractGas(request)) * 13n) / 10n;
+  return wallet.writeContract({ ...request, gas });
 }
 
 /** Reads PULSE_KEY at send time only; never stored or logged. */
@@ -130,14 +140,14 @@ export async function harvestTick(c: PulseConfig, client: PublicClient, lastAt: 
   const account = sendAccount(env);
   const { request } = await client.simulateContract({ address: h.factory, abi: FACTORY_ABI, functionName: "claimFees", args: [h.launchNumber], account });
   const wallet = createWalletClient({ account, chain: chainFor(c), transport: http(c.rpcUrl) });
-  const hash = await wallet.writeContract(request);
+  const hash = await send(client, wallet, request);
   log(`sent ${what} from ${account.address}: ${hash}`);
   if (c.splitter) {
     // split() only after the payout is mined, so it sees the fresh balances.
     await client.waitForTransactionReceipt({ hash });
     const sim = await client.simulateContract({ address: c.splitter, abi: SPLITTER_ABI, functionName: "split", account });
     const [toTreasury, toTeam, burned] = sim.result;
-    log(`sent split on ${c.splitter}: ${eth(toTreasury)} to treasury, ${eth(toTeam)} to team, ${Number(burned / 10n ** 15n) / 1e3} IDM burned: ${await wallet.writeContract(sim.request)}`);
+    log(`sent split on ${c.splitter}: ${eth(toTreasury)} to treasury, ${eth(toTeam)} to team, ${Number(burned / 10n ** 15n) / 1e3} IDM burned: ${await send(client, wallet, sim.request)}`);
   }
   return now;
 }
@@ -153,7 +163,7 @@ export async function burnTick(c: PulseConfig, client: PublicClient, lastAt: num
   const account = sendAccount(env);
   const { request } = await client.simulateContract({ address: c.treasury, abi: TREASURY_ABI, functionName: "burn", account });
   const wallet = createWalletClient({ account, chain: chainFor(c), transport: http(c.rpcUrl) });
-  log(`sent ${what} from ${account.address}: ${await wallet.writeContract(request)}`);
+  log(`sent ${what} from ${account.address}: ${await send(client, wallet, request)}`);
   return now;
 }
 

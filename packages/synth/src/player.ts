@@ -14,6 +14,7 @@ import {
 import { ceilingCurve, MASTER_CEILING, MixChain, OfflineReaper, setOfflineReaper, VoiceEngine } from "./engine.ts";
 import { FORM_BARS } from "./arrange.ts";
 import { crossfadeSeconds, epochOf, eraById, eraOf, type Era } from "./eras.ts";
+import { HOUSE_PROGRAM, type Program } from "./program.ts";
 import { initialState, type SequencerState } from "./state.ts";
 import type { ReleasePlan } from "./release.ts";
 
@@ -29,6 +30,11 @@ export interface EraView {
   name: string;
   /** True while two era engines are still crossfading. */
   fading: boolean;
+}
+
+export interface LivePlayerOptions {
+  /** What the player plays (program.ts). Fixed for the player's life: a new station is a new player. Default house. */
+  program?: Program;
 }
 
 export interface LivePlayer {
@@ -59,6 +65,8 @@ export interface LivePlayer {
 export interface RenderOptions {
   /** Force one era for the whole render. Omit to follow the epoch of each state. */
   eraId?: string;
+  /** What the render plays (program.ts): genre order and style lists, for every step and engine. Default house. */
+  program?: Program;
   /** First bar of the 32-bar song form (SPEC §4.4). Short clips start in the build. */
   barOffset?: number;
 }
@@ -114,6 +122,8 @@ class EraRig {
     liveFade: boolean,
     /** With `eraId`: every engine plays this genre instance (epoch), whatever the states' epochs. Releases only. */
     private readonly instance: number | null = null,
+    /** Genre order and style lists of every engine in this rig. */
+    readonly program: Program = HOUSE_PROGRAM,
   ) {
     this.eraId = eraId;
     this.live = typeof AudioContext !== "undefined" && ctx instanceof AudioContext;
@@ -193,7 +203,7 @@ class EraRig {
   }
 
   private eraFor(state: SequencerState): Era {
-    return this.eraId ? eraById(this.eraId) : eraOf(epochOf(state));
+    return this.eraId ? eraById(this.eraId) : eraOf(epochOf(state), this.program);
   }
 
   private levelAt(slot: Slot, time: number): number {
@@ -233,7 +243,7 @@ class EraRig {
   }
 
   private create(era: Era, time: number, level: number, schedule: boolean): Slot {
-    const engine = new VoiceEngine(this.ctx, era.index, this.instance);
+    const engine = new VoiceEngine(this.ctx, era.index, this.instance, this.program);
     const gain = this.ctx.createGain();
     stereo(gain);
     const held = Math.max(SILENT, level);
@@ -285,8 +295,9 @@ class EraRig {
  * Live scheduler. `setState` and `setEraOverride` apply on the next step that
  * has not been scheduled yet, and neither rebuilds a playing graph.
  */
-export function createLivePlayer(ctx: AudioContext): LivePlayer {
-  const rig = new EraRig(ctx, null, true);
+export function createLivePlayer(ctx: AudioContext, options?: LivePlayerOptions): LivePlayer {
+  const program = options?.program ?? HOUSE_PROGRAM;
+  const rig = new EraRig(ctx, null, true, null, program);
   rig.connect(ctx.destination);
 
   let committed: SequencerState | null = null;
@@ -321,8 +332,8 @@ export function createLivePlayer(ctx: AudioContext): LivePlayer {
         state = trackHold;
       }
     }
-    const { tempo, duration } = genreStep(state, rig.override);
-    const character = stepCharacter(state.patternId, step, rig.override);
+    const { tempo, duration } = genreStep(state, rig.override, null, program);
+    const character = stepCharacter(state.patternId, step, rig.override, null, program);
     const nowSec = clockSec != null ? clockSec : Date.now() / 1000;
     const idleStep = advanceIdle(idleMem, state, nowSec, step);
     idleMem = idleStep.mem;
@@ -410,13 +421,13 @@ export function createLivePlayer(ctx: AudioContext): LivePlayer {
     },
     getTransport() {
       const fallback = committed ?? initialState();
-      if (!running) return { state: fallback, step: 0, bar: 0, phase: 0, time: 0, bpm: genreStep(fallback, rig.override).tempo };
+      if (!running) return { state: fallback, step: 0, bar: 0, phase: 0, time: 0, bpm: genreStep(fallback, rig.override, null, program).tempo };
       const now = ctx.currentTime;
       let current: Scheduled | null = null;
       for (const item of scheduled) {
         if (item.gridTime <= now) current = item;
       }
-      if (!current) return { state: fallback, step: 0, bar: 0, phase: 0, time: now, bpm: genreStep(fallback, rig.override).tempo };
+      if (!current) return { state: fallback, step: 0, bar: 0, phase: 0, time: now, bpm: genreStep(fallback, rig.override, null, program).tempo };
       const phase = current.duration > 0 ? Math.min(0.999, Math.max(0, (now - current.gridTime) / current.duration)) : 0;
       return {
         state: current.state,
@@ -448,7 +459,7 @@ export async function renderToBuffer(
   sampleRate = OFFLINE_RATE,
   options?: RenderOptions,
 ): Promise<AudioBuffer> {
-  const bpm = genreStep(state, options?.eraId).tempo;
+  const bpm = genreStep(state, options?.eraId, null, options?.program).tempo;
   const seconds = Math.max(0.05, bars * 4 * (60 / bpm));
   return renderTimelineToBuffer([{ time: 0, state }], seconds, sampleRate, options);
 }
@@ -471,9 +482,10 @@ export async function renderTimelineToBuffer(
   const length = Math.max(1, Math.ceil(sampleRate * Math.max(0.05, seconds)));
   const ctx = new OfflineAudioContext({ numberOfChannels: 2, length, sampleRate });
   const eraId = options?.eraId ?? null;
-  const rig = new EraRig(ctx, eraId, false);
+  const program = options?.program ?? HOUSE_PROGRAM;
+  const rig = new EraRig(ctx, eraId, false, null, program);
   rig.connect(ctx.destination);
-  const hits = planSteps(points, seconds, eraId, options?.barOffset ?? 0);
+  const hits = planSteps(points, seconds, eraId, options?.barOffset ?? 0, program);
   for (const hit of hits) {
     if (hit.time < seconds) rig.play(hit);
   }
@@ -497,8 +509,9 @@ export async function renderReleaseToBuffer(plan: ReleasePlan, sampleRate = OFFL
   const seconds = Math.max(0.05, plan.seconds);
   const length = Math.max(1, Math.ceil(sampleRate * seconds));
   const ctx = new OfflineAudioContext({ numberOfChannels: 2, length, sampleRate });
-  // One genre instance for the whole release: the genre, style and tonic the track finished in (SPEC §4.6).
-  const rig = new EraRig(ctx, plan.genre.era, false, plan.genre.epoch);
+  // One genre instance for the whole release: the genre, style and tonic the track finished in (SPEC §4.6), in the
+  // program the plan was made with (its hits already carry that program's tempo and feel).
+  const rig = new EraRig(ctx, plan.genre.era, false, plan.genre.epoch, plan.program);
   // Release master trim, after the ceiling: full-heat releases measured ~1 dB over the genres' loudest-3s target.
   const trim = ctx.createGain();
   trim.gain.value = 10 ** (RELEASE_TRIM_DB / 20);
@@ -537,8 +550,9 @@ export function projectTimeline(
   seconds: number,
   at: number,
   eraId?: string | null,
+  program: Program = HOUSE_PROGRAM,
 ): TransportView {
-  const hits = planSteps(points, Math.max(seconds, at + 0.001), eraId);
+  const hits = planSteps(points, Math.max(seconds, at + 0.001), eraId, 0, program);
   const fallback = points[0]?.state ?? initialState();
-  return viewAt(hits, at, fallback);
+  return viewAt(hits, at, fallback, program);
 }

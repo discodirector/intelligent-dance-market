@@ -4,6 +4,8 @@
 import sepolia from "@deployments/sepolia.json";
 import sepoliaV2 from "@deployments/sepolia-v2.json";
 import { isRulesVersion, type RulesVersion } from "./rules";
+import type { VirtualPool } from "./data/virtual";
+import { STATIONS, stationNetwork } from "./stations";
 
 export interface Network {
   key: string;
@@ -31,12 +33,19 @@ export interface Network {
   launchUrl: string | null;
   /** PulseTreasury (contracts/TREASURY-RUNBOOK.md): its swaps are labelled PULSE. null until deployed. */
   treasury: `0x${string}` | null;
+  /** A station without the hook: this pool's swaps run through the v2 rules in the browser (data/virtual.ts). */
+  virtual?: VirtualPool;
 }
 
 /** Native ETH as a v4 currency. */
 export const NATIVE_ETH = "0x0000000000000000000000000000000000000000" as const;
 
 export const NETWORKS: Record<string, Network> = {
+  // Stations without the hook (stations/registry.json, every kind but "hook": v4, v3, v2 and forks): ?net=<key> plays
+  // the pool's swaps through the v2 rules in the browser from the entry's genesis block (data/virtual.ts). First:
+  // IMD/ETH on Ethereum (2026-10-21, asked for by IMD's founder, genesis ~7 days before). Spread first, so the
+  // networks below win a key clash.
+  ...Object.fromEntries(STATIONS.filter((s) => s.kind !== "hook").map((s) => [s.key, stationNetwork(s)])),
   sepolia: {
     key: "sepolia",
     label: "SEPOLIA",

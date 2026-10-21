@@ -99,13 +99,14 @@ export async function withTrackStart(
   entries: TimelineEntry[],
   fetchEarlier: (beforeBlock: number) => Promise<TimelineEntry[]>,
   maxSteps = 12,
+  trackNo?: number | null,
 ): Promise<{ entries: TimelineEntry[]; partial: boolean }> {
   let tape = entries;
   for (let i = 0; i < maxSteps; i++) {
-    if (trackStartKnown(tape)) return { entries: tape, partial: false };
+    if (trackStartKnown(tape, trackNo)) return { entries: tape, partial: false };
     const earlier = await fetchEarlier(tape[0].blockNumber);
     if (earlier.length === 0) break;
     tape = [...earlier, ...tape];
   }
-  return { entries: tape, partial: !trackStartKnown(tape) };
+  return { entries: tape, partial: !trackStartKnown(tape, trackNo) };
 }

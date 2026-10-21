@@ -13,7 +13,10 @@ contracts/.env*
 design-ref/
 sim/stress/
 sim/release/
+sim/stations/
 
 # Pulse keeper secrets (bot/pulse.env.example)
 pulse.env
 bot/.imd-launch.json
+# Swarm style-pack orders per station (bot/scripts/swarm-style.ts): request tokens and job ids
+bot/.swarm-style/

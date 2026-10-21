@@ -1,6 +1,7 @@
 import { FORM_BARS } from "./arrange.ts";
 import { eraById, eraOf, epochOf, genreTempo, type Era } from "./eras.ts";
 import { hash32 } from "./hash.ts";
+import { HOUSE_PROGRAM, type Program } from "./program.ts";
 import { styleFeel, styleOf } from "./styles.ts";
 import { idleStage, type IdleGains } from "./idle.ts";
 import { initialState, type SequencerState } from "./state.ts";
@@ -80,26 +81,38 @@ export function stepDuration(bpm: number): number {
  * plus a hash of patternId and step. Odd 16ths are delayed; the grid itself
  * stays one 16th note per step. `eraId` forces a gallery preview.
  */
-/** The genre that plays this page: the override, else the epoch's. */
-export function eraAt(patternId: number, eraId?: string | null): Era {
-  return eraId ? eraById(eraId) : eraOf(epochOf({ patternId: patternId >>> 0 }));
+/** The genre that plays this page: the override, else the epoch's in `program`'s genre order. */
+export function eraAt(patternId: number, eraId?: string | null, program: Program = HOUSE_PROGRAM): Era {
+  return eraId ? eraById(eraId) : eraOf(epochOf({ patternId: patternId >>> 0 }), program);
 }
 
 /**
  * One 16th at the genre tempo of this state (the chain bpm mapped into the genre's range). `styleEpoch` pins the
  * instance whose style sets the feel (a release plays the epoch its track finished in); default: the state's epoch.
+ * `program` picks genre and style (default house); every step of one render passes the same one.
  */
-export function genreStep(state: { bpm: number; patternId: number }, eraId?: string | null, styleEpoch?: number | null): { tempo: number; duration: number } {
-  const era = eraAt(state.patternId, eraId);
-  const feel = styleFeel(era, styleOf(era, styleEpoch ?? epochOf(state)).style);
+export function genreStep(
+  state: { bpm: number; patternId: number },
+  eraId?: string | null,
+  styleEpoch?: number | null,
+  program: Program = HOUSE_PROGRAM,
+): { tempo: number; duration: number } {
+  const era = eraAt(state.patternId, eraId, program);
+  const feel = styleFeel(era, styleOf(era, styleEpoch ?? epochOf(state), program).style);
   const tempo = genreTempo(era, state.bpm, feel.bpm);
   return { tempo, duration: stepDuration(tempo) };
 }
 
-export function stepCharacter(patternId: number, step: number, eraId?: string | null, styleEpoch?: number | null): StepCharacter {
+export function stepCharacter(
+  patternId: number,
+  step: number,
+  eraId?: string | null,
+  styleEpoch?: number | null,
+  program: Program = HOUSE_PROGRAM,
+): StepCharacter {
   const id = patternId >>> 0;
-  const era = eraAt(id, eraId);
-  const feel = styleFeel(era, styleOf(era, styleEpoch ?? epochOf({ patternId: id })).style);
+  const era = eraAt(id, eraId, program);
+  const feel = styleFeel(era, styleOf(era, styleEpoch ?? epochOf({ patternId: id }), program).style);
   const h = hash32(id, step, 0xa11);
   const h2 = hash32(id, step, 0x9e37);
   const micro = ((h % 1000) / 999 - 0.5) * 0.012 * feel.microScale;
@@ -187,7 +200,13 @@ export function stateAt(points: readonly TimelinePoint[], t: number): SequencerS
 
 /** Walk the grid from t=0. Step length follows the bpm of the state at that grid time. */
 /** `barOffset` starts the song form later (SPEC §4.4); short clips use it to open in the build. */
-export function planSteps(points: readonly TimelinePoint[], seconds: number, eraId?: string | null, barOffset = 0): StepHit[] {
+export function planSteps(
+  points: readonly TimelinePoint[],
+  seconds: number,
+  eraId?: string | null,
+  barOffset = 0,
+  program: Program = HOUSE_PROGRAM,
+): StepHit[] {
   const hits: StepHit[] = [];
   let grid = 0;
   let index = 0;
@@ -219,8 +238,8 @@ export function planSteps(points: readonly TimelinePoint[], seconds: number, era
         state = trackPending.held;
       }
     }
-    const { tempo, duration } = genreStep(state, eraId);
-    const character = stepCharacter(state.patternId, step, eraId);
+    const { tempo, duration } = genreStep(state, eraId, null, program);
+    const character = stepCharacter(state.patternId, step, eraId, null, program);
     let time = grid;
     if (step % 2 === 1) time += (character.swing - 0.5) * duration;
     time += character.micro;
@@ -266,9 +285,9 @@ export interface TransportView {
   bpm: number;
 }
 
-export function viewAt(hits: readonly StepHit[], t: number, fallback: SequencerState): TransportView {
+export function viewAt(hits: readonly StepHit[], t: number, fallback: SequencerState, program: Program = HOUSE_PROGRAM): TransportView {
   if (hits.length === 0) {
-    return { state: fallback, step: 0, bar: 0, phase: 0, time: t, bpm: genreStep(fallback).tempo };
+    return { state: fallback, step: 0, bar: 0, phase: 0, time: t, bpm: genreStep(fallback, null, null, program).tempo };
   }
   let lo = 0;
   let hi = hits.length - 1;

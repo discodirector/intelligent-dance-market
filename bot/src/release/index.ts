@@ -41,6 +41,8 @@ export interface ReleaseOpts {
   /** Console lines under the module (defaults: the page's own). */
   title?: string;
   subtitle?: string;
+  /** Station label (station.ts): the module shows it and switches to the blue theme. */
+  station?: string;
 }
 
 export interface ReleaseResult {
@@ -164,7 +166,7 @@ async function renderFrames(
     await page.goto(`${srv.base}/bot.html`, { waitUntil: "load" });
     await page.waitForFunction(() => typeof (window as any).__setupRelease === "function", null, { timeout: 120_000 });
     const info = await page.evaluate((a) => (window as any).__setupRelease(a), {
-      ...req, timeline: o.timeline, width: size, height: size, fps, wavUrl: WAV_PATH, title: o.title, subtitle: o.subtitle,
+      ...req, timeline: o.timeline, width: size, height: size, fps, wavUrl: WAV_PATH, title: o.title, subtitle: o.subtitle, station: o.station,
     });
     if (Math.abs(info.seconds - seconds) > 1e-6) throw new Error(`bot.html planned ${info.seconds}s, the WAV is ${seconds}s (site and web out of sync?)`);
     const frames = Math.round(fps * seconds);

@@ -24,3 +24,8 @@ body.bot *, body.bot *::before, body.bot *::after { animation: none !important; 
 .bot.release .rel-progress.dropped i { background: var(--amber); box-shadow: 0 0 4px var(--amber); }
 .bot.release .leds li[data-stage="drop"].on b { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
 .bot.release .leds li[data-stage="outro"].on b { background: var(--phos); box-shadow: 0 0 6px var(--phos); }
+
+/* A station's release (not the $IDM hook): blue phosphor instead of green, so the two never look alike.
+   Amber stays for the heat meter. Same colours as the imd-eth theme in stations/registry.json (the player applies
+   the registry theme through stations.ts applyTheme). */
+html.station-alt { --phos: #6fd8ff; --phos-rgb: 111, 216, 255; --phos-dim: #2a7f9c; --phos-ghost: #0b2530; --lcd-bg: #041218; }

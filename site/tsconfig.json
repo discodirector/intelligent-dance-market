@@ -21,6 +21,9 @@
       "@deployments/*": [
         "../contracts/deployments/*"
       ],
+      "@stations/*": [
+        "../stations/*"
+      ],
       "@swarm-sequencer/core": [
         "../packages/core/src/index.ts"
       ],

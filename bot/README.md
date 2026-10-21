@@ -9,7 +9,7 @@ post    : DRY_RUN=true (default) -> out/queue/<ts>_<kind>/{video.mp4,caption.txt
 release : finished v2 track (SPEC §4.6) -> web/render.html release mode -> <trackNo>.wav + .json
           (+ .mp4 1080x1080: frames from site/bot.html, the IDM-16 module of the other posts)
 schedule: SPEC §5 rules (src/rules.ts): pre-launch teaser every 6h; live snapshot every 6h,
-          Movement/whale max 1/h, cap 6 posts / rolling 24h; v2 track complete -> release post
+          Movement/whale max 1/2h on its own clock (clip around the latest whale), v2 track complete -> release post for every track as soon as it is rendered (queue, oldest first), cap 24 posts / rolling 24h
 ```
 
 ## Commands (from repo root, after `npm install`)
@@ -129,7 +129,7 @@ newer synth may sound different. Test tape: `web/public/release-test.timeline.js
 (`npx tsx bot/scripts/release-tape.ts`: core mutate under the V2 rules, three completed tracks).
 
 **Track post.** With `HOOK_RULES=v2`, when the scheduler sees a new `TrackComplete` and `decide` picks `track`
-(beats movements and snapshots, shares the 1/h event gap, counts toward 6 posts/24h), `produceRelease`
+(beats movements and snapshots; every TrackComplete is queued and posted oldest first, one per tick; counts toward 24 posts/24h), `produceRelease`
 (`src/pipeline.ts`):
 1. reads the hook's logs back from the context window, `TRACK_LOOKBACK_BLOCKS` (30k) at a time, up to
    `TRACK_LOOKBACK_STEPS` (24) times, until the track's start is on the tape (previous `TrackComplete`, or swap #1);

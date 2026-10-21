@@ -26,10 +26,13 @@
       <a href="#how">HOW</a>
       <a href="#eras">GENRES</a>
       <a href="#onchain">ONCHAIN</a>
-      <a href="/docs.html">DOCS</a>
+      <a href="/docs">DOCS</a>
       <a href="https://x.com/theidmfun" target="_blank" rel="noopener">X ↗</a>
     </nav>
-    <a class="btn-outline" id="src-switch" href="./" hidden>LIVE</a>
+    <div class="top-actions">
+      <a class="btn-outline" id="src-switch" href="./" hidden>LIVE</a>
+      <a class="btn-stations" href="/stations" title="All stations on air"><span class="led" aria-hidden="true"></span>STATIONS<span class="arr" aria-hidden="true">▸</span></a>
+    </div>
   </header>
 
   <main>
@@ -43,8 +46,11 @@
             <span class="eyebrow">INTELLIGENT DANCE MARKET</span>
             <h1>IDM-16 <em>swarm sequencer</em></h1>
           </div>
-          <div class="panel-meta">
-            <span class="dot" id="net-dot"></span><span id="net-status">CONNECTING</span>
+          <div class="panel-side">
+            <div class="station-tag" id="station-tag" hidden><span class="silk">ON AIR</span><b id="station-name"></b><span class="chain" id="station-chain"></span></div>
+            <div class="panel-meta">
+              <span class="dot" id="net-dot"></span><span id="net-status">CONNECTING</span>
+            </div>
           </div>
         </div>
 
@@ -127,7 +133,7 @@
           <span class="spacer"></span>
           <span class="legend"><i class="g"></i>buy</span><span class="legend"><i class="r"></i>sell</span><span class="legend"><i class="a"></i>whale</span>
         </div>
-        <div class="console-intro">IDM swarm sequencer<br /><span>every trade is a note · reading the hook</span></div>
+        <div class="console-intro">IDM swarm sequencer<br /><span>every trade is a note · reading the hook · times in UTC</span></div>
         <ol class="log" id="log" aria-live="polite"></ol>
         <div class="prompt">&gt; <span class="caret"></span> <span class="muted">listening for Mutated(…)</span></div>
       </div>

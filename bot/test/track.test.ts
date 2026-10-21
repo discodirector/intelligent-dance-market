@@ -5,7 +5,7 @@ import { decodeFor } from "../src/lib/hookRules.ts";
 import { factsFromTimeline } from "../src/lib/facts.ts";
 import { templateCaption, validateCaption, MAX_LEN } from "../src/caption/index.ts";
 import { decide, H, type SchedState } from "../src/rules.ts";
-import { AFTER_DROP, trackSubtitle, trackWindow } from "../src/lib/track.ts";
+import { AFTER_DROP, MOVEMENT_AFTER, MOVEMENT_BEFORE, movementWindow, trackSubtitle, trackWindow } from "../src/lib/track.ts";
 
 const tl: TimelineEntry[] = JSON.parse(readFileSync(new URL("../data/imd-eth-7d.timeline.json", import.meta.url), "utf8"));
 const tape: RawSwap[] = tl.map((e) => ({ isBuy: e.isBuy, quoteAmt: quoteAmtOf(e), tick: e.tick, blockNumber: BigInt(e.blockNumber), timestamp: e.ts }));
@@ -63,12 +63,22 @@ describe("track complete post", () => {
     expect(win.length - 1 - at).toBeLessThanOrEqual(AFTER_DROP);
     expect(trackWindow(tl)).toBe(tl);
   });
-  it("track beats movement and shares its 1h gap", () => {
+  it("track beats movement and posts when ready; movements keep their own 2h clock", () => {
     const T = 1_800_000_000_000;
     const st = (posts: [number, any][]): SchedState => ({ posts: posts.map(([at, kind]) => ({ at, kind })) });
     expect(decide(T, st([[T - 7 * H, "snapshot"]]), { live: true, newMovements: 2, newTracks: 1 })).toBe("track");
-    expect(decide(T, st([[T - 30 * 60_000, "track"], [T - H, "snapshot"]]), { live: true, newMovements: 2, newTracks: 0 })).toBeNull();
-    expect(decide(T, st([[T - 30 * 60_000, "movement"], [T - H, "snapshot"]]), { live: true, newMovements: 0, newTracks: 1 })).toBeNull();
-    expect(decide(T, st([[T - 61 * 60_000, "movement"], [T - H, "snapshot"]]), { live: true, newMovements: 0, newTracks: 1 })).toBe("track");
+    expect(decide(T, st([[T - 30 * 60_000, "track"], [T - H, "movement"], [T - H, "snapshot"]]), { live: true, newMovements: 2, newTracks: 0 })).toBeNull();
+    expect(decide(T, st([[T - 2 * 60_000, "track"], [T - H, "snapshot"]]), { live: true, newMovements: 0, newTracks: 1 })).toBe("track");
+    expect(decide(T, st([[T - 30 * 60_000, "movement"], [T - H, "snapshot"]]), { live: true, newMovements: 0, newTracks: 1 })).toBe("track");
+  });
+  it("movement post: the window around the latest whale movement", () => {
+    const tape = Array.from({ length: 200 }, (_, i) => ({ movement: i === 40 || i === 120 }) as any);
+    const win = movementWindow(tape);
+    expect(win.length).toBe(MOVEMENT_BEFORE + 1 + MOVEMENT_AFTER);
+    expect(win[MOVEMENT_BEFORE]).toBe(tape[120]);
+    // near the end of the tape: whatever follows
+    const late = movementWindow(tape.slice(0, 125));
+    expect(late.at(-1)).toBe(tape[124]);
+    expect(movementWindow(tape.slice(0, 30))).toHaveLength(30);
   });
 });

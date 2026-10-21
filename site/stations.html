@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Stations — Intelligent Dance Market</title>
+  <meta name="description" content="Stations on air at theidm.fun: each one plays a token's Uniswap pool through the $IDM rules. Every trade is a note." />
+  <meta name="theme-color" content="#050605" />
+  <meta name="twitter:site" content="@theidmfun" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23050605'/%3E%3Crect x='2' y='9' width='3' height='5' fill='%2365f08c'/%3E%3Crect x='6.5' y='5' width='3' height='9' fill='%23e8e2cf'/%3E%3Crect x='11' y='2' width='3' height='12' fill='%2365f08c'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=VT323&display=swap" rel="stylesheet" />
+</head>
+<body class="stations-page">
+  <canvas class="bg-floor" id="bg-floor" aria-hidden="true"></canvas>
+  <header class="top">
+    <a class="brand" href="/" aria-label="Intelligent Dance Market home">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><rect x="3" y="14" width="4" height="7"/><rect x="10" y="8" width="4" height="13" class="mid"/><rect x="17" y="3" width="4" height="18"/><rect x="1" y="22.4" width="22" height="1.2" class="base"/></svg>
+      </span>
+      <span class="word">IDM</span>
+    </a>
+    <nav class="nav">
+      <a href="/">PLAYER</a>
+      <a href="/stations" aria-current="page">STATIONS</a>
+      <a href="/docs">DOCS</a>
+      <a href="https://x.com/theidmfun" target="_blank" rel="noopener">X ↗</a>
+    </nav>
+    <a class="btn-outline" href="/">OPEN THE PLAYER</a>
+  </header>
+
+  <main class="stations">
+    <div class="st-intro">
+      <p class="eyebrow">INTELLIGENT DANCE MARKET · STATIONS</p>
+      <h1>Stations on air</h1>
+      <p class="lede">Each station plays one token's pool through the $IDM rules. Every trade is a note.</p>
+      <p class="st-note">One station plays at a time: LISTEN opens it in the player. This list plays no sound.</p>
+    </div>
+
+    <section class="st-list" aria-label="Stations on air">
+      <div class="section-head"><h2>ON AIR</h2><span id="st-count"></span></div>
+      <div class="st-grid" id="st-grid"></div>
+    </section>
+
+    <section class="st-pitch" id="offer">
+      <p class="eyebrow">STATIONS · SOON</p>
+      <h2 class="st-big">Every trade is a note. <span>Now any token can have its own radio.</span></h2>
+
+      <ol class="st-steps">
+        <li class="st-step">
+          <span class="st-num">01</span>
+          <h3>Point it at a pool</h3>
+          <div class="st-chips"><b>ethereum</b><b>base</b><b>arbitrum</b><b>robinhood</b><b>monad</b></div>
+          <div class="st-chips pools"><b>uniswap v2</b><b>uniswap v3</b><b>uniswap v4</b></div>
+          <p>No hook and no permission needed: swap logs are public. Every buy and sell on the pool becomes a kick, a snare, a hat or a bass note.</p>
+        </li>
+        <li class="st-step swarm">
+          <span class="st-num">02</span>
+          <h3>The IMD swarm writes its sound</h3>
+          <p class="st-stamp">SOUND BY THE IMD SWARM</p>
+          <p>A style order goes to the IMD swarm. Back comes the station's own sound: drums, synths and space that no other token has. Nothing goes on air unheard.</p>
+        </li>
+        <li class="st-step">
+          <span class="st-num">03</span>
+          <h3>On air 24/7</h3>
+          <p>The station plays on theidm.fun around the clock, listed here in its own colours. Holders open one link and hear their market play.</p>
+        </li>
+      </ol>
+    </section>
+
+    <section class="st-gets">
+      <div class="section-head"><h2>WHAT YOU GET</h2><span>soon</span></div>
+      <ol class="st-list6">
+        <li><span>01</span>hear the rhythm your token trades to</li>
+        <li><span>02</span>its own radio on theidm.fun</li>
+        <li><span>03</span>on air 24/7</li>
+        <li><span>04</span>a sound no other token has, written by the IMD swarm</li>
+        <li><span>05</span>other communities discover your token</li>
+        <li><span>06</span>a new way for holders and traders to feel the market</li>
+      </ol>
+      <div class="st-plus">
+        <b>STATION+</b><span class="soon">soon</span>
+        <p>Everything in Station, plus a place in the 24/7 YouTube radio rotation, finished tracks posted on X with the token tagged, and a higher spot on this list.</p>
+      </div>
+    </section>
+
+    <section class="st-price">
+      <div class="section-head"><h2>PRICE</h2><span>soon · paid in stables · launch prices</span></div>
+      <div class="table-term big">
+        <div class="tt-head">&gt; price · soon · paid in stables · launch prices</div>
+        <table>
+          <tbody>
+            <tr><td>setup, once</td><td><b>$50 + 1.5 IMD</b> <s>$100 + 3 IMD</s><em>the IMD part pays the swarm, at the rate on the day of the order</em></td></tr>
+            <tr><td>first month</td><td><b>included</b></td></tr>
+            <tr><td>monthly</td><td><b>$30</b> <s>$50</s></td></tr>
+            <tr><td>3 months</td><td><b>$75</b> <s>$125</s></td></tr>
+            <tr><td>station+</td><td><b class="a">soon</b></td></tr>
+          </tbody>
+        </table>
+        <p class="tt-note">Not renewed? The station goes off air and keeps its sound. Renewing brings it back, no new setup.</p>
+      </div>
+    </section>
+
+    <section class="st-holders">
+      <div class="section-head"><h2>WHAT HOLDERS GET</h2><span>every fee and subscription splits three ways</span></div>
+      <div class="st-thirds">
+        <div class="third idm"><b>1/3</b><span>buys back and burns <em>$IDM</em></span></div>
+        <div class="third imd"><b>1/3</b><span>buys back and burns <em>IMD</em></span></div>
+        <div class="third infra"><b>1/3</b><span>pays for the <em>infrastructure</em></span></div>
+      </div>
+      <p class="st-note big">More stations on air, less supply of both tokens.</p>
+    </section>
+
+    <section class="st-apply" id="apply">
+      <div class="section-head"><h2>GET A STATION FOR YOUR TOKEN</h2><span>uniswap v2 · v3 · v4 · ethereum, base, arbitrum, robinhood chain, monad</span></div>
+      <div class="st-apply-body">
+        <div class="st-apply-text">
+          <p>Nothing goes on air unheard, and a station whose token rugs is switched off. Every token has to pass these checks.</p>
+          <p class="st-cta">Applications open soon. Follow <a href="https://x.com/theidmfun" target="_blank" rel="noopener">@theidmfun</a></p>
+        </div>
+        <div class="table-term big">
+          <div class="tt-head">&gt; eligibility · every check must pass</div>
+          <table>
+            <tbody>
+              <tr><td>market cap</td><td><b>&ge; $50k</b></td></tr>
+              <tr><td>holders</td><td><b>&ge; 100</b></td></tr>
+              <tr><td>pool liquidity</td><td><b>&ge; $20k</b></td></tr>
+              <tr><td>token age</td><td><b>&ge; 7 days</b></td></tr>
+              <tr><td>sells</td><td><b>work</b> · a simulated sell succeeds</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/src/stations-page.ts"></script>
+</body>
+</html>

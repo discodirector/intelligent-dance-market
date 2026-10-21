@@ -1,5 +1,6 @@
 // Chunked eth_getLogs with retries and adaptive range splitting for public RPCs.
-import { createPublicClient, http, type AbiEvent, type PublicClient } from "viem";
+import { createPublicClient, http, toHex, type AbiEvent, type PublicClient } from "viem";
+import { rawLog, type RawLog } from "@swarm-sequencer/core";
 import { mainnet } from "viem/chains";
 
 // Public endpoints that serve eth_getLogs over wide ranges without a key (checked 2026-10-15).
@@ -47,20 +48,53 @@ function isRangeError(e: unknown): boolean {
 export async function getLogsChunked<E extends AbiEvent>(
   clients: PublicClient[],
   params: { address: `0x${string}`; event: E; args?: Record<string, unknown>; fromBlock: bigint; toBlock: bigint },
-  opts: { chunk?: bigint; onProgress?: (done: bigint, total: bigint, found: number) => void } = {},
+  opts: ChunkOptions = {},
 ) {
-  const out: any[] = [];
+  const read = (c: PublicClient, from: bigint, to: bigint) =>
+    c.getLogs({ address: params.address, event: params.event, args: params.args, fromBlock: from, toBlock: to, strict: true } as any) as Promise<any[]>;
+  return chunked(clients, read, params.fromBlock, params.toBlock, opts);
+}
+
+/** Same loop over a raw eth_getLogs filter (address + topics), e.g. core swapLogFilter(); returns core RawLogs. */
+export async function getRawLogsChunked(
+  clients: PublicClient[],
+  filter: { address: `0x${string}`; topics: (`0x${string}` | `0x${string}`[])[] },
+  fromBlock: bigint,
+  toBlock: bigint,
+  opts: ChunkOptions = {},
+): Promise<RawLog[]> {
+  const read = async (c: PublicClient, from: bigint, to: bigint) =>
+    ((await c.request({ method: "eth_getLogs", params: [{ ...filter, fromBlock: toHex(from), toBlock: toHex(to) }] })) as any[]).map(rawLog);
+  return chunked(clients, read, fromBlock, toBlock, opts);
+}
+
+export interface ChunkOptions {
+  /** First range size, in blocks (default 5k). */
+  chunk?: bigint;
+  /** Ranges grow while results are small, never past this: a chain's limit (registry chains.logChunk). Unset: grow
+   *  while under 200k. */
+  maxChunk?: bigint;
+  onProgress?: (done: bigint, total: bigint, found: number) => void;
+}
+
+async function chunked<T>(clients: PublicClient[], read: (c: PublicClient, from: bigint, to: bigint) => Promise<T[]>, fromBlock: bigint, toBlock: bigint, opts: ChunkOptions): Promise<T[]> {
+  const out: T[] = [];
+  const max = opts.maxChunk;
   let chunk = opts.chunk ?? 5_000n;
-  let from = params.fromBlock;
-  const total = params.toBlock - params.fromBlock + 1n;
-  while (from <= params.toBlock) {
-    const to = from + chunk - 1n > params.toBlock ? params.toBlock : from + chunk - 1n;
+  if (max && chunk > max) chunk = max;
+  let from = fromBlock;
+  const total = toBlock - fromBlock + 1n;
+  while (from <= toBlock) {
+    const to = from + chunk - 1n > toBlock ? toBlock : from + chunk - 1n;
     try {
-      const logs = await getOnce(clients, { ...params, fromBlock: from, toBlock: to });
+      const logs = await getOnce(clients, (c) => read(c, from, to));
       out.push(...logs);
-      opts.onProgress?.(to - params.fromBlock + 1n, total, out.length);
+      opts.onProgress?.(to - fromBlock + 1n, total, out.length);
       from = to + 1n;
-      if (logs.length < 2000 && chunk < 200_000n) chunk = (chunk * 3n) / 2n;
+      if (logs.length < 2000) {
+        if (max) chunk = (chunk * 3n) / 2n > max ? max : (chunk * 3n) / 2n;
+        else if (chunk < 200_000n) chunk = (chunk * 3n) / 2n;
+      }
     } catch (e) {
       if (chunk <= 10n) throw e;
       chunk = chunk / 4n > 10n ? chunk / 4n : 10n;
@@ -69,12 +103,12 @@ export async function getLogsChunked<E extends AbiEvent>(
   return out;
 }
 
-async function getOnce(clients: PublicClient[], p: any): Promise<any[]> {
+async function getOnce<T>(clients: PublicClient[], read: (c: PublicClient) => Promise<T[]>): Promise<T[]> {
   let last: unknown;
   for (let i = 0; i < 4; i++) {
     const c = clients[i % clients.length];
     try {
-      return await c.getLogs({ address: p.address, event: p.event, args: p.args, fromBlock: p.fromBlock, toBlock: p.toBlock, strict: true } as any);
+      return await read(c);
     } catch (e) {
       last = e;
       if (isRangeError(e)) throw e; // caller shrinks the range

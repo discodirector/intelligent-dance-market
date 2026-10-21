@@ -196,6 +196,16 @@ describe("release post", () => {
     const p = await withTrackStart(window, async () => []);
     expect(p.partial).toBe(true);
   });
+  it("live queue: an older track by number, from a tape that ends at its TrackComplete", async () => {
+    // The scheduler reads up to the queued track's TrackComplete block, then back to its start.
+    const tail = live.slice(ends[1] - 10, ends[1] + 1);
+    const fetchEarlier = async (before: number) => live.filter((e) => e.blockNumber < before).slice(-50);
+    const r = await withTrackStart(tail, fetchEarlier, 12, 2);
+    expect(r.partial).toBe(false);
+    const s = selectTrack(r.entries, 2);
+    expect(s.trackNo).toBe(2);
+    expect(s.end - s.start + 1).toBe(live[ends[1]].trackComplete!.swaps);
+  });
   it("template caption with release facts is valid and carries the headline", () => {
     const s = selectTrack(live, 2);
     const track = live.slice(s.start, s.end + 1);

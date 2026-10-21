@@ -9,6 +9,7 @@
 import { FORM_BARS, sectionAt, type SectionName } from "./arrange.ts";
 import { genreStep, stepCharacter, type DropCue, type StepHit } from "./clock.ts";
 import { epochOf, eraOf, type GenreId } from "./eras.ts";
+import { HOUSE_PROGRAM, type Program } from "./program.ts";
 import type { SequencerState } from "./state.ts";
 import { styleOf } from "./styles.ts";
 
@@ -43,6 +44,8 @@ export interface ReleaseOptions {
   outroBars?: number;
   /** Tempo used for the length bounds. Default: the median genre tempo of the track's states. */
   tempo?: number;
+  /** What the release plays (program.ts): the genre and style of its instance, and every step's feel. Default house. */
+  program?: Program;
 }
 
 export interface ReleasePace {
@@ -98,6 +101,8 @@ export interface ReleasePlan {
   sections: ReleaseSection[];
   /** The one genre, style and instance epoch the whole release plays. */
   genre: ReleaseGenre;
+  /** The program the plan was made with; renderReleaseToBuffer renders with the same one. */
+  program: Program;
   /** Release bar of the first state with a saturated grid (heat starts), or null. */
   saturationBar: number | null;
 }
@@ -131,17 +136,17 @@ function median(xs: number[]): number {
  * finished track holds TrackComplete's snapshot before the reset), else the seed. Its genre is that epoch's genre and
  * its style the one that epoch played live, so the release sounds like the track did when it completed.
  */
-export function releaseGenre(input: Pick<ReleaseInput, "seed" | "swaps">): ReleaseGenre {
+export function releaseGenre(input: Pick<ReleaseInput, "seed" | "swaps">, program: Program = HOUSE_PROGRAM): ReleaseGenre {
   const finished = input.swaps.at(-1)?.state ?? input.seed;
   const epoch = epochOf(finished);
-  const era = eraOf(epoch);
-  const style = styleOf(era, epoch).style;
+  const era = eraOf(epoch, program);
+  const style = styleOf(era, epoch, program).style;
   return { epoch, era: era.id, eraName: era.name, style: style.id, styleName: style.name };
 }
 
 /** Median genre tempo of the states a release plays (in the release's genre, when given). */
-export function releaseTempo(states: readonly SequencerState[], genre?: Pick<ReleaseGenre, "era" | "epoch">): number {
-  return median(states.map((s) => genreStep(s, genre?.era, genre?.epoch).tempo));
+export function releaseTempo(states: readonly SequencerState[], genre?: Pick<ReleaseGenre, "era" | "epoch">, program: Program = HOUSE_PROGRAM): number {
+  return median(states.map((s) => genreStep(s, genre?.era, genre?.epoch, program).tempo));
 }
 
 /**
@@ -236,9 +241,10 @@ export function counterBars(formBars: readonly number[]): number[] {
 export function planRelease(input: ReleaseInput, options: ReleaseOptions = {}): ReleasePlan {
   const o = { ...RELEASE_DEFAULTS, ...options };
   const states = [input.seed, ...input.swaps.map((s) => s.state)];
-  const genre = releaseGenre(input);
-  let tempo = o.tempo ?? releaseTempo(states, genre);
-  let plan = planAt(input, o, tempo, genre);
+  const program = options.program ?? HOUSE_PROGRAM;
+  const genre = releaseGenre(input, program);
+  let tempo = o.tempo ?? releaseTempo(states, genre, program);
+  let plan = planAt(input, o, tempo, genre, program);
   // States differ in tempo (the chain bpm moves within the genre range), so the bounds are re-fit to the bar length the plan
   // actually got, a few times at most; an over-long refit falls back to the best plan within the bound.
   const fits = (p: ReleasePlan) => p.seconds <= o.maxSeconds + 1e-6;
@@ -246,7 +252,7 @@ export function planRelease(input: ReleaseInput, options: ReleaseOptions = {}): 
   for (let i = 0; i < 4 && o.tempo == null; i++) {
     if (fits(plan) && plan.seconds >= o.minSeconds - 1e-6) break;
     tempo = (240 * plan.bars) / plan.seconds;
-    const next = planAt(input, o, tempo, genre);
+    const next = planAt(input, o, tempo, genre, program);
     if (next.bars === plan.bars) break;
     plan = next;
     if (fits(plan) && (!best || plan.seconds > best.seconds)) best = plan;
@@ -255,7 +261,13 @@ export function planRelease(input: ReleaseInput, options: ReleaseOptions = {}): 
   return plan;
 }
 
-function planAt(input: ReleaseInput, o: Required<Omit<ReleaseOptions, "tempo">> & ReleaseOptions, tempo: number, genre: ReleaseGenre): ReleasePlan {
+function planAt(
+  input: ReleaseInput,
+  o: Required<Omit<ReleaseOptions, "tempo" | "program">> & ReleaseOptions,
+  tempo: number,
+  genre: ReleaseGenre,
+  program: Program,
+): ReleasePlan {
   const intro = bars4(o.introBars, RELEASE_DEFAULTS.introBars);
   const outroLen = bars4(o.outroBars, RELEASE_DEFAULTS.outroBars);
   const swaps = input.swaps;
@@ -297,8 +309,8 @@ function planAt(input: ReleaseInput, o: Required<Omit<ReleaseOptions, "tempo">> 
       }
     }
     const trackDrop = dropBar != null && g === dropBar * 16;
-    const { tempo: stepTempo, duration } = genreStep(state, genre.era, genre.epoch);
-    const character = stepCharacter(state.patternId, step, genre.era, genre.epoch);
+    const { tempo: stepTempo, duration } = genreStep(state, genre.era, genre.epoch, program);
+    const character = stepCharacter(state.patternId, step, genre.era, genre.epoch, program);
     let time = grid;
     if (step % 2 === 1) time += (character.swing - 0.5) * duration;
     time += character.micro;
@@ -356,6 +368,7 @@ function planAt(input: ReleaseInput, o: Required<Omit<ReleaseOptions, "tempo">> 
     formBars,
     sections,
     genre,
+    program,
     saturationBar: satBody != null ? bodyStart + satBody : null,
   };
 }

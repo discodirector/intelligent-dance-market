@@ -1,6 +1,6 @@
 // Strict facts object: the only source of truth a caption may use.
 import { MODE_NAMES, NOTE_NAMES, TRACK_NAMES } from "@swarm-sequencer/core";
-import { epochOf, eraOf } from "@swarm-sequencer/synth";
+import { epochOf, eraOf, type Program } from "@swarm-sequencer/synth";
 import type { TimelineEntry } from "./timeline.ts";
 
 export interface Facts {
@@ -53,12 +53,24 @@ export interface ReleaseFacts {
 }
 
 const key = (root: number, mode: number) => `${NOTE_NAMES[root % 12]} ${MODE_NAMES[mode] ?? "?"}`;
-const playingAt = (patternId: number) => eraOf(epochOf({ patternId })).name;
+/** The genre on air at a page, in the program of the timeline's station (default house). */
+const playingAt = (patternId: number, program?: Program) => eraOf(epochOf({ patternId }), program).name;
 const iso = (ts: number) => new Date(ts * 1000).toISOString().replace(/\.\d+Z$/, "Z");
 
 export function factsFromTimeline(
   entries: TimelineEntry[],
-  o: { kind: Facts["kind"]; chain: string; pool: string; project?: string; videoSeconds?: number; hook?: string; startPage?: number; windowHours?: number },
+  o: {
+    kind: Facts["kind"];
+    chain: string;
+    pool: string;
+    project?: string;
+    videoSeconds?: number;
+    hook?: string;
+    startPage?: number;
+    windowHours?: number;
+    /** The station's program (synth program.ts), for `playing`. Default house; stations wiring passes theirs. */
+    program?: Program;
+  },
 ): Facts {
   if (!entries.length) throw new Error("no entries");
   const first = entries[0], last = entries.at(-1)!;
@@ -90,7 +102,7 @@ export function factsFromTimeline(
     key: { start: key(first.state.root, first.state.mode), end: key(last.state.root, last.state.mode) },
     swapCount: last.state.swapCount,
     page: last.state.patternId,
-    playing: playingAt(last.state.patternId),
+    playing: playingAt(last.state.patternId, o.program),
     videoSeconds: o.videoSeconds,
     hook: o.hook,
     ...(v2 ? { rules: "v2" as const, tracksCompleted: done.length } : {}),

@@ -18,6 +18,8 @@ One scheduler tick is one 16th note at the genre tempo. `genreTempo(era, bpm)` m
 
 `epochOf(state)` is `floor(patternId / 4)`. `eraOf(epoch)` walks cycles of the genre pool `ERA_SCHEDULE` gives (today one entry: all ten from epoch 0): the first cycle in the listed order, every later one a seeded shuffle with no repeat and no A-B-A across the seam. `styleOf(era, epoch)` walks each genre's styles in list order, from the list `STYLE_SCHEDULE` has in force at that epoch (`stylesAt(genre, epoch)`). Both are pure, so a bot can post the era without rendering audio.
 
+Both schedules travel together as a **program** (`program.ts`, docs/STATIONS.md): `{ key, eras, styles }`. `HOUSE_PROGRAM` is `{ key: "idm", eras: ERA_SCHEDULE, styles: STYLE_SCHEDULE }`, what $IDM and IMD/ETH play. `eraOf`, `styleOf`, `stylesAt`, `styleListAt`, the clock (`eraAt`, `genreStep`, `stepCharacter`, `planSteps`, `viewAt`), `VoiceEngine`, `createLivePlayer(ctx, { program })`, `RenderOptions.program` and `ReleaseOptions.program` (carried on `ReleasePlan.program` into `renderReleaseToBuffer`) all take an optional program, default house. A station program may name only some genres: the same cycle rules hold for any pool (three genres: one fixed order; two: alternating). Caches key on the schedule arrays, so build a program once and reuse it.
+
 ```ts
 import { epochOf, eraOf } from "@swarm-sequencer/synth";
 

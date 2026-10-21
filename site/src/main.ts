@@ -1,6 +1,6 @@
 import "./style.css";
 import { initialState, type State } from "@swarm-sequencer/core";
-import { ERA_SCHEDULE, ERAS, epochOf, eraOf, FORM_BARS, genreKey, idleStage, NOTE_NAMES, sectionAt, stepDuration, styleOf, stylesAt, type Era, type SequencerState } from "@swarm-sequencer/synth";
+import { ERAS, epochOf, eraOf, FORM_BARS, genreKey, HOUSE_PROGRAM, idleStage, NOTE_NAMES, sectionAt, stepDuration, styleOf, stylesAt, type Era, type Program, type SequencerState } from "@swarm-sequencer/synth";
 import { LINKS, NATIVE_ETH, readSource } from "./config";
 import { RULES, toSynth } from "./rules";
 import { Audio } from "./audio";
@@ -9,6 +9,8 @@ import { dropWalls, moduleWall, updateWalls } from "./wall";
 import { WaveSky } from "./sky";
 import { drawGrid, drawScope, drawSpectrum, Surface, type Flash } from "./visuals";
 import { startLive } from "./data/live";
+import { startVirtual } from "./data/virtual";
+import { applyTheme, chainOf, stationFor } from "./stations";
 import { EPOCH_PLAY, startReplay } from "./data/replay";
 import { formatQuote, type Feed, type SwapEvent } from "./data/types";
 
@@ -20,6 +22,9 @@ const explorer = source.kind === "replay" ? source.replay.explorer : net.explore
 const rules = RULES[source.rules];
 const v2 = rules.heatMax > 0;
 document.body.classList.toggle("rules-v2", v2);
+/** Registry entry for this pool (stations/registry.json); live, its theme recolours every LCD before the first frame. */
+const station = stationFor(net);
+if (station && source.kind === "live") applyTheme(station.theme);
 
 // ---------------------------------------------------------------- state
 let state: State = initialState();
@@ -29,7 +34,13 @@ let lastEpoch: number | null = null;
 const events: SwapEvent[] = [];
 const flashes: Flash[] = [];
 const counts = { buys: 0, sells: 0, whales: 0 };
-const audio = new Audio();
+/**
+ * What this page plays (synth program.ts): genre order and style lists for the player, the epoch lines, the rack and
+ * the genre count. Both house stations ($IDM, IMD/ETH) play the house program; stations wiring picks a station's
+ * program from `net` here (docs/STATIONS.md), and everything below follows it.
+ */
+const program: Program = HOUSE_PROGRAM;
+const audio = new Audio(program);
 let eraOverride: string | null = null;
 /** Testnets and replays let a listener audition genres; the mainnet live view plays only what the chain picks. */
 const canAudition = !(source.kind === "live" && net.mainnet);
@@ -43,7 +54,8 @@ const MAX_LINES = 400;
 const short = (h: string) => `${h.slice(0, 4)}…${h.slice(-2)}`;
 const hhmm = (ts: number) => {
   const d = new Date(ts * 1000);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  // UTC: one clock for every viewer and for the explorer.
+  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
 };
 
 function pushLine(li: HTMLLIElement) {
@@ -111,11 +123,13 @@ const feed: Feed = {
     e.isBuy ? counts.buys++ : counts.sells++;
     if (e.whale) counts.whales++;
     const epoch = epochOf(e.state);
-    if (lastEpoch !== null && epoch !== lastEpoch) systemLine(`EPOCH #${epoch} · ${eraOf(epoch).name.toUpperCase()}`, "sys epoch");
+    if (lastEpoch !== null && epoch !== lastEpoch) systemLine(`EPOCH #${epoch} · ${eraOf(epoch, program).name.toUpperCase()}`, "sys epoch");
     lastEpoch = epoch;
     swapLine(e);
     tapeSwap(e);
-    state = e.state;
+    // The backfill replays history after onState showed the current hook state: never step the grid back.
+    // (A replay restarts its tape at a lower swapCount, so only the backfill is guarded.)
+    if (!backfill || e.state.swapCount >= state.swapCount) state = e.state;
     const tc = e.trackComplete;
     if (tc) {
       drops++;
@@ -252,11 +266,11 @@ knob.addEventListener("keydown", (e) => {
   if (e.key === "ArrowDown" || e.key === "ArrowLeft") setKnob(audio.getVolume() - 0.05);
 });
 
-/** Genres in the rotation at this epoch: the last ERA_SCHEDULE entry already in force, so the copy follows new genres. */
+/** Genres in the rotation at this epoch: the program's last genre-schedule entry in force, so the copy follows new genres. */
 let shownGenres = -1;
 function showGenreCount(epoch: number) {
-  let ids = ERA_SCHEDULE[0].ids;
-  for (const entry of ERA_SCHEDULE) if (entry.fromEpoch <= epoch) ids = entry.ids;
+  let ids = program.eras[0].ids;
+  for (const entry of program.eras) if (entry.fromEpoch <= epoch) ids = entry.ids;
   if (ids.length === shownGenres) return;
   shownGenres = ids.length;
   for (const el of document.querySelectorAll(".n-genres")) el.textContent = String(ids.length);
@@ -279,10 +293,13 @@ rack.innerHTML = ERAS.map(
     ${canAudition ? `<button class="btn-sq audition" data-id="${era.id}">AUDITION</button>` : ""}
   </article>`,
 ).join("");
-/** The rack lists each genre's styles in force at the chain epoch (STYLE_SCHEDULE); redrawn when a list changes. */
+/**
+ * The rack lists each genre's styles in force at the chain epoch (the program's style lists); redrawn when a list
+ * changes. The rack itself still shows every genre (ERAS): a station program naming fewer must filter it first.
+ */
 let rackStylesKey = "";
 function rackStyles(epoch: number) {
-  const lists = ERAS.map((era) => stylesAt(era.id, epoch));
+  const lists = ERAS.map((era) => stylesAt(era.id, epoch, program));
   const key = lists.map((l) => l.map((st) => st.id).join(",")).join("|");
   if (key === rackStylesKey) return;
   rackStylesKey = key;
@@ -319,13 +336,16 @@ const addr = (a: string | null, kind: "address" | "token" = "address") =>
 const src = (a: string | null) => (a && net.sourcify ? ([["sourcify", `${net.sourcify}/${a}`]] as [string, string][]) : []);
 $("oc-grid").innerHTML = [
   ocRow("CHAIN", `${net.label} · id ${net.chainId}`),
-  ocRow("HOOK", net.hook ?? "pending launch", [...addr(net.hook), ...src(net.hook)]),
-  ocRow("TOKEN $IDM", net.token ?? "pending launch", [...addr(net.token, "token"), ...src(net.token)]),
+  net.virtual
+    ? ocRow("HOOK", "none on this pool · the $IDM rules run in your browser")
+    : ocRow("HOOK", net.hook ?? "pending launch", [...addr(net.hook), ...src(net.hook)]),
+  ocRow(`TOKEN $${net.virtual?.tokenSymbol ?? "IDM"}`, net.token ?? "pending launch", [...addr(net.token, "token"), ...src(net.token)]),
   net.quote === NATIVE_ETH
     ? ocRow("PAIRED WITH", "native ETH")
     : ocRow(`PAIRED WITH $${net.quoteSymbol}`, net.quote ?? "—", addr(net.quote, "token")),
-  ocRow("POOL ID", net.poolId ?? "pending launch"),
-  ocRow("POOL MANAGER", net.poolManager ?? "—", addr(net.poolManager)),
+  ...(net.virtual && net.virtual.source.kind !== "v4"
+    ? [ocRow("POOL", `${net.virtual.source.kind} · ${net.virtual.source.address}`, addr(net.virtual.source.address))]
+    : [ocRow("POOL ID", net.poolId ?? "pending launch"), ocRow("POOL MANAGER", net.poolManager ?? "—", addr(net.poolManager))]),
   ocRow("LAUNCH", net.launchedBy, net.launchUrl ? [["job", net.launchUrl]] : [["imd.fun", LINKS.imd]]),
   ocRow("SOURCE", "discodirector/intelligent-dance-market", [["github", LINKS.github]]),
   ocRow("X", LINKS.x ?? "account soon", LINKS.x ? [["x.com", LINKS.x]] : []),
@@ -334,8 +354,14 @@ $("onchain-sub").textContent =
   source.kind === "replay" ? `showing a replay · live contracts on ${net.label.toLowerCase()}` : `live on ${net.label.toLowerCase()}`;
 
 // ---------------------------------------------------------------- source switch + walls
-// Live is the only public view since launch; the button appears only on a ?replay= URL, to get back to live.
+// The header's STATIONS button opens the station list; the station on air here is named on the panel itself.
+// On a ?replay= URL a LIVE button leads back to live.
 const switchLink = $<HTMLAnchorElement>("src-switch");
+if (source.kind === "live") {
+  $("station-tag").hidden = false;
+  $("station-name").textContent = station ? `$${station.ticker}` : net.label;
+  $("station-chain").textContent = (station ? chainOf(station).name : net.label).toUpperCase();
+}
 if (source.kind === "replay") {
   switchLink.hidden = false;
   switchLink.textContent = `LIVE ${net.label}`;
@@ -405,11 +431,11 @@ function frame(now: number) {
   if (now - lastSlow > 66) {
     lastSlow = now;
     updateWalls((now - t0) / 1000, level, step, audio.running ? audio.freqData : null);
-    const era = audio.running ? audio.player!.getEra() : { ...eraOf(epochOf(state)), epoch: epochOf(state), fading: false };
+    const era = audio.running ? audio.player!.getEra() : { ...eraOf(epochOf(state), program), epoch: epochOf(state), fading: false };
     const shown = eraOverride ? ERAS.find((e) => e.id === eraOverride)! : era;
     updateReadouts(bpm, ERAS.find((e) => e.id === shown.id)!);
     // The style the engine plays: an audition keeps the chain epoch, so styleOf picks exactly as the engine does.
-    const style = styleOf(ERAS.find((e) => e.id === shown.id)!, era.epoch).style;
+    const style = styleOf(ERAS.find((e) => e.id === shown.id)!, era.epoch, program).style;
     rackStyles(era.epoch);
     $("era-name").textContent = shown.name.toUpperCase();
     const part = audio.running ? ` · ${sectionAt(bar).name.toUpperCase()} ${(bar % FORM_BARS) + 1}/${FORM_BARS}` : "";
@@ -453,13 +479,14 @@ function sparkline() {
 
 // ---------------------------------------------------------------- boot
 systemLine(
-  (source.kind === "replay" ? `${source.replay.label} · ${EPOCH_PLAY[0]}–${EPOCH_PLAY[1]} s per genre` : `${net.label} · hook ${net.hook ? short(net.hook) : "pending"}`) +
+  (source.kind === "replay" ? `${source.replay.label} · ${EPOCH_PLAY[0]}–${EPOCH_PLAY[1]} s per genre` : net.virtual && station ? `${net.label} · ${station.label} pool on ${chainOf(station).name} · no hook, the $IDM rules run here` : `${net.label} · hook ${net.hook ? short(net.hook) : "pending"}`) +
     (v2 ? ` · rules v2${source.kind === "replay" && source.resim ? " (re-simulated)" : ""}` : ""),
 );
 requestAnimationFrame(frame);
 if (source.kind === "replay") {
   startReplay(source.replay.url, source.speed, source.replay.label, feed, rules, source.resim, source.replay.epochPlay).catch((e) => feed.onStatus(`replay failed: ${e.message}`, false));
-} else startLive(net, feed);
+} else if (net.virtual) startVirtual(net, feed);
+else startLive(net, feed);
 
 // Hooks for the headless check (scripts/check.mjs).
 (window as unknown as { __site: unknown }).__site = {

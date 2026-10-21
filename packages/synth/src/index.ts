@@ -31,7 +31,7 @@ export { heatIdleFactor, IDLE_DRONE_SEC, IDLE_FULL_SEC, IDLE_SPARSE_SEC, idleLab
 export type { IdleGains, IdleName, IdleStage } from "./idle.ts";
 
 export { createLivePlayer, projectTimeline, renderReleaseToBuffer, renderTimelineToBuffer, renderToBuffer } from "./player.ts";
-export type { EraView, LivePlayer, RenderOptions, StepListenerEvent } from "./player.ts";
+export type { EraView, LivePlayer, LivePlayerOptions, RenderOptions, StepListenerEvent } from "./player.ts";
 
 export {
   CHAIN_BPM,
@@ -46,10 +46,35 @@ export {
   eraByIndex,
   eraOf,
 } from "./eras.ts";
-export type { Era, GenreId } from "./eras.ts";
+export type { Era, EraScheduleEntry, GenreId } from "./eras.ts";
 
 export { allStyles, GENRE_STYLES, STYLE_SCHEDULE, styleById, styleFeel, styleListAt, styleOf, stylesAt } from "./styles.ts";
-export type { GenreStyle, StyleChoice, StyleList, StyleScheduleEntry } from "./styles.ts";
+export type { GenreStyle, StyleChoice, StyleList, StyleScheduleEntry, StyleSource } from "./styles.ts";
+
+export { HOUSE_PROGRAM } from "./program.ts";
+export { assertPack, programFromPack, validatePack } from "./pack.ts";
+export type { PackBases, PackLeadPatch, StationPack, StationStyle } from "./pack.ts";
+export { BUS_NAMES, DATA_FIELDS, DATA_GENRES } from "./styledata.ts";
+export { SOUND_DEFAULTS } from "./engine.ts";
+export type {
+  AcidData,
+  BusName,
+  DataGenre,
+  DrumLayer,
+  DrumVoice,
+  FxData,
+  GarageData,
+  GenreDataMap,
+  HatSpec,
+  LiquidData,
+  LofiHouseData,
+  PadSpec,
+  SoundData,
+  StyleData,
+  SubSpec,
+  TripHopData,
+} from "./styledata.ts";
+export type { Program } from "./program.ts";
 export { SYNTH_VERSION } from "./version.ts";
 
 export { audioBufferToWavBase64 } from "./wav.ts";

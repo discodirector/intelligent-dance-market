@@ -68,10 +68,7 @@ export async function fetchMutated(
       chunk /= 4n;
     }
   }
-  const ts = new Map<bigint, number>();
-  for (const l of logs) if (l.blockTimestamp != null) ts.set(l.blockNumber, Number(l.blockTimestamp));
-  for (const bn of new Set(logs.map((l) => l.blockNumber as bigint)))
-    if (!ts.has(bn)) ts.set(bn, Number((await client.getBlock({ blockNumber: bn })).timestamp));
+  const ts = await blockTimes(client, logs);
   const tcBy = new Map<number, any>(completes.map((l) => [Number(l.args.swapCount), l.args]));
   let trackStart: number | null = null;
   const symbol = quoteSymbolForRules(rules);
@@ -116,4 +113,38 @@ export async function fetchMutated(
       ...(isPulse(a.sender, treasury) ? { pulse: true as const } : {}),
     };
   });
+}
+
+/** Blocks between anchor blocks for interpolated times (on Robinhood ~250 s apart; measured error within ~8 s). */
+export const TIME_ANCHOR = 2500n;
+
+/**
+ * Block time of every log. Robinhood's RPC puts blockTimestamp 0x0 on recent logs, so 0 counts as missing. A few
+ * blocks are read exactly; more (a backfill at ~10 blocks/s) read one anchor block every TIME_ANCHOR and interpolate.
+ */
+export async function blockTimes(client: PublicClient, logs: { blockNumber: bigint | null; blockTimestamp?: bigint | null }[]) {
+  const ts = new Map<bigint, number>();
+  for (const l of logs) if (l.blockTimestamp && l.blockNumber != null) ts.set(l.blockNumber, Number(l.blockTimestamp));
+  const todo = [...new Set(logs.map((l) => l.blockNumber as bigint))].filter((b) => !ts.has(b));
+  const read = async (blocks: bigint[], into: Map<bigint, number>) => {
+    for (let i = 0; i < blocks.length; i += 16)
+      await Promise.all(blocks.slice(i, i + 16).map(async (b) => into.set(b, Number((await client.getBlock({ blockNumber: b })).timestamp))));
+  };
+  if (todo.length <= 16) {
+    await read(todo, ts);
+    return ts;
+  }
+  const top = todo.reduce((a, b) => (b > a ? b : a));
+  const span = (b: bigint) => {
+    const lo = (b / TIME_ANCHOR) * TIME_ANCHOR;
+    return [lo, lo + TIME_ANCHOR > top ? top : lo + TIME_ANCHOR] as const;
+  };
+  const anchors = new Map<bigint, number>();
+  await read([...new Set(todo.flatMap((b) => span(b)))], anchors);
+  for (const b of todo) {
+    const [lo, hi] = span(b);
+    const t0 = anchors.get(lo)!, t1 = anchors.get(hi)!;
+    ts.set(b, hi === lo ? t0 : Math.round(t0 + ((t1 - t0) * Number(b - lo)) / Number(hi - lo)));
+  }
+  return ts;
 }

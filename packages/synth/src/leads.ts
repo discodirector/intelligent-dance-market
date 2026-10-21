@@ -306,8 +306,9 @@ const ERA_LEADS: Record<string, string[]> = {
   wonky: ["bell"],
 };
 
-/** The motif's patch for this genre and epoch. */
-export function leadPatch(eraId: string, epoch: number, styleLeads?: readonly string[]): LeadPatch {
+/** The motif's patch for this genre and epoch. `patches`: a station pack's own patches by id, before the house ones. */
+export function leadPatch(eraId: string, epoch: number, styleLeads?: readonly string[], patches?: Readonly<Record<string, LeadPatch>>): LeadPatch {
   const list = styleLeads ?? ERA_LEADS[eraId] ?? ["rhodes"];
-  return LEAD_PATCHES[list[hash32(epoch >>> 0, 0x1ead) % list.length]];
+  const id = list[hash32(epoch >>> 0, 0x1ead) % list.length];
+  return patches?.[id] ?? LEAD_PATCHES[id];
 }

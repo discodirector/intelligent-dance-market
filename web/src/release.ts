@@ -66,17 +66,18 @@ export function buildRelease(raw: readonly ReleaseEntry[], req: ReleaseRequest =
 export function releaseSummary(r: BuiltRelease) {
   const first = r.entries[0];
   const last = r.entries.at(-1)!;
+  const program = r.plan.program;
   const genre = (s: SequencerState) => {
     const epoch = epochOf(s);
-    const era = eraOf(epoch);
-    const style = styleOf(era, epoch).style;
+    const era = eraOf(epoch, program);
+    const style = styleOf(era, epoch, program).style;
     return { epoch, era: era.id, eraName: era.name, style: style.id, styleName: style.name };
   };
   const finished = r.swaps.at(-1)?.state ?? r.seed;
   const epochs = [...new Set([r.seed, ...r.swaps.map((s) => s.state)].map((s) => epochOf(s)))];
   // Live genres of the epochs the track passed through, in order (context only: the release plays r.plan.genre).
   const chainGenres = epochs.map((epoch) => {
-    const era = eraOf(epoch);
+    const era = eraOf(epoch, program);
     return { epoch, era: era.id, eraName: era.name };
   });
   return {
