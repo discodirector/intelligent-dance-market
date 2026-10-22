@@ -1,0 +1,28 @@
+# /etc/systemd/system/idm-stream.service
+[Unit]
+Description=IDM radio: loop video + live synth audio -> YouTube RTMP
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=idm
+WorkingDirectory=/opt/idm-stream
+# The RTMP URL (rtmp://a.rtmp.youtube.com/live2/<key>) lives in this file, mode 600, owner idm.
+Environment=STREAM_URL_FILE=/etc/idm-stream/url
+Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/idm-stream/browsers
+# --stations auto: the house stations + the Station+ stations with a loop (rotation.mjs: each Station+ 8 min an hour,
+# the house shares the rest), re-read from the bot's stations-data before every change; or key:minutes,... by hand
+ExecStart=/usr/bin/node /opt/idm-stream/stream.mjs --dist /opt/idm-stream/dist --loops /opt/idm-stream/loops --registry /opt/idm-stream/registry.json --stations auto --data-dir /opt/swarm-sequencer/out/stations-data
+Restart=always
+RestartSec=5
+# One restart a day keeps Chrome fresh; YouTube keeps the same broadcast across a short reconnect.
+RuntimeMaxSec=1d
+# two Chromium pages while the next station loads, then one
+MemoryMax=2G
+CPUQuota=120%
+# Audio is real time: under contention (e.g. the X bot rendering a clip, which is offline and only gets slower)
+# the stream gets the CPU first. The quota above still caps it.
+CPUWeight=1000
+
+[Install]
+WantedBy=multi-user.target

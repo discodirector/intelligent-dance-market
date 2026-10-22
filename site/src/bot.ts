@@ -22,11 +22,12 @@ import {
   renderTimelineToBuffer,
   stepDuration,
   viewAt,
+  type Program,
   type SequencerState,
   type StepHit,
   type TimelinePoint,
 } from "@swarm-sequencer/synth";
-import { barAt, buildRelease, sectionOfBar, type BuiltRelease, type ReleaseEntry, type ReleaseRequest } from "../../web/src/release";
+import { barAt, buildRelease, programOfPack, sectionOfBar, type BuiltRelease, type ReleaseEntry, type ReleaseRequest } from "../../web/src/release";
 import { formatQuote, normalizeTimeline, quoteOf, quoteSymbolOf, type RawTimelineEvent } from "../../web/src/timeline";
 import { sevenSeg } from "./sevenseg";
 import { drawGrid, drawScope, drawSpectrum, Surface, type Flash } from "./visuals";
@@ -52,6 +53,12 @@ interface SetupOptions {
   rules?: "v1" | "v2";
   /** A station clip: its name on the module and the blue LCD theme, as a station release (ReleaseSetup.station). */
   station?: string;
+  /** The station's style pack as JSON (a Station+ post, bot scheduler): the clip plays its program, not the house's. */
+  pack?: unknown;
+  /** The station's LCD colours (registry theme); unset = the blue station theme (html.station-alt). */
+  theme?: StationTheme;
+  /** A calibrated quote (CHOG/MON): the feed shows amounts in it (ETH value x perEth), not in ETH. */
+  quote?: ShownQuote;
 }
 
 const SR = 44100;
@@ -67,7 +74,9 @@ let audio: AudioBuffer | null = null;
 /** Channel 0 of the audio the frames show (teaser: the rendered buffer; release: the release WAV). */
 let samples: Float32Array | null = null;
 let rel: BuiltRelease | null = null;
-let opts: Required<Omit<SetupOptions, "timeline" | "rules" | "station">>;
+let opts: Required<Omit<SetupOptions, "timeline" | "rules" | "station" | "pack" | "theme" | "quote">>;
+/** The clip's program: a station's pack (SetupOptions.pack), else undefined = the house schedules. */
+let program: Program | undefined;
 let v2 = false;
 const HEAT_MAX = DEFAULT_DROP_RULES.heatMax;
 let grid: Surface, scope: Surface, spectrum: Surface;
@@ -194,11 +203,11 @@ function logLines(upto: number) {
     if (tc) rows.push(`<li class="sys track"><span class="p">#</span> TRACK #${tc.trackNo} COMPLETE${tc.swaps != null ? ` · ${tc.swaps} SWAPS` : ""}</li>`);
     const whale = Boolean(points[i].drop);
     const cls = whale ? "whale" : e.isBuy ? "buy" : "sell";
-    const amt = formatQuote(quoteOf(e)).padStart(8, " ");
+    const amt = formatQuote(quoteOf(e) * (shownQuote?.perEth ?? 1)).padStart(8, " ");
     const tag = whale ? ` <span class="tag">${e.isBuy ? "FILL" : "DROP"}</span>` : "";
     const trk = TRACKS[(e.track ?? 0) & 3].padEnd(6, " ");
     rows.push(
-      `<li class="${cls}"><span class="p">&gt;</span> <span class="t">${hhmm(e.ts ?? 0)}</span>  <span class="sd">${e.isBuy ? "BUY " : "SELL"}</span> ${amt} ${quoteSymbolOf(e)}  ` +
+      `<li class="${cls}"><span class="p">&gt;</span> <span class="t">${hhmm(e.ts ?? 0)}</span>  <span class="sd">${e.isBuy ? "BUY " : "SELL"}</span> ${amt} ${shownQuote?.symbol ?? quoteSymbolOf(e)}  ` +
         `<span class="trk">${trk}</span> s${String((e.step ?? 0) + 1).padStart(2, "0")}${tag}</li>`,
     );
   }
@@ -226,7 +235,7 @@ function audioPanels(t: number) {
 }
 
 function paint(t: number) {
-  const view = viewAt(hits, t, points[0].state);
+  const view = viewAt(hits, t, points[0].state, program);
   const st: SequencerState = view.state;
   let idx = 0;
   while (idx + 1 < points.length && points[idx + 1].time <= t) idx++;
@@ -249,7 +258,7 @@ function paint(t: number) {
 
   audioPanels(t);
 
-  const era = eraOf(epochOf(st));
+  const era = eraOf(epochOf(st), program);
   const note = NOTE_NAMES[genreKey(era, epochOf(st))];
   seg.bpm(String(Math.round(view.bpm)));
   seg.key(note[0] + " ", note.includes("#") ? [0] : []);
@@ -300,17 +309,20 @@ window.__setup = async (o) => {
     title: o.title ?? "IMD/ETH · ETHEREUM · REPLAYED THROUGH THE IDM HOOK",
     subtitle: o.subtitle ?? "",
   };
+  program = o.pack ? programOfPack(o.pack) : undefined;
   entries = raw.slice().sort((a, b) => (a.ts ?? a.timestamp ?? 0) - (b.ts ?? b.timestamp ?? 0));
   v2 = (o.rules ?? (entries.some((e) => e.rules === "v2") ? "v2" : "v1")) === "v2";
   document.body.classList.toggle("rules-v2", v2);
   document.documentElement.classList.toggle("station-alt", !!o.station);
+  stationTheme(o.theme);
+  shownQuote = o.quote ?? null;
   if (o.station) {
     $("model-sub").textContent = o.station;
     $("foot-left").textContent = `EVERY TRADE IS A NOTE · ${o.station.toUpperCase()}`;
   }
   points = spread(entries, opts.seconds);
   if (v2) points = withHeat(points, entries);
-  hits = planSteps(points, opts.seconds, null, BOT_BAR_OFFSET);
+  hits = planSteps(points, opts.seconds, null, BOT_BAR_OFFSET, program);
   $("title").textContent = opts.title;
   $("subtitle").textContent = opts.subtitle;
   await document.fonts.ready;
@@ -318,7 +330,7 @@ window.__setup = async (o) => {
   scope = new Surface($("scope") as HTMLCanvasElement);
   spectrum = new Surface($("spectrum") as HTMLCanvasElement);
   layout();
-  audio = await renderTimelineToBuffer(points, opts.seconds, SR, { barOffset: BOT_BAR_OFFSET });
+  audio = await renderTimelineToBuffer(points, opts.seconds, SR, { barOffset: BOT_BAR_OFFSET, program });
   samples = audio.getChannelData(0);
   shownLines = -1;
   paint(0);
@@ -338,7 +350,23 @@ window.__audio = async () => {
 
 // ---------------------------------------------------------------- release mode (SPEC §4.6)
 
+interface StationTheme { phos: string; phosDim: string; ghost: string; lcd: string }
+interface ShownQuote { symbol: string; perEth: number }
+let shownQuote: ShownQuote | null = null;
+/** A station's own colours over html.station-alt's blue (the canvases read the CSS variables). */
+function stationTheme(t?: StationTheme) {
+  const st = document.documentElement.style;
+  if (!t) { for (const v of ["--phos", "--phos-rgb", "--phos-dim", "--phos-ghost", "--lcd-bg"]) st.removeProperty(v); return; }
+  const rgb = [1, 3, 5].map((i) => parseInt(t.phos.slice(i, i + 2), 16)).join(", ");
+  st.setProperty("--phos", t.phos); st.setProperty("--phos-rgb", rgb); st.setProperty("--phos-dim", t.phosDim);
+  st.setProperty("--phos-ghost", t.ghost); st.setProperty("--lcd-bg", t.lcd);
+}
+
 interface ReleaseSetup extends ReleaseRequest {
+  /** The station's LCD colours (registry theme); unset = the blue station theme. */
+  theme?: StationTheme;
+  /** A calibrated quote: the feed shows amounts in it. */
+  quote?: ShownQuote;
   timeline: ReleaseEntry[];
   width?: number;
   height?: number;
@@ -429,11 +457,11 @@ function releaseTape(r: BuiltRelease, n: number, dropped: boolean) {
     const e = r.entries[i];
     const whale = Boolean(r.swaps[i].drop);
     const cls = whale ? "whale" : e.isBuy ? "buy" : "sell";
-    const amt = formatQuote(quoteOf(e)).padStart(8, " ");
+    const amt = formatQuote(quoteOf(e) * (shownQuote?.perEth ?? 1)).padStart(8, " ");
     const tag = whale ? ` <span class="tag">${e.isBuy ? "FILL" : "DROP"}</span>` : "";
     const trk = TRACKS[(e.track ?? 0) & 3].padEnd(6, " ");
     rows.push(
-      `<li class="${cls}"><span class="p">&gt;</span> <span class="t">${hhmm(e.ts ?? 0)}</span>  <span class="sd">${e.isBuy ? "BUY " : "SELL"}</span> ${amt} ${quoteSymbolOf(e)}  ` +
+      `<li class="${cls}"><span class="p">&gt;</span> <span class="t">${hhmm(e.ts ?? 0)}</span>  <span class="sd">${e.isBuy ? "BUY " : "SELL"}</span> ${amt} ${shownQuote?.symbol ?? quoteSymbolOf(e)}  ` +
         `<span class="trk">${trk}</span> s${String((e.step ?? 0) + 1).padStart(2, "0")}${tag}</li>`,
     );
   }
@@ -525,7 +553,7 @@ function paceText(r: BuiltRelease): string {
 }
 
 window.__setupRelease = async (o) => {
-  const { timeline, width, height, fps, wavUrl, title, subtitle, station, ...req } = o;
+  const { timeline, width, height, fps, wavUrl, title, subtitle, station, theme, quote, ...req } = o;
   rel = buildRelease(timeline, cleanRequest(req));
   const r = rel;
   const no = r.selection.trackNo;
@@ -541,6 +569,8 @@ window.__setupRelease = async (o) => {
   document.body.classList.add("rules-v2", "release");
   // The canvases read their colours from the CSS variables, so the theme class recolours every LCD.
   document.documentElement.classList.toggle("station-alt", !!station);
+  stationTheme(theme);
+  shownQuote = quote ?? null;
   if (station) {
     $("model-sub").textContent = station;
     $("foot-left").textContent = `EVERY TRADE IS A NOTE · ${station.toUpperCase()}`;

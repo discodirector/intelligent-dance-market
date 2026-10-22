@@ -1,0 +1,10 @@
+# /etc/systemd/system/idm-stream-loops.timer
+[Unit]
+Description=IDM radio: look for a Station+ station without a loop every 15 minutes
+
+[Timer]
+OnBootSec=10min
+OnUnitInactiveSec=15min
+
+[Install]
+WantedBy=timers.target

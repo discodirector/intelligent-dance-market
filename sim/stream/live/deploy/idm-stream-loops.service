@@ -1,0 +1,22 @@
+# /etc/systemd/system/idm-stream-loops.service (started by idm-stream-loops.timer)
+# Builds the rotation loop of one Station+ station that has none yet (build-loops.mjs); nothing to do = exits at once.
+# Low priority: the live stream (CPUWeight=1000) keeps the CPU, the bot's renders come next, this waits.
+[Unit]
+Description=IDM radio: build the loop of a new Station+ station
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=idm
+WorkingDirectory=/opt/idm-stream
+Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/idm-stream/browsers
+# status.json + stations.json straight from the bot's stations-data (same host); the events file is read by the
+# stations worker in docker (OUT_DIR/stream/loops.json), which tells the owner on Telegram.
+ExecStart=/usr/bin/node /opt/idm-stream/build-loops.mjs --loops /opt/idm-stream/loops --registry /opt/idm-stream/registry.json --builder /opt/idm-stream/loopbuild --data-dir /opt/swarm-sequencer/out/stations-data --events /opt/swarm-sequencer/out/stream/loops.json
+Nice=19
+IOSchedulingClass=idle
+CPUWeight=10
+CPUQuota=100%
+MemoryMax=1500M
+TimeoutStartSec=3h

@@ -1,0 +1,12 @@
+{
+  "name": "idm-stream-live",
+  "private": true,
+  "type": "module",
+  "description": "IDM YouTube radio: loop video + live synth audio -> RTMP",
+  "scripts": {
+    "start": "node stream.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.64.1"
+  }
+}

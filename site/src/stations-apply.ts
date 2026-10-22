@@ -1,7 +1,8 @@
 // The application form on /stations (docs/STATIONS.md "Applications and payment"), shown only in a build with
 // VITE_STATIONS_APPLY=1 (stations.ts APPLY_OPEN). Talks to the bot's stations API (bot/src/api, same origin):
 // eligibility on blur, then a quote (amounts per stablecoin and chain, the address to pay), then the tx hash, then the
-// status. A renewal for a station already in the registry takes the same quote and payment steps.
+// status. A renewal for a station already in the registry takes the same quote and payment steps. Station or Station+
+// (docs/STATIONS.md "Station+") for a new station and a renewal; an upgrade to Station+ for the days already paid.
 import { DATA_GENRES, ERAS } from "@swarm-sequencer/synth";
 import { API_BASE, CHAIN_LIST, statusOf, type Station, type StatusMap } from "./stations";
 
@@ -16,14 +17,24 @@ interface Rule { rule: string; status: "pass" | "fail" | "unmeasured"; measured:
 interface Report { verdict: "pass" | "fail" | "unavailable"; symbol: string | null; pool: string; reasons: string[]; rules: Rule[] }
 interface Amount { chainId: number; chain: string; symbol: string; token: string; display: string; confirmations: number }
 interface App {
-  applicationId: string; kind: "setup" | "renew"; state: "awaiting-payment" | "confirming" | "paid" | "expired";
+  applicationId: string; kind: "setup" | "renew" | "upgrade"; state: "awaiting-payment" | "confirming" | "paid" | "expired";
   expiresAt: string; payTo: string; symbol?: string | null; key?: string; months?: number; paidUntil?: string;
-  quote: { totalUsd: string; usd: { feeUsd: number; imd?: { amount: number; priceUsd: number; usd: number } }; amounts: Amount[] };
+  plus?: boolean; plusUntil?: string;
+  quote: {
+    totalUsd: string; amounts: Amount[];
+    usd: { feeUsd: number; imd?: { amount: number; priceUsd: number; usd: number }; plusUsd?: number; upgrade?: { days: number; usd: number } };
+  };
   pendingTx?: { confirmations: number; required: number };
   payment?: { chainId: number; txHash: string; symbol: string; paidAt: string };
   code?: string; message?: string; error?: string;
 }
-interface Config { open: boolean; prices: { setupUsd: number; setupImd: number; monthUsd: number; threeMonthsUsd: number }; checkChains: number[]; vibeChars: number }
+interface Config {
+  open: boolean;
+  prices: { setupUsd: number; setupImd: number; monthUsd: number; threeMonthsUsd: number; plusMonthUsd?: number; plusThreeMonthsUsd?: number };
+  checkChains: number[]; vibeChars: number;
+  /** Station+ slots (docs/STATIONS.md "Station+"); absent from an older API: Station+ not offered. */
+  plus?: { slots: number; used: number; left: number; prorateDays: number };
+}
 
 class ApiError extends Error {
   constructor(readonly status: number, readonly body: any) {
@@ -87,15 +98,29 @@ export function mountApply(root: HTMLElement, renewable: Station[], status: Stat
   });
 }
 
+/** A station's paid end and Station+ end, ms (null = none), from status.json. */
+const endOf = (v: string | undefined) => (!v ? null : /^\d{4}-\d{2}-\d{2}$/.test(v) ? Date.parse(`${v}T00:00:00Z`) + 86_400_000 : Date.parse(v) || null);
+
 function build(root: HTMLElement, cfg: Config, renewable: Station[], status: StatusMap | null) {
   const p = cfg.prices;
   const chains = CHAIN_LIST.filter(([id]) => cfg.checkChains.includes(id));
   const renewKey = new URLSearchParams(location.search).get("renew");
+  // Station+ (docs/STATIONS.md "Station+"): offered when the API prices it; refused by the API when the slots are full.
+  const plus = cfg.plus && p.plusMonthUsd && p.plusThreeMonthsUsd ? { ...cfg.plus, month: p.plusMonthUsd, three: p.plusThreeMonthsUsd, diff: p.plusMonthUsd - p.monthUsd } : null;
+  const full = !plus || plus.left <= 0;
+  const slotsText = plus ? (full ? `full · all ${plus.slots} taken` : `${plus.left} of ${plus.slots} left`) : "";
+  const dayRate = plus ? plus.diff / plus.prorateDays : 0;
+  const planField = (name: string, station: string, plusText: string) => plus ? `
+      <fieldset class="ap-plan"><legend>PLAN</legend>
+        <label><input type="radio" name="${name}" value="station" checked /><span>STATION · ${station}</span></label>
+        <label class="${full ? "ap-full" : ""}"><input type="radio" name="${name}" value="plus"${full ? " disabled" : ""} /><span>STATION+ · ${plusText} · <b>${esc(slotsText)}</b></span></label>
+        <p class="ap-note">Station+ adds the 24/7 YouTube radio rotation, a post a week on @theidmfun with the token tagged, and a place above the other stations.</p>
+      </fieldset>` : "";
   root.innerHTML = `
   <div class="ap">
     <div class="ap-tabs" role="tablist">
       <button type="button" role="tab" data-mode="new" aria-selected="true">NEW STATION</button>
-      <button type="button" role="tab" data-mode="renew" aria-selected="false">RENEW</button>
+      <button type="button" role="tab" data-mode="renew" aria-selected="false">${plus ? "RENEW · STATION+" : "RENEW"}</button>
     </div>
     <form class="ap-form" id="ap-new" novalidate>
       <label>CHAIN<select name="chainId">${chains.map(([id, c]) => `<option value="${id}">${esc(c.name)}</option>`).join("")}</select></label>
@@ -107,18 +132,21 @@ function build(root: HTMLElement, cfg: Config, renewable: Station[], status: Sta
       <fieldset class="ap-genres"><legend>GENRES <span>optional · pick 2 or more, or leave them to the owner</span></legend>
         ${DATA_GENRES.map((g) => `<label><input type="checkbox" name="genre" value="${g}" /> ${esc(genreName(g))}</label>`).join("")}
       </fieldset>
-      <p class="ap-price">Setup: <b>${usd(p.setupUsd)} + ${p.setupImd} IMD</b> at the current IMD price, paid in stablecoins (USDC, USDT, USDT0, USDG) · first month included from the day it goes on air.</p>
+      ${planField("plan", "first month included", plus ? `<b>+${usd(plus.diff)}</b> on the setup for its first month` : "")}
+      <p class="ap-price" id="ap-setup-price"></p>
       <button type="submit" class="btn-sq">GET A QUOTE ▸</button>
       <p class="ap-msg ap-out" aria-live="polite"></p>
     </form>
     <form class="ap-form" id="ap-renew" hidden novalidate>
       ${renewable.length ? `
-      <label>STATION<select name="key">${renewable.map((s) => `<option value="${esc(s.key)}"${s.key === renewKey ? " selected" : ""}>$${esc(s.ticker)} · ${esc(chainName(s.chainId))}${statusOf(s, status) === "expired" ? " · off air" : ""}${status?.[s.key]?.paidUntil ? ` · paid until ${esc(status[s.key].paidUntil!.slice(0, 10))}` : ""}</option>`).join("")}</select></label>
+      <label>STATION<select name="key">${renewable.map((s) => `<option value="${esc(s.key)}"${s.key === renewKey ? " selected" : ""}>$${esc(s.ticker)} · ${esc(chainName(s.chainId))}${statusOf(s, status) === "expired" ? " · off air" : ""}${status?.[s.key]?.paidUntil ? ` · paid until ${esc(status[s.key].paidUntil!.slice(0, 10))}` : ""}${status?.[s.key]?.plus ? ` · station+${status[s.key].plusUntil ? ` until ${esc(status[s.key].plusUntil!.slice(0, 10))}` : ""}` : ""}</option>`).join("")}</select></label>
+      ${planField("rplan", `${usd(p.monthUsd)} a month`, plus ? `${usd(plus.month)} a month` : "")}
       <fieldset class="ap-months"><legend>RENEW FOR</legend>
-        <label><input type="radio" name="months" value="1" checked /> 1 month · <b>${usd(p.monthUsd)}</b></label>
-        <label><input type="radio" name="months" value="3" /> 3 months · <b>${usd(p.threeMonthsUsd)}</b></label>
+        <label><input type="radio" name="months" value="1" checked /> 1 month · <b class="ap-m1"></b></label>
+        <label><input type="radio" name="months" value="3" /> 3 months · <b class="ap-m3"></b></label>
+        ${plus ? `<label class="ap-up" hidden><input type="radio" name="months" value="up" /> upgrade only · <b class="ap-mup"></b></label>` : ""}
       </fieldset>
-      <p class="ap-price">From the current end, or from today if the station is off air. No new setup.</p>
+      <p class="ap-price ap-renew-note"></p>
       <button type="submit" class="btn-sq">GET A QUOTE ▸</button>` : `<p class="ap-msg">No station to renew yet.</p>`}
       <p class="ap-msg ap-out" aria-live="polite"></p>
     </form>
@@ -168,6 +196,47 @@ function build(root: HTMLElement, cfg: Config, renewable: Station[], status: Sta
     (fNew.contact as HTMLInputElement).placeholder = fNew.contactKind.value === "email" ? "name@example.com" : "@handle";
   });
 
+  // ---- plan and prices: Station or Station+, the renewal's prices and the upgrade (as the API prices them)
+  const checked = (form: HTMLFormElement, name: string) => form.querySelector<HTMLInputElement>(`input[name=${name}]:checked`)?.value ?? "";
+  const setupPrice = q<HTMLElement>("#ap-setup-price", fNew);
+  const showSetup = () => {
+    const isPlus = !!plus && checked(fNew, "plan") === "plus";
+    setupPrice.innerHTML = `Setup: <b>${usd(p.setupUsd + (isPlus ? plus!.diff : 0))} + ${p.setupImd} IMD</b> at the current IMD price, paid in stablecoins (USDC, USDT, USDT0, USDG) · first month${isPlus ? " as Station+" : ""} included from the day it goes on air.`;
+  };
+  fNew.addEventListener("change", showSetup);
+  showSetup();
+  /** The API's upgrade price: (Station+ month - Station month) x days / 30, cents rounded up. */
+  const upUsd = (days: number) => (plus ? Math.ceil(Math.round(((plus.diff * days) / plus.prorateDays) * 1e6) / 1e4) / 100 : 0);
+  /** Days of the paid period not on Station+ yet (the API's upgradeDays: rounded up, the first hour free). */
+  const upDays = (key: string) => {
+    const st = status?.[key], now = Date.now();
+    const paid = endOf(st?.paidUntil), plusEnd = st?.plus ? endOf(st.plusUntil) : null;
+    if (!paid || paid <= now) return 0;
+    const gap = paid - Math.max(now, plusEnd ?? 0) - 3_600_000;
+    return gap > 0 ? Math.ceil(gap / 86_400_000) : 0;
+  };
+  const showRenew = () => {
+    if (!renewable.length) return;
+    const isPlus = !!plus && checked(fRenew, "rplan") === "plus";
+    const key = fRenew.key.value as string;
+    const st = renewable.find((s) => s.key === key);
+    const live = !!st && statusOf(st, status) === "live";
+    const days = isPlus && live ? upDays(key) : 0;
+    const extra = upUsd(days);
+    q<HTMLElement>(".ap-m1", fRenew).textContent = usd((isPlus ? plus!.month : p.monthUsd) + extra);
+    q<HTMLElement>(".ap-m3", fRenew).textContent = usd((isPlus ? plus!.three : p.threeMonthsUsd) + extra);
+    const up = fRenew.querySelector<HTMLElement>(".ap-up");
+    if (up) {
+      up.hidden = !days;
+      q<HTMLElement>(".ap-mup", fRenew).textContent = days ? `${usd(extra)} · Station+ for the ${days} day${days === 1 ? "" : "s"} already paid` : "";
+      if (!days && checked(fRenew, "months") === "up") (fRenew.querySelector("input[name=months][value='1']") as HTMLInputElement).checked = true;
+    }
+    q<HTMLElement>(".ap-renew-note", fRenew).textContent = (days ? `Station+ runs to the new end, so the ${days} day${days === 1 ? "" : "s"} already paid are upgraded too (${usd(extra)}). ` : "")
+      + "From the current end, or from today if the station is off air. No new setup.";
+  };
+  fRenew.addEventListener("change", showRenew);
+  showRenew();
+
   // ---- quote requests
   const submit = async (form: HTMLFormElement, path: string, body: unknown) => {
     const msg = q<HTMLElement>(".ap-out", form), btn = q<HTMLButtonElement>("button[type=submit]", form);
@@ -202,12 +271,14 @@ function build(root: HTMLElement, cfg: Config, renewable: Station[], status: Sta
     }
     void submit(fNew, "/apply", {
       chainId: Number(fNew.chainId.value), token, ...(pool ? { pool } : {}), contact: { kind: fNew.contactKind.value, value: contact },
-      vibe: text, ...(genres.length ? { genres } : {}), plan: "setup",
+      vibe: text, ...(genres.length ? { genres } : {}), plan: "setup", ...(plus && checked(fNew, "plan") === "plus" ? { plus: true } : {}),
     });
   });
   fRenew.addEventListener("submit", (ev) => {
     ev.preventDefault();
-    void submit(fRenew, "/renew", { key: fRenew.key.value, months: Number((fRenew.querySelector("input[name=months]:checked") as HTMLInputElement).value) });
+    const months = checked(fRenew, "months");
+    if (months === "up") return void submit(fRenew, "/upgrade", { key: fRenew.key.value });
+    void submit(fRenew, "/renew", { key: fRenew.key.value, months: Number(months), ...(plus && checked(fRenew, "rplan") === "plus" ? { plus: true } : {}) });
   });
 
   // ---- quote, payment, status
@@ -216,13 +287,18 @@ function build(root: HTMLElement, cfg: Config, renewable: Station[], status: Sta
     fNew.hidden = fRenew.hidden = true;
     quoteEl.hidden = false;
     const payChains = [...new Set(app.quote.amounts.map((a) => a.chainId))];
-    const what = app.kind === "setup" ? `$${esc(app.symbol ?? "TOKEN")} station · setup` : `$${esc(app.key)} · renew ${app.months} month${app.months === 1 ? "" : "s"}`;
+    const tier = app.plus ? "station+" : "station";
+    const what = app.kind === "setup" ? `$${esc(app.symbol ?? "TOKEN")} ${tier} · setup`
+      : app.kind === "upgrade" ? `${esc(app.key)} · upgrade to station+`
+      : `${esc(app.key)} · renew ${app.months} month${app.months === 1 ? "" : "s"}${app.plus ? " as station+" : ""}`;
     const u = app.quote.usd;
     quoteEl.innerHTML = `
       <div class="table-term big">
         <div class="tt-head">&gt; quote · ${what} · <span class="ap-left"></span></div>
         <table><tbody>
-          <tr><td>${app.kind === "setup" ? "setup fee" : "subscription"}</td><td><b>${usd(u.feeUsd)}</b></td></tr>
+          ${app.kind !== "upgrade" ? `<tr><td>${app.kind === "setup" ? "setup fee" : app.plus ? "station+" : "subscription"}</td><td><b>${usd(u.feeUsd)}</b></td></tr>` : ""}
+          ${u.plusUsd ? `<tr><td>station+</td><td><b>${usd(u.plusUsd)}</b><em>the first month as station+</em></td></tr>` : ""}
+          ${u.upgrade ? `<tr><td>upgrade</td><td><b>${usd(u.upgrade.usd)}</b><em>station+ for the ${u.upgrade.days} day${u.upgrade.days === 1 ? "" : "s"} already paid</em></td></tr>` : ""}
           ${u.imd ? `<tr><td>swarm</td><td><b>${u.imd.amount} IMD</b> × $${u.imd.priceUsd.toPrecision(4)} = <b>${usd(u.imd.usd)}</b><em>IMD at its current price; the IMD part pays the swarm</em></td></tr>` : ""}
           <tr><td>total</td><td><b>$${esc(app.quote.totalUsd)}</b><em>plus a few millionths that name this quote</em></td></tr>
         </tbody></table>
@@ -290,9 +366,12 @@ function build(root: HTMLElement, cfg: Config, renewable: Station[], status: Sta
       const tx = a.payment ? (ex ? `<a href="${esc(ex)}/tx/${esc(a.payment.txHash)}" target="_blank" rel="noopener">${esc(a.payment.symbol)} on ${esc(chainName(a.payment.chainId))} ↗</a>` : esc(a.payment.symbol)) : "";
       left.textContent = "PAID";
       txForm.hidden = true;
-      const next = a.kind === "renew"
-        ? `The station is paid until <b>${esc(a.paidUntil?.slice(0, 10) ?? "?")}</b>. An off-air station is back within minutes.`
-        : "Next: the IMD swarm writes the station's sound, the owner listens, and the station goes on air; the first month starts then. The contact given hears back at each step.";
+      const plusNext = "The YouTube radio adds the station once its loop is rendered, and the weekly posts start.";
+      const next = a.kind === "upgrade"
+        ? `The station is Station+ until <b>${esc(a.plusUntil?.slice(0, 10) ?? "?")}</b>. ${plusNext}`
+        : a.kind === "renew"
+        ? `The station is paid until <b>${esc(a.paidUntil?.slice(0, 10) ?? "?")}</b>${a.plusUntil ? `, Station+ until <b>${esc(a.plusUntil.slice(0, 10))}</b>` : ""}. An off-air station is back within minutes.${a.plusUntil ? ` ${plusNext}` : ""}`
+        : `Next: the IMD swarm writes the station's sound, the owner listens, and the station goes on air; the first month${a.plus ? " as Station+" : ""} starts then. The contact given hears back at each step.`;
       q<HTMLElement>(".ap-id", quoteEl).insertAdjacentHTML("beforebegin", `<div class="table-term ap-done"><div class="tt-head">&gt; status · <span class="ok">PAID</span> · ${tx}</div><p class="tt-note">${next}</p></div>`);
     }
   }

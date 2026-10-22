@@ -181,7 +181,7 @@ describe("validation", () => {
   });
 
   it("renew and pay", () => {
-    expect(renewReq({ key: "infer", months: 3 })).toEqual({ key: "infer", months: 3 });
+    expect(renewReq({ key: "infer", months: 3 })).toEqual({ key: "infer", months: 3, plus: false });
     expect(() => renewReq({ key: "infer", months: 2 })).toThrow(/months/);
     expect(() => renewReq({ key: "../x", months: 1 })).toThrow(/key/);
     const tx = "0x" + "Ab".repeat(32);
@@ -278,7 +278,7 @@ describe("HTTP API (no network: fake chain, check and price)", () => {
   let receipt: ReceiptLike | null;
   let head: bigint;
   const now = () => BASE.blockTime * 1000 - 30_000; // the quotes are made 30 s before the recorded transfer
-  const config: ApiConfig = { payTo: BASE_TO, open: true, tier: "launch", origins: ["https://theidm.fun"], trustProxy: true };
+  const config: ApiConfig = { payTo: BASE_TO, open: true, tier: "launch", origins: ["https://theidm.fun"], trustProxy: true, plusSlots: 2 };
   const registry = { chains: {}, stations: [
     { key: "infer", label: "INFER/IMD", ticker: "INFER", program: "infer", chainId: 1, kind: "v4", genesisBlock: 1, token: "0x53d0ea0a685220718dc6a0a6e4617194c6f37921", status: "live", paidUntil: "2026-10-30" },
     { key: "idm", label: "$IDM", ticker: "IDM", program: "idm", chainId: 4663, kind: "hook", genesisBlock: 1, token: "0x4fe9f3823791c8b187b81ab8b7398d793fed28f6", status: "live", house: true },

@@ -25,7 +25,7 @@ const now = Date.now();
 const usage = "usage: station-apps.ts list [--all] | show <id> | approve <id>   [--out <dir>]";
 
 const usd = (a: Application) => `$${(a.quote.usd.totalCents / 100).toFixed(2)}`;
-const what = (a: Application) => (a.kind === "setup" ? `${a.symbol ?? "?"} ${CHAINS[a.chainId!]?.name ?? a.chainId}` : `renew ${a.key} ${a.months} mo`);
+const what = (a: Application) => (a.kind === "setup" ? `${a.symbol ?? "?"} ${CHAINS[a.chainId!]?.name ?? a.chainId}${a.plus ? " station+" : ""}` : a.kind === "upgrade" ? `upgrade ${a.key} to station+` : `renew ${a.key} ${a.months} mo${a.plus ? " station+" : ""}`);
 /** Single-quoted for a POSIX shell. */
 const sh = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
@@ -54,7 +54,7 @@ if (cmd === "list") {
   const a = get();
   const state = stateOf(a, now, LIMITS.graceMs);
   if (a.kind !== "setup") {
-    console.log(`${a.id} is a renewal of ${a.key}: ${state === "paid" ? `paid, runs until ${a.paidUntil} (already in status.json)` : `not paid (${state})`}. Nothing to approve.`);
+    console.log(`${a.id} is a ${a.kind === "upgrade" ? "Station+ upgrade" : "renewal"} of ${a.key}: ${state === "paid" ? `paid, ${a.kind === "upgrade" ? `Station+ until ${a.plusUntil}` : `runs until ${a.paidUntil}`} (already in status.json)` : `not paid (${state})`}. Nothing to approve.`);
     process.exit(0);
   }
   if (state !== "paid") console.log(`WARNING: not paid (${state}). Approve only after the payment.\n`);

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>IDM-16 stream audio</title>
+  <link rel="icon" href="data:," />
+</head>
+<body>
+  <!-- Stream audio source (sim/stream/live/stream.mjs): the same feed and live player as index.html, no UI.
+       Same URL params as the site (?net=robinhood | imd-eth, ?replay=...). The master output is tapped by an
+       AudioWorklet and handed to window.__tapChunk(base64 s16le stereo at the AudioContext rate) when the harness exposes it. -->
+  <script type="module" src="/src/stream.ts"></script>
+</body>
+</html>

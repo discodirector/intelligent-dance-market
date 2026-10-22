@@ -25,7 +25,8 @@ export interface Payment {
 
 export interface Application {
   id: string;
-  kind: "setup" | "renew";
+  /** "upgrade": Station+ for the rest of a station's paid period (docs/STATIONS.md "Station+"). */
+  kind: "setup" | "renew" | "upgrade";
   createdAt: string;
   /** Quote valid until; a payment mined up to LIMITS.graceMs later still counts. */
   expiresAt: string;
@@ -41,14 +42,20 @@ export interface Application {
   genres?: string[];
   /** Setup: the eligibility report it was accepted on (always PASS: the check is automatic). */
   eligibility?: Pick<Report, "verdict" | "reasons" | "checkedAt" | "pool">;
-  /** Renewal: the station and the months. */
+  /** Renewal and upgrade: the station; renewal: the months. */
   key?: string;
   months?: 1 | 3;
+  /** Setup or renewal as Station+ (an upgrade always is). */
+  plus?: boolean;
+  /** Upgrade: the paid end it was quoted up to (Station+ until then once paid). */
+  upgradeTo?: string;
   /** The last tx submitted that is not yet confirmed (shown while the form polls). */
   pendingTx?: { chainId: number; txHash: string; confirmations: number; required: number };
   payment?: Payment;
   /** Renewal: the new paid end. */
   paidUntil?: string;
+  /** Paid Station+ renewal or upgrade: the new Station+ end. */
+  plusUntil?: string;
   /** Set by bot/scripts/station-apps.ts approve. */
   approvedAt?: string;
 }

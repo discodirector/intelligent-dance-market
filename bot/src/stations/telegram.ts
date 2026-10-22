@@ -26,6 +26,35 @@ export function parseCommand(text: string): Command | null {
   return null;
 }
 
+// ---------------------------------------------------------------- Station+ notifications (docs/STATIONS.md "Station+")
+
+/** A paid renewal or Station+ upgrade (API applications, kind renew / upgrade). */
+export function renewalText(a: {
+  kind: string; key?: string; months?: number; plus?: boolean; paidUntil?: string; plusUntil?: string;
+  quote: { usd: { totalCents: number; upgrade?: { days: number } } }; payment?: { symbol: string };
+}): string {
+  const paid = `$${(a.quote.usd.totalCents / 100).toFixed(2)} in ${a.payment?.symbol ?? "?"}`;
+  if (a.kind === "upgrade") {
+    return `UPGRADED ${a.key} to STATION+: ${a.quote.usd.upgrade?.days ?? "?"} day(s), ${paid}; Station+ until ${a.plusUntil ?? "?"}. Its rotation loop builds on the stream host; weekly posts start.`;
+  }
+  const up = a.quote.usd.upgrade ? ` + ${a.quote.usd.upgrade.days} day(s) of upgrade` : "";
+  return `RENEWED ${a.key}${a.plus ? " as STATION+" : ""}: ${a.months} month(s)${up}, ${paid}; paid until ${a.paidUntil ?? "?"}${a.plusUntil ? `, Station+ until ${a.plusUntil}` : ""}`;
+}
+
+/** Station+ slots filled up (new Station+ quotes are refused from then), or one freed again. */
+export function plusSlotsText(full: boolean, s: { max: number; used: number; active: string[]; pending: number; quoted: number }): string {
+  return full
+    ? `STATION+ FULL: ${s.used} of ${s.max} slots taken (${s.active.length} on air, ${s.pending} paid and not live yet, ${s.quoted} open quote(s)). New Station+ quotes are refused; plain Station is still sold. STATION_PLUS_SLOTS in api.env (and stations.env) sells more.`
+    : `STATION+ slot free again: ${s.used} of ${s.max} taken.`;
+}
+
+/** A Station+ station's rotation loop, built (or not) on the stream host (sim/stream/live/build-loops.mjs). */
+export function loopText(key: string, l: { state: "built" | "failed"; error?: string }): string {
+  return l.state === "built"
+    ? `LOOP BUILT ${key}: its YouTube rotation loop is ready; the stream plays it from its next station change.`
+    : `LOOP FAILED ${key}: ${l.error ?? "?"}. The stream skips the station until its loop exists; the builder retries (journalctl -u idm-stream-loops on the stream host).`;
+}
+
 export interface Update { update_id: number; message?: { chat?: { id?: number | string }; from?: { id?: number }; text?: string } }
 
 /** The commands in a batch of updates that come from the owner's chat (string compare: ids can exceed 2^53). */

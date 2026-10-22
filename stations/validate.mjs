@@ -115,6 +115,8 @@ export function stationProblems(s, chains, { packExists = () => true } = {}) {
   if (!STATUSES.includes(s.status)) fail(`status "${s.status}" unknown (${STATUSES.join(", ")})`);
   // The subscription's end (bot stations/subscription.ts): past it a live station is off air.
   if (s.paidUntil !== undefined && !isDate(s.paidUntil)) fail("paidUntil must be YYYY-MM-DD or an ISO timestamp in UTC");
+  // Station+ end (docs/STATIONS.md "Station+"), same format; paid Station+ renewals push it further at runtime.
+  if (s.plusUntil !== undefined && !isDate(s.plusUntil)) fail("plusUntil must be YYYY-MM-DD or an ISO timestamp in UTC");
   if (s.house !== undefined && typeof s.house !== "boolean") fail("house must be a boolean");
   return errors;
 }

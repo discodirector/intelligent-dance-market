@@ -142,6 +142,12 @@ body.stations-page { background: var(--black); }
 .ap-form fieldset label { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 400; letter-spacing: 0.02em; color: #b4bbb5; }
 .ap-form input[type="checkbox"], .ap-form input[type="radio"] { accent-color: var(--phos); }
 .ap-count { justify-self: end; }
+.ap-form .ap-plan { display: grid; gap: 8px; }
+.ap-form .ap-plan label { align-items: baseline; }
+.ap-form .ap-plan label b { color: var(--phos); font-weight: 700; }
+.ap-form .ap-plan .ap-full { opacity: 0.55; }
+.ap-form .ap-plan .ap-full b { color: var(--sell); }
+.ap-form .ap-note { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .ap-price { margin: 0; color: #b4bbb5; font-size: 13px; }
 .ap-price b { color: var(--bone); }
 .ap-form .btn-sq { justify-self: start; cursor: pointer; }
@@ -182,3 +188,5 @@ body.stations-page { background: var(--black); }
   .st-list6 li { font-size: 16px; }
   .third b { font-size: 52px; }
 }
+.st-plan-tabs { margin: 4px 0 6px; }
+.st-price table td:first-child { width: 30%; }

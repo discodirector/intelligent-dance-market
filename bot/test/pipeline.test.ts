@@ -153,6 +153,26 @@ describe("pipeline state machine", () => {
     expect(w.entries.get("chog")!.status).toBe("paused");
   });
 
+  it("a Station+ setup goes live as Station+ for its included month (plusUntil = paidUntil)", async () => {
+    const w = world(), a = app({ plus: true }), p = newPipeline(a.id);
+    await run(a, p, w.deps);
+    expect(w.sent.find((s) => s.startsWith("PAID"))).toContain("as STATION+");
+    w.admit("order-1", "job-1");
+    w.jobs.set("job-1", { state: "completed", base: BASE, delivery: { repoUrl: "https://github.com/o/r", commit: COMMIT } });
+    await run(a, p, w.deps);
+    await goLive(a, p, w.deps, "on the owner's command");
+    expect(w.entries.get("chog")).toMatchObject({ status: "live", paidUntil: "2026-11-22T12:00:00Z", plusUntil: "2026-11-22T12:00:00Z" });
+    expect(w.sent.at(-1)).toContain("Station+ until 2026-11-22T12:00:00Z");
+    // A plain setup never gets plusUntil.
+    const v = world(), b = app(), q = newPipeline(b.id);
+    await run(b, q, v.deps);
+    v.admit("order-1", "job-1");
+    v.jobs.set("job-1", { state: "completed", base: BASE, delivery: { repoUrl: "https://github.com/o/r", commit: COMMIT } });
+    await run(b, q, v.deps);
+    await goLive(b, q, v.deps, "now");
+    expect(v.entries.get("chog")!.plusUntil).toBeUndefined();
+  });
+
   it("gate fails once -> ONE automatic job.continue with the failing lines; fails again -> attention, nothing more paid", async () => {
     const w = world(), a = app(), p = newPipeline(a.id);
     await run(a, p, w.deps);

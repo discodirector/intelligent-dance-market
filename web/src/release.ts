@@ -6,9 +6,12 @@ import {
   eraOf,
   initialState,
   planRelease,
+  programFor,
+  registerPack,
   RELEASE_HEAT_MAX,
   styleOf,
   SYNTH_VERSION,
+  type Program,
   type ReleaseOptions,
   type ReleasePlan,
   type ReleaseSwap,
@@ -24,6 +27,18 @@ export interface ReleaseRequest extends ReleaseOptions {
   track?: number | null;
   /** Packed state before the tape's first entry (bot timeline.meta.json `initial`), for a track that starts the tape. */
   initial?: { slot0: string; slot1: string } | null;
+  /**
+   * A station's style pack as JSON (synth pack.ts; the bot sends it for a station release): registered here, then the
+   * release plays its program. Data across the page boundary, never code. Absent: `program`, else the house.
+   */
+  pack?: unknown;
+}
+
+/** The program of a station pack sent as data: validated and registered (synth registerPack), then built. */
+export function programOfPack(pack: unknown): Program {
+  const errors = registerPack(pack);
+  if (errors.length) throw new Error(`station pack refused: ${errors.slice(0, 3).join("; ")}`);
+  return programFor((pack as { key: string }).key);
 }
 
 export interface BuiltRelease {
@@ -58,7 +73,8 @@ export function buildRelease(raw: readonly ReleaseEntry[], req: ReleaseRequest =
   else seed = { ...initialState(), heat: 0, trackNo: 0 };
   const last = entries.at(-1)!;
   const next = selection.complete ? dec(last.slot0, last.slot1) : null;
-  const plan = planRelease({ seed, swaps, ...(next ? { next } : {}) }, req);
+  const { pack, ...options } = req;
+  const plan = planRelease({ seed, swaps, ...(next ? { next } : {}) }, pack ? { ...options, program: programOfPack(pack) } : options);
   return { selection, entries, seed, next, plan, swaps };
 }
 

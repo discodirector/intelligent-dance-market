@@ -4,14 +4,22 @@
 //  - STATION_CHECKPOINTS=1: every live registry station replayed and its checkpoint published each tick (station.ts)
 //  - every tick: stations-data/status.json (registry status + paid renewals, expired = off air); once a day the
 //    stations expiring within 3 days are logged and written to applications/reminders.json (stations/subscription.ts)
+//  - Station+ (docs/STATIONS.md "Station+"): one post a week per Station+ station, the release of a track finished
+//    that week or a now-playing clip, at most one per tick and 3 h apart (stations/plusPosts.ts), inside the daily cap
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { decide, prune, readyTracks, type PostKind, type SchedState } from "./rules.ts";
+import { packFor, programFromPack, type StationPack } from "@swarm-sequencer/synth";
+import { decide, DEFAULT_RULES, H, prune, readyTracks, type PostKind, type SchedState } from "./rules.ts";
 import { producePost, produceRelease, teaser } from "./pipeline.ts";
 import { fetchMutated, liveClient, liveConfigFromEnv } from "./live.ts";
 import { isDryRun } from "./post/index.ts";
-import { IMD_STATION, updateStations, type Registry } from "./station.ts";
-import { loadMergedRegistry } from "./stations/runtime.ts";
+import { Store } from "./api/store.ts";
+import { IMD_STATION, stationFromEntry, updateStations, type Registry } from "./station.ts";
+import {
+  duePlusPost, failedPlus, plusCaption, PLUS_POST_RULES, plusTrack, postedPlus, trackSwaps, xHandle,
+  type PlusPostRules, type PlusPostStates,
+} from "./stations/plusPosts.ts";
+import { loadMergedRegistry, packJsonPath } from "./stations/runtime.ts";
 import { expiring, publishStatus, writeJsonAtomic, type StatusFile } from "./stations/subscription.ts";
 import type { TimelineEntry } from "./lib/timeline.ts";
 import { movementWindow, trackSubtitle, trackWindow } from "./lib/track.ts";
@@ -62,6 +70,97 @@ function subscriptions(reg: Registry): StatusFile {
   } catch (e) {
     log("subscription status failed:", (e as Error).message);
     return {};
+  }
+}
+
+/** STATION_PLUS_POSTS=0 turns the Station+ weekly posts off (default on; DRY_RUN still decides whether X sees them). */
+const PLUS_POSTS = process.env.STATION_PLUS_POSTS !== "0";
+const PLUS_RULES: PlusPostRules = {
+  ...PLUS_POST_RULES,
+  dailyCap: DEFAULT_RULES.dailyCap,
+  gapMs: Number(process.env.PLUS_POST_GAP_HOURS ?? PLUS_POST_RULES.gapMs / H) * H,
+};
+/** Swaps a "now playing" clip plays: the station's newest. */
+const PLUS_CLIP_SWAPS = 200;
+const SITE = (process.env.SITE_URL ?? "https://theidm.fun").replace(/\/$/, "");
+
+/** Live Station+ stations now (status.json's plus). */
+const plusKeys = (status: StatusFile) => Object.entries(status).flatMap(([k, v]) => (v.plus && v.status === "live" ? [k] : []));
+/** Dry runs keep their own Station+ state: a dry run never delays the first real post. */
+const plusStates = (s: SchedState): PlusPostStates => (isDryRun() ? (s.plusPostsDry ??= {}) : (s.plusPosts ??= {}));
+
+/** A station's pack as data: baked (synth PACKS) or the pipeline's runtime JSON; undefined for the house program. */
+function packOf(program: string): unknown {
+  if (program === "idm") return undefined;
+  const baked = packFor(program);
+  if (baked) return baked;
+  const p = packJsonPath(STATIONS_DATA, program);
+  return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : undefined;
+}
+
+/** The client's X handle from the station's paid setup application (pipeline stations); null for others. */
+function handleOf(key: string): string | null {
+  try {
+    const store = new Store(OUT);
+    const app = store.list().find((a) => a.kind === "setup" && a.payment && store.pipeline<{ key?: string }>(a.id)?.key === key);
+    return xHandle(app?.contact);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * One Station+ weekly post (stations/plusPosts.ts): the release of a track finished since the station's last post,
+ * else a "now playing" clip; square 1080x1080 only, the station's own sound (its pack) and name, a fixed caption with
+ * its ticker as the only cashtag. A failure is retried in an hour; after three the week is given up.
+ */
+async function plusPost(s: SchedState, key: string, reg: Registry, stations: Awaited<ReturnType<typeof updateStations>>) {
+  const states = plusStates(s);
+  const now = Date.now();
+  try {
+    const e = reg.stations.find((x) => x.key === key);
+    if (!e || e.kind === "hook") throw new Error("not a played registry station");
+    let cache = stations.get(key);
+    if (!cache || cache instanceof Error) cache = (await updateStations(OUT, STATIONS_DATA, { keys: [key], reg })).get(key);
+    if (!cache || cache instanceof Error) throw cache ?? new Error("station timeline not loaded");
+    const entries = cache.entries;
+    if (!entries.length) {
+      log(`station+ ${key}: no swaps yet; nothing to post this week`);
+      postedPlus(states, key, now, "skipped");
+      return;
+    }
+    const st = stationFromEntry(e, reg);
+    const chain = reg.chains[String(e.chainId)]?.name ?? String(e.chainId);
+    const pack = packOf(e.program);
+    const program = pack ? programFromPack(pack as StationPack) : undefined;
+    const base = { label: e.label, ticker: e.ticker, key, handle: handleOf(key), site: SITE };
+    // A calibrated quote (not ETH): the feed shows the pool's own currency, named by its label (CHOG/MON: MON).
+    const perEth = Number(e.calibration?.quotePerEth ?? 1);
+    const quote = perEth !== 1 ? { symbol: e.label.split("/")[1] ?? "ETH", perEth } : undefined;
+    const trackNo = plusTrack(entries, states[key], now);
+    if (trackNo != null) {
+      await produceRelease(entries, {
+        chain: chain.toLowerCase(), pool: e.label, track: trackNo, station: st.label, pack, program, theme: e.theme, quote,
+        title: `${e.label.toUpperCase()} · ${chain.toUpperCase()} · TRACK #${trackNo} · ${trackSwaps(entries, trackNo)} SWAPS IN ORDER`,
+        caption: (f) => plusCaption({ ...base, kind: "release", trackNo, swaps: f.release?.swaps ?? trackSwaps(entries, trackNo), genre: f.release?.genre }),
+      });
+    } else {
+      const recent = entries.slice(-PLUS_CLIP_SWAPS);
+      await producePost(recent, {
+        kind: "snapshot", chain: chain.toLowerCase(), pool: e.label,
+        title: `${e.label.toUpperCase()} · ${chain.toUpperCase()} · NOW PLAYING`,
+        subtitle: `${recent.length} RECENT SWAPS · THEIDM.FUN/?NET=${key.toUpperCase()}`,
+        station: st.label, pack, program, theme: e.theme, quote, sizes: [[1080, 1080]],
+        caption: (f) => plusCaption({ ...base, kind: "clip", swaps: f.swaps, genre: f.playing }),
+      });
+    }
+    postedPlus(states, key, now, trackNo != null ? "release" : "clip", trackNo ?? undefined);
+    log(`station+ ${key}: weekly ${trackNo != null ? `release of track #${trackNo}` : "now-playing clip"} ${isDryRun() ? "queued (dry run)" : "posted"}`);
+    // Dry runs post nothing, so they must not use up the daily cap.
+    if (!isDryRun()) s.posts.push({ at: now, kind: "station" });
+  } catch (err) {
+    const gaveUp = failedPlus(states, key, now, PLUS_RULES);
+    log(`station+ ${key}: weekly post failed${gaveUp ? " again; this week is skipped" : ", retrying in an hour"}:`, (err as Error).stack ?? err);
   }
 }
 
@@ -121,7 +220,19 @@ async function tick() {
     const ctxFrom = head > 30_000n ? head - 30_000n : 0n;
     recent = (await fetchMutated(client, live.hook, ctxFrom, head, live.rules, live.treasury)).slice(-2000);
   }
-  const kind: PostKind | null = decide(Date.now(), s, { live: !!live, newMovements, newTracks });
+  // A Station+ station's weekly post takes the tick when one is due (it waits for the cap and its own gap, never for
+  // the hook's posts); the hook's queue simply posts on the next tick.
+  const plusKey = reg && PLUS_POSTS ? duePlusPost(plusKeys(status), plusStates(s), Date.now(), s.posts.filter((p) => Date.now() - p.at < 24 * H).length, PLUS_RULES) : null;
+  if (plusKey && reg) {
+    if (live) {
+      s.pendingMovements = newMovements;
+      delete s.pendingTracks;
+      s.lastBlock = Number(head);
+    }
+    await plusPost(s, plusKey, reg, stations);
+    return save(s);
+  }
+  const kind: Exclude<PostKind, "station"> | null = decide(Date.now(), s, { live: !!live, newMovements, newTracks });
   log(`mode=${live ? `live ${live.rules}` : "pre-launch"} dryRun=${isDryRun()} posts24h=${s.posts.filter((p) => Date.now() - p.at < 86_400_000).length} movements=${newMovements} tracks=${newTracks} -> ${kind ?? "nothing"}`);
   if (live) {
     s.pendingMovements = kind === "movement" ? 0 : newMovements;

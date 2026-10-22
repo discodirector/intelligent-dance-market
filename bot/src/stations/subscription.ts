@@ -3,17 +3,41 @@
 // OUT_DIR/applications/subscriptions.json) push the end further. The runtime status the site reads,
 // OUT_DIR/stations-data/status.json = { <key>: { status, paidUntil? } }, merges both: a live station whose paidUntil
 // has passed is "expired" (off air, keeps its sound and its registry entry). House stations never expire; a station
-// with no paidUntil anywhere (the pilot) never expires either.
+// with no paidUntil anywhere (the pilot) never expires either. Station+ (docs/STATIONS.md "Station+") is the same shape:
+// plusUntil in the registry entry (a Station+ setup gets it when it goes live) or in subscriptions.json (paid renewals
+// and upgrades), the later one counts; status.json says `plus: true` (and its plusUntil) only while a live, unexpired
+// station is inside it, so a lapsed Station+ simply falls back to a plain station.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Registry, RegistryEntry } from "../station.ts";
 
 export type RuntimeStatus = RegistryEntry["status"] | "expired";
-export interface StationStatus { status: RuntimeStatus; paidUntil?: string }
+export interface StationStatus {
+  status: RuntimeStatus;
+  paidUntil?: string;
+  /** Station+ now: live, not expired, inside plusUntil. Absent otherwise (never false). */
+  plus?: true;
+  plusUntil?: string;
+}
 export type StatusFile = Record<string, StationStatus>;
 
-export interface Renewal { applicationId: string; months: number; paidAt: string; txHash: string; chainId: number }
-export interface Subscription { paidUntil: string; renewals: Renewal[] }
+export interface Renewal {
+  applicationId: string;
+  /** 0 for an upgrade (no time added). */
+  months: number;
+  paidAt: string;
+  txHash: string;
+  chainId: number;
+  /** "plus": a Station+ renewal; "upgrade": Station+ for the rest of the paid period. Absent: a plain renewal. */
+  plan?: "plus" | "upgrade";
+}
+export interface Subscription {
+  /** Absent when the station only had upgrades (its paid end is still the registry's). */
+  paidUntil?: string;
+  /** Station+ end from paid Station+ renewals and upgrades. */
+  plusUntil?: string;
+  renewals: Renewal[];
+}
 export type Subscriptions = Record<string, Subscription>;
 
 const DAY = 86_400_000;
@@ -43,13 +67,19 @@ export function addMonths(ms: number, months: number): number {
   return Date.UTC(y, m, Math.min(d.getUTCDate(), last), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds());
 }
 
-/** The later of the registry's paidUntil and the paid renewals', as written (null = none). */
-export function effectivePaidUntil(e: RegistryEntry, sub?: Subscription): string | undefined {
-  const a = paidEnd(e.paidUntil), b = paidEnd(sub?.paidUntil);
-  if (a === null) return b === null ? undefined : sub!.paidUntil;
-  if (b === null) return e.paidUntil;
-  return b > a ? sub!.paidUntil : e.paidUntil;
+/** The later of two ends, as written (undefined = neither). */
+export function laterEnd(a: string | undefined, b: string | undefined): string | undefined {
+  const x = paidEnd(a), y = paidEnd(b);
+  if (x === null) return y === null ? undefined : b;
+  if (y === null) return a;
+  return y > x ? b : a;
 }
+
+/** The later of the registry's paidUntil and the paid renewals', as written (null = none). */
+export const effectivePaidUntil = (e: RegistryEntry, sub?: Subscription): string | undefined => laterEnd(e.paidUntil, sub?.paidUntil);
+
+/** The later of the registry's plusUntil and the paid Station+ renewals' and upgrades'. */
+export const effectivePlusUntil = (e: RegistryEntry, sub?: Subscription): string | undefined => laterEnd(e.plusUntil, sub?.plusUntil);
 
 /** A renewal of `months` from the later of now and the current end (a lapsed station restarts from today). */
 export function renewedUntil(e: RegistryEntry, sub: Subscription | undefined, months: number, now: number): string {
@@ -57,12 +87,17 @@ export function renewedUntil(e: RegistryEntry, sub: Subscription | undefined, mo
   return isoSeconds(addMonths(Math.max(now, end ?? 0), months));
 }
 
-/** One station's runtime status: the registry's switch, "expired" when a live station's subscription has run out. */
+/**
+ * One station's runtime status: the registry's switch, "expired" when a live station's subscription has run out, and
+ * Station+ while a live station is inside its plusUntil (never a house station: the house is in the rotation anyway).
+ */
 export function stationStatus(e: RegistryEntry, sub: Subscription | undefined, now: number): StationStatus {
   const paidUntil = effectivePaidUntil(e, sub);
   const end = paidEnd(paidUntil);
   const expired = !e.house && e.status === "live" && end !== null && end <= now;
-  return { status: expired ? "expired" : e.status, ...(paidUntil ? { paidUntil } : {}) };
+  const plusUntil = effectivePlusUntil(e, sub);
+  const plus = !e.house && !expired && e.status === "live" && (paidEnd(plusUntil) ?? 0) > now;
+  return { status: expired ? "expired" : e.status, ...(paidUntil ? { paidUntil } : {}), ...(plus ? { plus: true as const, plusUntil } : {}) };
 }
 
 export function buildStatus(reg: Registry, subs: Subscriptions, now: number): StatusFile {

@@ -14,7 +14,8 @@ Token owners buy a station; the IMD swarm writes its sound; theidm.fun lists eve
    cannot be verified refuses. The owner (theidm) keeps a veto; a station whose token rugs is switched off, no refund.
 3. **Pay** in stablecoins (Ethereum, Base, Arbitrum, Monad, Robinhood): setup = a service fee + the swarm's cost in IMD at the
    rate of the order day (launch: $50 + 1.5 IMD, later $100 + 3 IMD; first month included, from the day it goes on air), then a subscription
-   (launch $30/month or $75/3 months, later $50 / $125). The IMD part buys the IMD that pays the swarm. Service fees and
+   (launch $30/month or $75/3 months, later $50 / $125), or Station+ ($90 / $225, later $150 / $375; "Station+"
+   below). The IMD part buys the IMD that pays the swarm. Service fees and
    subscriptions are split in three: 1/3 buys back and burns $IDM, 1/3 buys back and burns IMD, 1/3 pays for the
    infrastructure. A station that is not renewed goes off air and keeps its sound; renewing needs no new setup.
 4. **Swarm**: theidm opens `job.open` (0.5 IMD) on the public repo for the station's style pack, from theidm's own
@@ -141,7 +142,7 @@ that commit with no blockers and `judged: false`), so nothing warns: push those 
 `stations/registry.json`, shared by site and bot:
 `{ key, label, ticker, chainId, kind, poolManager + poolId (v4) | pool (other kinds), token, quote, ethSide,
 genesisBlock, quoteSymbol: "ETH", calibration?, rpcUrls?, theme: { phos, phosDim, ghost, lcd }, program: "<pack key>",
-status: "live"|"paused"|"pending", paidUntil? }`.
+status: "live"|"paused"|"pending", paidUntil?, plusUntil? }` (plusUntil: Station+, same format as paidUntil).
 `status` is the switch: only "live" is on air (`/stations`, bot checkpoints); "pending" (a new entry, below),
 "preview" (the pipeline's: its pack is in, labelled PREVIEW on the player, not listed) and "paused" still get
 `?net=<key>` on the player, so the owner can listen before going live. The rules are `stations/validate.mjs`, shared
@@ -244,8 +245,8 @@ ratio 1.000.
 
 ## Site
 
-`/stations`: a list of stations on air (ours first): mini LCD in the station's colours, ticker, chain, genre · style
-now, track #, swaps; one plays at a time. `/s/<key>` = the player on that station. Long histories replay from a
+`/stations`: a list of stations on air (ours first, then Station+, then the rest in registry order): mini LCD in the
+station's colours, ticker, chain, genre · style now, track #, swaps; one plays at a time. `/s/<key>` = the player on that station. Long histories replay from a
 checkpoint instead of from genesis (below).
 
 ### Checkpoints
@@ -286,7 +287,9 @@ on air. Pieces: the API service `bot/src/api/` (node:http, no framework, no keys
 `site/src/stations-apply.ts`, the owner's tool `bot/scripts/station-apps.ts`.
 
 **Prices** (`bot/src/api/config.ts`, `STATION_PRICE_TIER=launch|regular`): setup = $50 + 1.5 IMD (regular $100 + 3
-IMD), first month included; renewal $30 / month or $75 / 3 months (regular $50 / $125). The IMD part is converted at
+IMD), first month included; renewal $30 / month or $75 / 3 months (regular $50 / $125). Station+ $90 / month or $225 /
+3 months (regular $150 / $375); a setup as Station+ adds $60 (regular $100) for its first month; an upgrade is
+prorated ("Station+" below). The IMD part is converted at
 the order time: IMD's USD price from its deepest DexScreener pair (Ethereum, token 0xd34a…63b7, cached 5 min), cents
 rounded up.
 
@@ -313,11 +316,13 @@ meme token ("UpSideDownCat on robinhood", 18 decimals, 1e9 supply); USDG there i
 **API** (`/api/stations/*`, Caddy proxies to 127.0.0.1:8797):
 
 ```
-GET  /config              prices, stables per chain, genres, open or not
+GET  /config              prices, stables per chain, genres, open or not, plus: {slots, used, left, prorateDays}
 POST /check               {chainId, token, pool?}                    -> eligibility report
 POST /apply               {chainId, token, pool?, contact: {kind: x|telegram|email, value}, vibe (<= 300 chars),
-                           genres?: 2..9 of liquid|futuregarage|triphop|lofihouse|acid|dubtechno|electro|ambientidm|drone, plan: "setup"} -> quote
-POST /renew               {key, months: 1|3}                         -> quote for a registry station (not house)
+                           genres?: 2..9 of liquid|futuregarage|triphop|lofihouse|acid|dubtechno|electro|ambientidm|drone, plan: "setup",
+                           plus?: true}                              -> quote
+POST /renew               {key, months: 1|3, plus?: true}            -> quote for a registry station (not house)
+POST /upgrade             {key}                                      -> quote: Station+ for the days already paid
 POST /pay                 {applicationId, chainId, txHash}           -> 200 paid | 202 not mined / confirming | 4xx
 GET  /application/:id     the form's poll (no contact, no vibe)
 ```
@@ -375,14 +380,17 @@ paidUntil yet writes paidUntil = now + 1 month (and prints it); one that already
 
 **Form** (`site/stations.html` `#apply`): behind the build flag `VITE_STATIONS_APPLY=1` (default off: the page keeps
 "Applications open soon", the form code is not even in the bundle). New station: chain, token, pool, contact, vibe,
-genres; the eligibility table appears on blur; GET A QUOTE shows the breakdown, the pay-to address and every amount
-with copy buttons and the expiry; then the chain and the tx hash, CONFIRM PAYMENT polls until paid. RENEW: a registry
-station (`/stations?renew=<key>#apply` preselects it) and 1 or 3 months.
+genres, plan (Station or Station+, with the slots left; Station+ disabled when full); the eligibility table appears on
+blur; GET A QUOTE shows the breakdown, the pay-to address and every amount
+with copy buttons and the expiry; then the chain and the tx hash, CONFIRM PAYMENT polls until paid. RENEW · STATION+:
+a registry station (`/stations?renew=<key>#apply` preselects it), Station or Station+, and 1 or 3 months, or (Station+
+on a live station with paid days left) "upgrade only".
 
 ## Subscription
 
 `bot/src/stations/subscription.ts`. The runtime status `OUT_DIR/stations-data/status.json` =
-`{ <key>: { status, paidUntil? } }`, every registry station: the registry's status, and "expired" for a live, non-house
+`{ <key>: { status, paidUntil?, plus?: true, plusUntil? } }` (plus: "Station+" below), every registry station: the
+registry's status, and "expired" for a live, non-house
 station whose paidUntil (the later of the registry's and the paid renewals') has passed. House stations never expire;
 no paidUntil anywhere never expires (none in the registry now: INFER, the pilot, has a free month to 2026-11-22).
 Expired = off air: hidden from `/stations`, no more checkpoints from the bot (its cache and last checkpoint are
@@ -423,6 +431,107 @@ route) on `/stations` and the player; missing, unreadable or slower than 2.5 s -
    Check: `curl -s https://theidm.fun/api/stations/config`, `curl -sI https://theidm.fun/stations-data/status.json`.
 5. **Site**: `VITE_STATIONS_APPLY=1 npm run build -w site`, rsync `site/dist/` to /var/www/theidm as usual. Without
    the variable the page stays "Applications open soon".
+
+## Station+
+
+Everything in Station, plus (owner-approved 2026-10-22):
+
+1. **The 24/7 YouTube radio**: a place in the stream's rotation (`sim/stream/live`, "Rotation" below).
+2. **4 posts a month on @theidmfun**, one a week: the station's finished track (its release) if a drop happened that
+   week, otherwise a "now playing" clip of the station ("Weekly posts" below). The client's ticker is the post's only
+   cashtag; the client's X handle is tagged when the application gave one.
+3. **Listed above the plain stations** on `/stations` (the house stations stay on top) and marked STATION+ on its card.
+
+**Prices** (stablecoins, the same stables and the same three-way split as Station; `PRICES` in `bot/src/api/config.ts`):
+
+| | launch | regular |
+|---|---|---|
+| Station+ month | $90 | $150 |
+| Station+ 3 months | $225 | $375 |
+| new station as Station+ | setup + $60 (its first month) | setup + $100 |
+| upgrade | $2 a day already paid | $3.33 a day |
+
+Station stays $30 / $75 (regular $50 / $125); the setup is unchanged ($50 + 1.5 IMD, regular $100 + 3 IMD) with the
+first month included: a new application may take that month as Station+ for the month's difference on top.
+
+**Upgrade** (`POST /upgrade`, a live station on Station): Station+ for the rest of the paid period, ending with the
+paidUntil. Prorated:
+
+```
+days    = ceil((paidEnd - max(now, plusEnd) - 1 h) / 24 h)        (0 or less: nothing to upgrade)
+price   = (plusMonthUsd - monthUsd) x days / 30, cents rounded up  (launch $60 / 30 = $2 a day)
+```
+
+`paidEnd`/`plusEnd` are the effective ends (registry or paid renewals, the later); the first hour is free so a quote
+paid minutes later never charges a sliver of a day. Refused: a station off air or not live ("renew it as Station+"),
+a station with no paid end ahead or already Station+ to its end (`code: "nothing-to-upgrade"`), a house station.
+**Renewals**: a Station+ station renews at Station+ prices (`/renew` with `plus: true`); Station+ then runs to the new
+paid end, so the days of the current period not on Station+ yet are added at the upgrade's rate in the same quote
+(`usd.upgrade`). It may renew as plain Station: its Station+ ends where it was paid to, and it leaves the rotation and
+the posts then. A lapsed station renewing as Station+ restarts from today with nothing to prorate.
+
+**Slots**: at most `STATION_PLUS_SLOTS` (default 6; `api.env`, and the same value in `stations.env` for the worker's
+count) at a time. Taken = live Station+ stations + paid Station+ setups the pipeline has not put on air yet (a rejected
+one frees its slot) + open, unexpired quotes that would add one (a Station+ setup; a Station+ renewal or upgrade of a
+station not on Station+ now, one per station). The check runs under the store's lock with the quote's creation, so two
+quotes never take the last slot. Full: 409 `{ error: "Station+ is full (6 of 6 taken): a plain Station is still
+available", code: "plus-full", plus: { slots, used, left } }` for any new Station+; plain Station is still sold; a
+station already on Station+ keeps renewing. No waitlist. An open quote holds its slot for its 30 min (+15 min grace).
+
+**Data**: `plusUntil` (YYYY-MM-DD or ISO timestamp, UTC, as paidUntil) in the registry entry (the pipeline writes it
+when a Station+ setup goes live: plusUntil = paidUntil, the included month; the owner may set it on a baked station)
+and in `applications/subscriptions.json` (`{ paidUntil?, plusUntil?, renewals: [{ ..., plan?: "plus" | "upgrade" }] }`,
+written by paid Station+ renewals and upgrades); the later counts. Applications: `plus: true` (setup, renew),
+`kind: "upgrade"` with `upgradeTo` (the paid end it was quoted for), and after payment `plusUntil`. `status.json` has
+`plus: true` and `plusUntil` only while a live, unexpired, non-house station is inside it: a lapsed Station+ falls back
+to a plain station (or off air) with no other change. The API rewrites status.json at once after a paid Station+
+renewal or upgrade.
+
+**Quote shape** (`publicApp`): `{ kind: "setup" | "renew" | "upgrade", plus?: true, upgradeTo?, plusUntil?, quote:
+{ usd: { feeUsd, imd?, plusUsd?, upgrade?: { days, usd }, totalCents }, totalUsd, amounts } , ... }`.
+
+**Rotation** (`sim/stream/live/rotation.mjs`, `stream.mjs --stations auto`): the house stations and the live
+Station+ stations, nothing else. Each Station+ station 8 min an hour (`--plus-minutes`), the house stations share the
+rest (with 6: 6 min each); each house station is followed by its half of the Station+ stations; re-read before every
+change. A Station+ station plays once its loop exists: `sim/stream/live/build-loops.mjs` builds it on the stream host
+(systemd timer, every 15 min, one station per run, low priority) and the stream skips the station until then
+(`sim/stream/README.md` "Station+ loops"; it needs `work/base-1080p24.mkv` and `work/quads.json` copied from the dev
+machine once).
+
+**Weekly posts** (`bot/src/stations/plusPosts.ts`, run by the scheduler, which owns the X posting state, the station
+timelines and DRY_RUN; the worker has no X keys): each live Station+ station posts once every 7 days (a new one at
+once), the most overdue first, at most one Station+ post per tick and none within 3 h of the previous one
+(`PLUS_POST_GAP_HOURS`), inside the daily cap of 24 (Station+ posts count in it; a due Station+ post takes the tick and
+the hook's queue posts on the next). The post: the newest track finished since the station's last post (never one
+released before; its start must be on the cached tape) as a release, else a "now playing" clip of its newest 200
+swaps; both square 1080x1080 only, with the station's name, the blue station theme and its own sound (its pack sent
+to the render pages as data). Caption, fixed (no model: X refuses two cashtags with a 403):
+
+```
+track #12 finished on the chog/mon station: 214 swaps, liquid.        now playing on the chog/mon station, liquid.
+every $CHOG trade is a note, the whole track from its first swap...   the last 200 $CHOG swaps, played through the idm rules.
+@client_handle                                                         @client_handle
+theidm.fun/?net=chog                                                   theidm.fun/?net=chog
+```
+
+The handle is the paid setup application's X contact (none for a baked station or a Telegram/email contact). State
+per station in `scheduler-state.json` `plusPosts` (`lastAt`, `lastTrackNo`, `lastKind`); dry runs keep `plusPostsDry`
+(never delays a real post, never uses the cap). A failed post retries after an hour; after three the week is skipped.
+`STATION_PLUS_POSTS=0` turns them off.
+
+**Telegram** (worker): a paid setup as Station+ ("PAID ... as STATION+"), its go-live ("Station+ until ..."), Station+
+renewals and upgrades (RENEWED ... as STATION+ / UPGRADED), the slots filling up (STATION+ FULL, once, and when one
+frees), and each loop built or failed on the stream host (LOOP BUILT / LOOP FAILED, from `OUT_DIR/stream/loops.json`,
+once per new outcome). `/status` shows the slots.
+
+### Deploy (for the owner to approve; nothing here is applied)
+
+1. Bot image as usual (`docker compose build bot`), then `docker compose up -d bot api` and `docker compose --profile
+   stations up -d stations`. Optional env: `STATION_PLUS_SLOTS` (api.env and stations.env, default 6),
+   `PLUS_POST_GAP_HOURS` (bot .env, default 3), `STATION_PLUS_POSTS=0` to hold the posts.
+2. Site: `VITE_STATIONS_APPLY=1 npm run build -w site`, rsync as usual (the price table and the form show Station+).
+3. Stream host: `sim/stream/live/README.md` "Station+ deploy" (rsync the stream and the builder, copy the base loop and
+   the quads, python3-numpy/pil, the loops timer, `--stations auto --data-dir`, restart the stream).
 
 ## Automatic pipeline
 
@@ -487,7 +596,7 @@ minute, each paid setup application through the state machine (`bot/src/stations
 **Telegram** (`bot/src/stations/telegram.ts`): plain-text notifications (no markup; control characters stripped; 3.5k
 chars at most; never a secret: the bot token is only in the request URL, never in logs or errors) for every
 transition, errors, low IMD (< 2 IMD once a day), subscriptions ending within 3 days (the scheduler's
-reminders.json), paid renewals. Commands by long polling, accepted ONLY from `TELEGRAM_CHAT_ID` (other chats are
+reminders.json), paid renewals, Station+ (bought, upgraded, slots full, loops: "Station+" above). Commands by long polling, accepted ONLY from `TELEGRAM_CHAT_ID` (other chats are
 ignored, never answered): `/status`, `/balance` (IMD, ETH, Permit2 allowance), `/live <key>` (a preview), `/hold <key>`
 (no automatic go-live), `/reject <key>` (marked failed, station paused; the refund stays manual: the message gives the
 amount, the payer, the tx and the client's contact).
@@ -519,7 +628,8 @@ the manual fallback.
 
 ## Bot
 
-Posts each station's launch and a weekly digest on @theidmfun; per-track posts only for the house stations.
+Posts each station's launch and a weekly digest on @theidmfun; per-track posts only for the house stations; one post
+a week per Station+ station ("Station+" above).
 Station timelines are cached per key and published as checkpoints (`updateStations`, `STATION_CHECKPOINTS=1`);
 `IMD_STATION=1` still queues the IMD/ETH station's finished tracks while the hook is live.
 

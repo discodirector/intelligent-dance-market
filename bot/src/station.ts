@@ -84,6 +84,8 @@ export interface RegistryEntry {
   status: "live" | "paused" | "pending" | "preview";
   /** Subscription end (YYYY-MM-DD or ISO timestamp, UTC): past it a live station is "expired" (subscription.ts). */
   paidUntil?: string;
+  /** Station+ end (same format; docs/STATIONS.md "Station+"): set when a Station+ setup goes live; paid at runtime. */
+  plusUntil?: string;
 }
 
 export interface Registry {

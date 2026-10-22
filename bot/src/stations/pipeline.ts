@@ -214,7 +214,7 @@ export async function advance(app: Application, p: Pipeline, d: PipelineDeps): P
       p.key = entry.key;
       to(p, "registered", `runtime entry ${entry.key} (pending)`, now);
       d.save(p);
-      await d.notify(`PAID ${label(app, p)}: ${usd(app)} in ${app.payment.symbol}; registered as ${entry.key} (pending). Ordering its sound next.`);
+      await d.notify(`PAID ${label(app, p)}${app.plus ? " as STATION+" : ""}: ${usd(app)} in ${app.payment.symbol}; registered as ${entry.key} (pending). Ordering its sound next.`);
       break;
     }
     case "registered": {
@@ -302,17 +302,21 @@ export async function advance(app: Application, p: Pipeline, d: PipelineDeps): P
   return p.stage !== from;
 }
 
-/** Puts a preview on air: status live and the included first month from now (as station-add --set-status live). */
+/**
+ * Puts a preview on air: status live and the included first month from now (as station-add --set-status live). A
+ * Station+ setup (docs/STATIONS.md "Station+") is Station+ for that first month: plusUntil = paidUntil.
+ */
 export async function goLive(app: Application, p: Pipeline, d: PipelineDeps, why: string) {
   if (p.stage !== "preview") throw new Error(`${p.key} is ${p.stage}, not preview`);
   const now = d.now();
   const entry = d.setEntry(p.key!, { status: "live" });
   const paidUntil = firstPaidUntil({ kind: entry.kind, house: entry.house, paidUntil: entry.paidUntil }, "live", now);
-  if (paidUntil) d.setEntry(p.key!, { paidUntil });
+  const plusUntil = app.plus ? (paidUntil ?? entry.paidUntil) : undefined;
+  if (paidUntil || plusUntil) d.setEntry(p.key!, { ...(paidUntil ? { paidUntil } : {}), ...(plusUntil ? { plusUntil } : {}) });
   p.liveAt = new Date(now).toISOString();
   to(p, "live", why, now);
   d.save(p);
-  await d.notify(`LIVE ${label(app, p)}: on air ${why}${paidUntil ? `; paid until ${paidUntil}` : ""}. ${d.siteUrl}/?net=${p.key}`);
+  await d.notify(`LIVE ${label(app, p)}: on air ${why}${paidUntil ? `; paid until ${paidUntil}` : ""}${plusUntil ? `; Station+ until ${plusUntil} (rotation loop builds on the stream host, weekly posts start)` : ""}. ${d.siteUrl}/?net=${p.key}`);
 }
 
 /** /hold: no automatic go-live (any stage before live). */

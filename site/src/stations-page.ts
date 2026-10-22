@@ -1,6 +1,6 @@
-// stations.html: every station on air (stations/registry.json), house stations first. Each card is a small LCD in the
-// station's own colours with what it plays now. No audio here: LISTEN opens the player on that station, so only
-// one station plays at a time.
+// stations.html: every station on air (stations/registry.json), house stations first, then Station+ (status.json).
+// Each card is a small LCD in the station's own colours with what it plays now. No audio here: LISTEN opens the player
+// on that station, so only one station plays at a time.
 import "./style.css";
 import "./stations.css";
 import { createPublicClient, defineChain, fallback, http, parseAbi, type PublicClient } from "viem";
@@ -10,7 +10,7 @@ import { NETWORKS } from "./config";
 import { startVirtual } from "./data/virtual";
 import { decodeSlots, RULES, toSynth } from "./rules";
 import { WaveSky, type SkyAudio } from "./sky";
-import { APPLY_OPEN, applyTheme, chainOf, loadStatus, onAir, playerHref, rpcUrlsOf, STATIONS, type Station } from "./stations";
+import { APPLY_OPEN, applyTheme, chainOf, isPlus, loadStatus, onAir, playerHref, rpcUrlsOf, STATIONS, type Station } from "./stations";
 import { mountApply } from "./stations-apply";
 
 const HOOK_POLL_MS = 15_000;
@@ -27,7 +27,7 @@ interface Card {
   dot: HTMLElement;
 }
 
-function card(s: Station, i: number): Card {
+function card(s: Station, i: number, plus: boolean): Card {
   const chain = chainOf(s);
   const el = document.createElement("article");
   el.className = "st";
@@ -35,7 +35,7 @@ function card(s: Station, i: number): Card {
   applyTheme(s.theme, el);
   const pool = s.kind === "hook" ? "v4 pool · $IDM hook" : `${s.kind} pool · no hook, the rules run in the browser`;
   el.innerHTML = `
-    <div class="st-top"><span class="silk">STATION ${String(i + 1).padStart(2, "0")}${s.house ? " · HOUSE" : ""}</span><span class="led"></span></div>
+    <div class="st-top"><span class="silk">STATION ${String(i + 1).padStart(2, "0")}${s.house ? " · HOUSE" : plus ? " · STATION+" : ""}</span><span class="led"></span></div>
     <div class="st-lcd">
       <div class="st-name">$${esc(s.ticker)}</div>
       <div class="st-cells" aria-hidden="true">${"<i></i>".repeat(64)}</div>
@@ -131,7 +131,7 @@ function tuneVirtual(c: Card, s: Station) {
 const status = await loadStatus();
 const stations = onAir(status);
 const grid = document.getElementById("st-grid")!;
-document.getElementById("st-count")!.textContent = `${stations.length} station${stations.length === 1 ? "" : "s"} · house first`;
+document.getElementById("st-count")!.textContent = `${stations.length} station${stations.length === 1 ? "" : "s"} · house first, then station+`;
 if (APPLY_OPEN) mountApply(document.getElementById("st-apply-form")!, STATIONS.filter((s) => !s.house && s.kind !== "hook"), status);
 const seen = new IntersectionObserver((entries) => {
   for (const e of entries) {
@@ -143,7 +143,7 @@ const seen = new IntersectionObserver((entries) => {
     else tuneVirtual(cards[i], s);
   }
 });
-const cards = stations.map((s, i) => card(s, i));
+const cards = stations.map((s, i) => card(s, i, isPlus(s, status)));
 for (const c of cards) {
   grid.append(c.el);
   seen.observe(c.el);
@@ -161,3 +161,15 @@ requestAnimationFrame(function tick(now) {
   }
   requestAnimationFrame(tick);
 });
+
+// Price table: STATION / STATION+ tabs (one table each, the other hidden).
+const planTabs = [...document.querySelectorAll<HTMLButtonElement>(".st-plan-tabs [role=tab]")];
+for (const tab of planTabs) {
+  tab.addEventListener("click", () => {
+    for (const t of planTabs) {
+      const on = t === tab;
+      t.setAttribute("aria-selected", String(on));
+      document.getElementById(t.getAttribute("aria-controls")!)!.hidden = !on;
+    }
+  });
+}

@@ -1,6 +1,7 @@
 // The stations pipeline worker (docs/STATIONS.md "Automatic pipeline"): compose service `stations` (profile stations),
 // `npx tsx src/stations/worker.ts`, env ../stations.env (chmod 600). Every WORKER_TICK_SEC it advances every paid
-// application (stations/pipeline.ts), tells the owner about paid renewals, expiring stations (the scheduler's
+// application (stations/pipeline.ts), tells the owner about paid renewals and Station+ upgrades, Station+ slots
+// filling up, rotation loops built on the stream host (OUT_DIR/stream/loops.json), expiring stations (the scheduler's
 // reminders.json) and a low IMD balance, all on Telegram; the owner's commands come back by long polling, from
 // TELEGRAM_CHAT_ID only. SWARM_KEY (the hot wallet that pays the swarm) is read from the environment once, held as a
 // viem account, and never logged or sent anywhere but as signatures.
@@ -11,16 +12,16 @@ import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import { api, checkRequest, payAndSubmit, PERMIT2 } from "../imd/paid.ts";
 import { PUBLIC_REPO } from "../imd/styleJob.ts";
-import { IMD_TOKEN } from "../api/config.ts";
+import { IMD_TOKEN, LIMITS, plusSlotsFromEnv } from "../api/config.ts";
 import { stateOf, Store, type Application } from "../api/store.ts";
-import { LIMITS } from "../api/config.ts";
+import { plusSlots } from "./plus.ts";
 import { loadRegistry, type RegistryEntry } from "../station.ts";
 import { gateDelivery } from "./gate.ts";
 import { advance, fmtImd, goLive, hold, newPipeline, reject, TERMINAL, type JobView, type Pipeline, type PipelineDeps, type Swarm } from "./pipeline.ts";
 import { finishEntry, resolvePool, stationContext } from "./register.ts";
 import { addRuntimeEntry, loadMergedRegistry, publishPack, readRuntime, updateRuntimeEntry } from "./runtime.ts";
 import { writeJsonAtomic } from "./subscription.ts";
-import { ownerCommands, telegram, type Command } from "./telegram.ts";
+import { loopText, ownerCommands, plusSlotsText, renewalText, telegram, type Command } from "./telegram.ts";
 
 const env = process.env;
 const OUT = env.OUT_DIR ?? "out";
@@ -121,7 +122,16 @@ const deps: PipelineDeps = {
 };
 
 // ---------------------------------------------------------------- worker state
-interface WorkerState { telegramOffset: number; lowImdDay?: string; remindersDay?: string; renewalsNotified: string[] }
+interface WorkerState {
+  telegramOffset: number;
+  lowImdDay?: string;
+  remindersDay?: string;
+  renewalsNotified: string[];
+  /** Station+ slots all taken, as last told. */
+  plusFull?: boolean;
+  /** Rotation loop events told: key -> the event's time. */
+  loopsNotified?: Record<string, string>;
+}
 const STATE = join(OUT, "applications", "worker.json");
 function loadState(): WorkerState {
   try {
@@ -142,6 +152,12 @@ const locked = <T>(f: () => Promise<T>): Promise<T> => {
 
 const pipelineOf = (app: Application): Pipeline => store.pipeline<Pipeline>(app.id) ?? newPipeline(app.id);
 const paidSetups = () => store.list().filter((a) => a.kind === "setup" && a.payment);
+const PLUS_MAX = plusSlotsFromEnv(env);
+/** The API's count (it reads the same files; STATION_PLUS_SLOTS should match api.env). */
+const plusSlotsNow = () => plusSlots({
+  reg: loadMergedRegistry(DATA, baked), subs: store.subscriptions(), apps: store.list(), now: Date.now(), max: PLUS_MAX,
+  stage: (id) => store.pipeline<Pipeline>(id)?.stage,
+});
 
 async function tick() {
   const state = loadState();
@@ -171,10 +187,33 @@ async function tick() {
       }
     }
   }
-  // Paid renewals: told once.
-  for (const a of store.list().filter((x) => x.kind === "renew" && x.payment && !state.renewalsNotified.includes(x.id))) {
-    await tg.send(`RENEWED ${a.key}: ${a.months} month(s), $${(a.quote.usd.totalCents / 100).toFixed(2)} in ${a.payment!.symbol}; paid until ${a.paidUntil ?? "?"}`);
+  // Paid renewals and Station+ upgrades: told once.
+  for (const a of store.list().filter((x) => (x.kind === "renew" || x.kind === "upgrade") && x.payment && !state.renewalsNotified.includes(x.id))) {
+    await tg.send(renewalText(a));
     state.renewalsNotified = [...state.renewalsNotified, a.id].slice(-500);
+  }
+  // Station+ slots: told when they fill up (new Station+ quotes are refused from then) and when one frees again.
+  try {
+    const s = plusSlotsNow();
+    const full = s.max > 0 && s.left === 0;
+    if (full !== !!state.plusFull) {
+      state.plusFull = full;
+      await tg.send(plusSlotsText(full, s));
+    }
+  } catch (e) {
+    log("station+ slots:", (e as Error).message);
+  }
+  // Rotation loops of Station+ stations, built on the stream host (sim/stream/live/build-loops.mjs): told once each.
+  try {
+    const loops = JSON.parse(readFileSync(join(OUT, "stream", "loops.json"), "utf8")) as Record<string, { state: "built" | "failed"; at: string; error?: string }>;
+    state.loopsNotified ??= {};
+    for (const [k, l] of Object.entries(loops)) {
+      if (state.loopsNotified[k] === l.at) continue;
+      state.loopsNotified[k] = l.at;
+      await tg.send(loopText(k, l));
+    }
+  } catch {
+    /* no loops built yet (the stream host writes them) */
   }
   // Expiring stations: the scheduler's daily reminders.json, forwarded once a day.
   try {
@@ -223,7 +262,9 @@ async function command(c: Command): Promise<string> {
       return `${p?.key ?? app.symbol ?? app.id.slice(0, 8)}: ${p?.stage ?? "paid"}${p?.hold ? " (hold)" : ""}${p?.waiting ? ` waiting ${p.waiting}` : ""}${p?.errors ? ` ${p.errors} error(s)` : ""}`;
     });
     const open = store.list().filter((a) => !a.payment && stateOf(a, Date.now(), LIMITS.graceMs) !== "expired").length;
-    return [`${lines.length} paid application(s), ${open} open quote(s)`, ...lines.slice(-30)].join("\n");
+    const s = plusSlotsNow();
+    const plus = `Station+: ${s.used} of ${s.max} slots${s.active.length ? ` (on air: ${s.active.join(", ")})` : ""}`;
+    return [`${lines.length} paid application(s), ${open} open quote(s)`, plus, ...lines.slice(-30)].join("\n");
   }
   if (!("key" in c)) return HELP;
   const found = findByKey(c.key);

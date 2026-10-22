@@ -15,6 +15,7 @@ import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser } from "playwright";
 import { selectTrack, wavLevels, type TrackEntry, type WavLevels } from "../lib/release.ts";
+import type { ShownQuote, StationTheme } from "../render/index.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(here, "../../..");
@@ -43,6 +44,12 @@ export interface ReleaseOpts {
   subtitle?: string;
   /** Station label (station.ts): the module shows it and switches to the blue theme. */
   station?: string;
+  /** The station's style pack as JSON: the WAV and the frames play its program (web release.ts programOfPack). */
+  pack?: unknown;
+  /** The station's LCD colours (registry theme); unset = the blue station theme. */
+  theme?: StationTheme;
+  /** A calibrated quote: the feed shows amounts in it. */
+  quote?: ShownQuote;
 }
 
 export interface ReleaseResult {
@@ -166,7 +173,7 @@ async function renderFrames(
     await page.goto(`${srv.base}/bot.html`, { waitUntil: "load" });
     await page.waitForFunction(() => typeof (window as any).__setupRelease === "function", null, { timeout: 120_000 });
     const info = await page.evaluate((a) => (window as any).__setupRelease(a), {
-      ...req, timeline: o.timeline, width: size, height: size, fps, wavUrl: WAV_PATH, title: o.title, subtitle: o.subtitle, station: o.station,
+      ...req, timeline: o.timeline, width: size, height: size, fps, wavUrl: WAV_PATH, title: o.title, subtitle: o.subtitle, station: o.station, theme: o.theme, quote: o.quote,
     });
     if (Math.abs(info.seconds - seconds) > 1e-6) throw new Error(`bot.html planned ${info.seconds}s, the WAV is ${seconds}s (site and web out of sync?)`);
     const frames = Math.round(fps * seconds);
@@ -231,7 +238,7 @@ export async function renderRelease(o: ReleaseOpts): Promise<ReleaseResult> {
     if (!(await page.evaluate(() => typeof (window as any).__renderRelease === "function"))) {
       throw new Error("render.html has no __renderRelease (rebuild web/ or drop --web-dir)");
     }
-    const req = { track: sel.trackNo, swapsPerBar: o.swapsPerBar, maxSeconds: o.maxSeconds, minSeconds: o.minSeconds, initial: o.initial ?? null };
+    const req = { track: sel.trackNo, swapsPerBar: o.swapsPerBar, maxSeconds: o.maxSeconds, minSeconds: o.minSeconds, initial: o.initial ?? null, ...(o.pack ? { pack: o.pack } : {}) };
     const t0 = Date.now();
     const res = await page.evaluate((r) => (window as any).__renderRelease(r), req);
     const wavBuf = Buffer.from(res.wav as string, "base64");
@@ -244,7 +251,7 @@ export async function renderRelease(o: ReleaseOpts): Promise<ReleaseResult> {
     const stills: Record<string, string> = {};
     if (o.mp4) {
       mp4 = join(o.outDir, `${sel.trackNo}.mp4`);
-      const req = { track: sel.trackNo, swapsPerBar: o.swapsPerBar, maxSeconds: o.maxSeconds, minSeconds: o.minSeconds, initial: o.initial ?? null };
+      const req = { track: sel.trackNo, swapsPerBar: o.swapsPerBar, maxSeconds: o.maxSeconds, minSeconds: o.minSeconds, initial: o.initial ?? null, ...(o.pack ? { pack: o.pack } : {}) };
       Object.assign(stills, await renderFrames({ ...o, mp4 }, browser, req, wav, wavBuf, res.seconds as number, size, fps));
     }
     const meta = join(o.outDir, `${sel.trackNo}.json`);

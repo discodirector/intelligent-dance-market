@@ -1,4 +1,5 @@
 // SPEC §5 posting rules, pure + testable.
+import type { PlusPostStates } from "./stations/plusPosts.ts";
 export const H = 3600_000;
 
 export interface Rules {
@@ -12,7 +13,8 @@ export interface Rules {
 // (was a shared 1/h and 6/day that skipped most tracks and, with tracks that frequent, every movement).
 export const DEFAULT_RULES: Rules = { snapshotEveryMs: 6 * H, trackMinGapMs: 0, eventMinGapMs: 2 * H, dailyCap: 24 };
 
-export type PostKind = "snapshot" | "movement" | "track" | "teaser";
+/** "station": a Station+ weekly post (stations/plusPosts.ts); it counts in the daily cap only. */
+export type PostKind = "snapshot" | "movement" | "track" | "teaser" | "station";
 export interface PostRecord { at: number; kind: PostKind }
 /** A finished track waiting for its release post: its number and the block of its TrackComplete. */
 export interface QueuedTrack {
@@ -35,6 +37,9 @@ export interface SchedState {
   stationLastTrackNo?: number;
   /** Legacy count before the queue (2026-10-21); ignored. */
   pendingTracks?: number;
+  /** Station+ weekly posts per station (stations/plusPosts.ts); dry runs keep their own, so they never delay real ones. */
+  plusPosts?: PlusPostStates;
+  plusPostsDry?: PlusPostStates;
 }
 
 export interface Signals {
@@ -47,7 +52,7 @@ export interface Signals {
  * Decide what (if anything) to post now; everything respects the daily cap. Tracks go first, except that a due
  * movement takes the next slot after a track post, so a steady track queue cannot starve it. Snapshots come last.
  */
-export function decide(now: number, s: SchedState, sig: Signals, r: Rules = DEFAULT_RULES): PostKind | null {
+export function decide(now: number, s: SchedState, sig: Signals, r: Rules = DEFAULT_RULES): Exclude<PostKind, "station"> | null {
   const recent = s.posts.filter((p) => now - p.at < 24 * H);
   if (recent.length >= r.dailyCap) return null;
   const last = (kinds: PostKind[]) => Math.max(-Infinity, ...s.posts.filter((p) => kinds.includes(p.kind)).map((p) => p.at));

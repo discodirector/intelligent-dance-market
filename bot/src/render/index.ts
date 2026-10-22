@@ -45,7 +45,16 @@ export interface RenderOpts {
   page?: string; // path or URL of a page implementing __setup/__frame/__audio; default site bot.html, else teaser
   /** A station clip (station.ts label): the module shows its name in the station's blue theme, as its releases do. */
   station?: string;
+  /** The station's style pack as JSON: the clip plays its program (site bot.ts registers it), not the house's. */
+  pack?: unknown;
+  /** The station's LCD colours (registry theme: phos, phosDim, ghost, lcd); unset = the blue station theme. */
+  theme?: StationTheme;
+  /** A calibrated quote (CHOG/MON: MON, 111949 per ETH): the feed shows amounts in it, not their ETH value. */
+  quote?: ShownQuote;
 }
+
+export interface StationTheme { phos: string; phosDim: string; ghost: string; lcd: string }
+export interface ShownQuote { symbol: string; perEth: number }
 
 export interface RenderResult {
   videos: { width: number; height: number; path: string }[];
@@ -91,7 +100,7 @@ export async function render(opts: RenderOpts): Promise<RenderResult> {
       await pg.waitForFunction(() => typeof (window as any).__setup === "function");
       const info = await pg.evaluate(
         (o) => (window as any).__setup(o),
-        { timeline: opts.timeline, width, height, fps, seconds, title: opts.title, subtitle: opts.subtitle, station: opts.station },
+        { timeline: opts.timeline, width, height, fps, seconds, title: opts.title, subtitle: opts.subtitle, station: opts.station, pack: opts.pack, theme: opts.theme, quote: opts.quote },
       );
       log(`${width}x${height}: ${info.frames} frames, ${info.steps} steps, ${info.swaps} swaps`);
 

@@ -94,7 +94,8 @@ export const rpcUrlsOf = (s: Station): string[] => s.rpcUrls ?? chainOf(s).rpcUr
  * with paid renewals merged in; a live station whose subscription ran out is "expired" (off air, keeps its sound).
  */
 export type RuntimeStatus = Station["status"] | "expired";
-export type StatusMap = Record<string, { status: RuntimeStatus; paidUntil?: string }>;
+/** `plus`: Station+ now (docs/STATIONS.md "Station+"), with its end; absent = a plain station. */
+export type StatusMap = Record<string, { status: RuntimeStatus; paidUntil?: string; plus?: true; plusUntil?: string }>;
 export const STATUS_URL = "/stations-data/status.json";
 
 /**
@@ -109,8 +110,13 @@ export async function loadStatus(timeoutMs = 2500): Promise<StatusMap | null> {
     if (!j || typeof j !== "object" || Array.isArray(j)) return null;
     const ok = ["live", "paused", "pending", "preview", "expired"];
     const out: StatusMap = {};
-    for (const [k, v] of Object.entries(j as Record<string, { status?: unknown; paidUntil?: unknown }>)) {
-      if (v && typeof v.status === "string" && ok.includes(v.status)) out[k] = { status: v.status as RuntimeStatus, ...(typeof v.paidUntil === "string" ? { paidUntil: v.paidUntil } : {}) };
+    for (const [k, v] of Object.entries(j as Record<string, { status?: unknown; paidUntil?: unknown; plus?: unknown; plusUntil?: unknown }>)) {
+      if (!v || typeof v.status !== "string" || !ok.includes(v.status)) continue;
+      out[k] = {
+        status: v.status as RuntimeStatus,
+        ...(typeof v.paidUntil === "string" ? { paidUntil: v.paidUntil } : {}),
+        ...(v.plus === true ? { plus: true as const, ...(typeof v.plusUntil === "string" ? { plusUntil: v.plusUntil } : {}) } : {}),
+      };
     }
     return out;
   } catch {
@@ -121,9 +127,14 @@ export async function loadStatus(timeoutMs = 2500): Promise<StatusMap | null> {
 /** A station's status now: the runtime file's when it names the station, else the registry's. */
 export const statusOf = (s: Station, status: StatusMap | null): RuntimeStatus => status?.[s.key]?.status ?? s.status;
 
-/** Stations on air, house stations first, registry order otherwise; an expired subscription is off air. */
-export const onAir = (status: StatusMap | null = null): Station[] =>
-  STATIONS.filter((s) => s.status === "live" && statusOf(s, status) === "live").sort((a, b) => Number(!!b.house) - Number(!!a.house));
+/** Station+ now (status.json; without it, none): listed right after the house stations. */
+export const isPlus = (s: Station, status: StatusMap | null): boolean => !s.house && status?.[s.key]?.plus === true;
+
+/** Stations on air: house stations first, then Station+, registry order otherwise; an expired subscription is off air. */
+export const onAir = (status: StatusMap | null = null): Station[] => {
+  const rank = (s: Station) => (s.house ? 0 : isPlus(s, status) ? 1 : 2);
+  return STATIONS.filter((s) => s.status === "live" && statusOf(s, status) === "live").sort((a, b) => rank(a) - rank(b));
+};
 
 /**
  * Applications on /stations (stations-apply.ts): off until the owner builds with VITE_STATIONS_APPLY=1; until then

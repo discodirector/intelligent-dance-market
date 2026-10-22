@@ -80,19 +80,37 @@ export function checkReq(v: unknown, chains: number[]): CheckReq {
   return { chainId: chain(o.chainId, chains), token: address(o.token, "token"), pool: pool(o.pool) };
 }
 
-export interface ApplyReq extends CheckReq { contact: Contact; vibe: string; genres: string[]; plan: "setup" }
-export function applyReq(v: unknown, chains: number[], vibeMax: number): ApplyReq {
-  const o = object(v, ["chainId", "token", "pool", "contact", "vibe", "genres", "plan"]);
-  if (o.plan !== "setup") throw new Invalid('plan: "setup"');
-  return { ...checkReq({ chainId: o.chainId, token: o.token, pool: o.pool }, chains), contact: contact(o.contact), vibe: vibe(o.vibe, vibeMax), genres: genres(o.genres), plan: "setup" };
+/** Station+ or not: absent = plain Station. */
+function plus(v: unknown): boolean {
+  if (v === undefined) return false;
+  if (typeof v !== "boolean") throw new Invalid("plus: true (Station+) or false");
+  return v;
 }
 
-export interface RenewReq { key: string; months: 1 | 3 }
+function key(v: unknown): string {
+  if (typeof v !== "string" || !/^[a-z0-9][a-z0-9-]{0,39}$/.test(v)) throw new Invalid("key: a station key");
+  return v;
+}
+
+export interface ApplyReq extends CheckReq { contact: Contact; vibe: string; genres: string[]; plan: "setup"; plus: boolean }
+export function applyReq(v: unknown, chains: number[], vibeMax: number): ApplyReq {
+  const o = object(v, ["chainId", "token", "pool", "contact", "vibe", "genres", "plan", "plus"]);
+  if (o.plan !== "setup") throw new Invalid('plan: "setup"');
+  return { ...checkReq({ chainId: o.chainId, token: o.token, pool: o.pool }, chains), contact: contact(o.contact), vibe: vibe(o.vibe, vibeMax), genres: genres(o.genres), plan: "setup", plus: plus(o.plus) };
+}
+
+export interface RenewReq { key: string; months: 1 | 3; plus: boolean }
 export function renewReq(v: unknown): RenewReq {
-  const o = object(v, ["key", "months"]);
-  if (typeof o.key !== "string" || !/^[a-z0-9][a-z0-9-]{0,39}$/.test(o.key)) throw new Invalid("key: a station key");
+  const o = object(v, ["key", "months", "plus"]);
+  const k = key(o.key);
   if (o.months !== 1 && o.months !== 3) throw new Invalid("months: 1 or 3");
-  return { key: o.key, months: o.months };
+  return { key: k, months: o.months, plus: plus(o.plus) };
+}
+
+export interface UpgradeReq { key: string }
+export function upgradeReq(v: unknown): UpgradeReq {
+  const o = object(v, ["key"]);
+  return { key: key(o.key) };
 }
 
 export interface PayReq { applicationId: string; chainId: number; txHash: `0x${string}` }

@@ -4,29 +4,55 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { render } from "./render/index.ts";
+import { render, type ShownQuote, type StationTheme } from "./render/index.ts";
 import { caption } from "./caption/index.ts";
 import { publish } from "./post/index.ts";
 import { factsFromTimeline, type Facts } from "./lib/facts.ts";
 import { toTimelineState, type TimelineEntry } from "./lib/timeline.ts";
 import { decodeFor } from "./lib/hookRules.ts";
+import type { Program } from "@swarm-sequencer/synth";
 import { replay } from "./replay/index.ts";
 import { renderRelease } from "./release/index.ts";
 import { postCut, releaseHeadline, selectTrack, X_VIDEO_MAX_SECONDS } from "./lib/release.ts";
 
 const log = (...a: unknown[]) => console.error("[pipeline]", ...a);
 
+/**
+ * A station's post (Station+, stations/plusPosts.ts): its label and pack for the render, its program for the facts, and
+ * a fixed caption (one cashtag, the client's handle) instead of the model's, which may name other tokens.
+ */
+export interface StationPostOpts {
+  station?: string;
+  pack?: unknown;
+  /** The station's LCD colours (registry theme); unset = the blue station theme. */
+  theme?: StationTheme;
+  /** A calibrated quote: the clip's feed shows amounts in it (registry calibration, pool label). */
+  quote?: ShownQuote;
+  program?: Program;
+  caption?: (facts: Facts) => string;
+}
+
+/** The caption: the station's own when given (source "station"), else the model's with the template fallback. */
+async function captionFor(facts: Facts, own?: (facts: Facts) => string): Promise<{ text: string; source: string }> {
+  if (own) return { text: own(facts), source: "station" };
+  const cap = await caption(facts);
+  if (cap.errors?.length) log("caption fell back to template:", cap.errors.join("; "));
+  return cap;
+}
+
 export async function producePost(
   entries: TimelineEntry[],
-  o: { kind: Facts["kind"]; chain: string; pool: string; title: string; subtitle: string; seconds?: number; hook?: string; startPage?: number; windowHours?: number },
+  o: StationPostOpts & {
+    kind: Facts["kind"]; chain: string; pool: string; title: string; subtitle: string; seconds?: number; hook?: string; startPage?: number; windowHours?: number;
+    sizes?: [number, number][];
+  },
 ) {
   const work = mkdtempSync(join(tmpdir(), "seq-render-"));
   try {
     const seconds = o.seconds ?? Number(process.env.VIDEO_SECONDS ?? 32);
-    const r = await render({ timeline: entries, outDir: work, seconds, title: o.title, subtitle: o.subtitle });
-    const facts = factsFromTimeline(entries, { kind: o.kind, chain: o.chain, pool: o.pool, videoSeconds: r.seconds, hook: o.hook, startPage: o.startPage, windowHours: o.windowHours });
-    const cap = await caption(facts);
-    if (cap.errors?.length) log("caption fell back to template:", cap.errors.join("; "));
+    const r = await render({ timeline: entries, outDir: work, seconds, title: o.title, subtitle: o.subtitle, station: o.station, pack: o.pack, theme: o.theme, quote: o.quote, sizes: o.sizes });
+    const facts = factsFromTimeline(entries, { kind: o.kind, chain: o.chain, pool: o.pool, videoSeconds: r.seconds, hook: o.hook, startPage: o.startPage, windowHours: o.windowHours, program: o.program });
+    const cap = await captionFor(facts, o.caption);
     const square = r.videos.find((v) => v.width === v.height) ?? r.videos[0];
     const res = await publish({
       caption: cap.text,
@@ -63,12 +89,12 @@ function ffmpegCut(src: string, dst: string, start: number, seconds: number) {
  */
 export async function produceRelease(
   entries: TimelineEntry[],
-  o: { chain: string; pool: string; hook?: string; track?: number | null; partial?: boolean; initial?: { slot0: string; slot1: string } | null; maxPostSeconds?: number; station?: string },
+  o: StationPostOpts & { chain: string; pool: string; hook?: string; track?: number | null; partial?: boolean; initial?: { slot0: string; slot1: string } | null; maxPostSeconds?: number; title?: string },
 ) {
   const work = mkdtempSync(join(tmpdir(), "seq-release-"));
   try {
     const sel = selectTrack(entries, o.track);
-    const r = await renderRelease({ timeline: entries, track: sel.trackNo, initial: o.initial, outDir: work, mp4: true, station: o.station });
+    const r = await renderRelease({ timeline: entries, track: sel.trackNo, initial: o.initial, outDir: work, mp4: true, station: o.station, pack: o.pack, theme: o.theme, quote: o.quote, title: o.title });
     const sum = r.summary as any;
     const max = o.maxPostSeconds ?? Number(process.env.X_VIDEO_MAX_SECONDS ?? X_VIDEO_MAX_SECONDS);
     const cut = postCut(r.seconds, sum.dropTime ?? null, max);
@@ -79,7 +105,7 @@ export async function produceRelease(
     }
     // Tapes written without the decoded `state` copy (e.g. the synthetic one) get it from the slots.
     const track = entries.slice(sel.start, sel.end + 1).map((e) => (e.state ? e : { ...e, state: toTimelineState(decodeFor(e.slot0, e.slot1, e.rules ?? "v2")) }));
-    const facts = factsFromTimeline(track, { kind: "track", chain: o.chain, pool: o.pool, hook: o.hook, videoSeconds: Math.round(cut ? cut.seconds : r.seconds) });
+    const facts = factsFromTimeline(track, { kind: "track", chain: o.chain, pool: o.pool, hook: o.hook, videoSeconds: Math.round(cut ? cut.seconds : r.seconds), program: o.program });
     if (facts.track && facts.track.swaps == null && !o.partial) facts.track.swaps = track.length;
     // The release plays one genre and style, the ones the track finished in (SPEC §4.6); posts name the genre only.
     const genre = sum.genre.eraName as string;
@@ -95,8 +121,7 @@ export async function produceRelease(
       clip: cut ? { from: Math.round(cut.start), seconds: Math.round(cut.seconds) } : null,
       ...(o.partial ? { partial: true } : {}),
     };
-    const cap = await caption(facts);
-    if (cap.errors?.length) log("caption fell back to template:", cap.errors.join("; "));
+    const cap = await captionFor(facts, o.caption);
     const res = await publish({
       caption: cap.text,
       captionSource: cap.source,

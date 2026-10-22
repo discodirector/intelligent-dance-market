@@ -1,6 +1,7 @@
 // Station applications and payment (docs/STATIONS.md "Applications and payment"): every price, every accepted
 // stablecoin and every limit in one place. Owner-approved prices: launch now, regular later
-// (STATION_PRICE_TIER=regular). The IMD part of the setup pays the swarm and is priced at the order time.
+// (STATION_PRICE_TIER=regular). The IMD part of the setup pays the swarm and is priced at the order time. Station+
+// (docs/STATIONS.md "Station+") costs more per month, in the same stables, split the same three ways.
 
 export type Tier = "launch" | "regular";
 export interface Prices {
@@ -10,11 +11,17 @@ export interface Prices {
   /** Renewals: one month or three. */
   monthUsd: number;
   threeMonthsUsd: number;
+  /** Station+: one month or three (a setup that starts as Station+ adds plusMonthUsd - monthUsd). */
+  plusMonthUsd: number;
+  plusThreeMonthsUsd: number;
 }
 export const PRICES: Record<Tier, Prices> = {
-  launch: { setupUsd: 50, setupImd: 1.5, monthUsd: 30, threeMonthsUsd: 75 },
-  regular: { setupUsd: 100, setupImd: 3, monthUsd: 50, threeMonthsUsd: 125 },
+  launch: { setupUsd: 50, setupImd: 1.5, monthUsd: 30, threeMonthsUsd: 75, plusMonthUsd: 90, plusThreeMonthsUsd: 225 },
+  regular: { setupUsd: 100, setupImd: 3, monthUsd: 50, threeMonthsUsd: 125, plusMonthUsd: 150, plusThreeMonthsUsd: 375 },
 };
+
+/** Station+ stations at a time (STATION_PLUS_SLOTS): the YouTube rotation and the weekly posts have room for this many. */
+export const PLUS_SLOTS = 6;
 
 /** The IMD token (Ethereum): its USD price converts the setup's IMD part (DexScreener, deepest pair). */
 export const IMD_TOKEN = "0xd34a99bc0f67ae1bbd63c660e6d0b0dd03e263b7";
@@ -95,6 +102,8 @@ export interface ApiConfig {
   origins: string[];
   /** Behind the host's reverse proxy: the client is the last X-Forwarded-For hop. */
   trustProxy: boolean;
+  /** Station+ stations at a time; a new Station+ (setup, renewal or upgrade) is refused when they are taken. */
+  plusSlots: number;
 }
 
 export function configFromEnv(env: NodeJS.ProcessEnv = process.env): ApiConfig {
@@ -106,5 +115,15 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     tier: env.STATION_PRICE_TIER === "regular" ? "regular" : "launch",
     origins: (env.API_ORIGINS ?? "https://theidm.fun").split(",").map((s) => s.trim()).filter(Boolean),
     trustProxy: env.API_TRUST_PROXY !== "0",
+    plusSlots: plusSlotsFromEnv(env),
   };
+}
+
+/** STATION_PLUS_SLOTS: a whole number 0..50 (0 = Station+ not sold), default PLUS_SLOTS. */
+export function plusSlotsFromEnv(env: NodeJS.ProcessEnv = process.env): number {
+  const v = env.STATION_PLUS_SLOTS?.trim();
+  if (!v) return PLUS_SLOTS;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 0 || n > 50) throw new Error(`STATION_PLUS_SLOTS: a whole number 0..50, not ${v}`);
+  return n;
 }

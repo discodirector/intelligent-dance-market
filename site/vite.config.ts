@@ -21,13 +21,15 @@ export default defineConfig({
   build: {
     target: "es2022",
     chunkSizeWarningLimit: 900,
-    // bot.html is the bot's render page (bot/src/render); index.html, docs.html and stations.html are the public site.
+    // bot.html is the bot's render page (bot/src/render), stream.html the YouTube radio's audio source (sim/stream/live);
+    // index.html, docs.html and stations.html are the public site.
     rollupOptions: {
       input: {
         main: fileURLToPath(new URL("index.html", import.meta.url)),
         docs: fileURLToPath(new URL("docs.html", import.meta.url)),
         stations: fileURLToPath(new URL("stations.html", import.meta.url)),
         bot: fileURLToPath(new URL("bot.html", import.meta.url)),
+        stream: fileURLToPath(new URL("stream.html", import.meta.url)),
       },
     },
   },
