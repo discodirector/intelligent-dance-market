@@ -41,7 +41,7 @@ services:
       API_HOST: 0.0.0.0
       API_PORT: "8787"
     ports:
-      - "127.0.0.1:8787:8787"
+      - "127.0.0.1:8797:8787"  # host 8787 is taken by another service on the VPS
     volumes:
       - ../out:/app/out
     mem_limit: 384m

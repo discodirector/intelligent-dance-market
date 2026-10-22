@@ -2,11 +2,12 @@ import type { EraScheduleEntry } from "./eras.ts";
 import { LEAD_PATCHES, type LeadPatch } from "./leads.ts";
 import type { Program } from "./program.ts";
 import { BUS_NAMES, DATA_FIELDS, DATA_GENRES, type DataGenre, type GenreDataMap } from "./styledata.ts";
+import { AMBIENT_KIT_PARTS } from "./styledata.ts";
 import { STYLE_SCHEDULE, type GenreStyle, type StyleScheduleEntry } from "./styles.ts";
 
 /**
  * Style packs: a station's sound as one data-only file, `stations/<key>.ts` (docs/STATIONS.md "Style pack",
- * stations/README.md). A pack names 2..5 of the opened genres (styledata.ts DATA_GENRES) and 1..4 styles for each;
+ * stations/README.md). A pack names 2 or more of the opened genres (styledata.ts DATA_GENRES) and 1..4 styles for each;
  * every style is a variant of a house style (`base`) with its own id, feel and table overrides (`data`).
  * validatePack checks the whole contract; programFromPack turns a valid pack into the station's Program.
  */
@@ -18,6 +19,10 @@ export interface PackBases {
   triphop: "classic" | "bristol" | "cinematic";
   lofihouse: "classic" | "chop" | "rave";
   acid: "classic" | "acidhouse" | "rubber";
+  dubtechno: "classic" | "ixtlan" | "moment";
+  electro: "classic" | "client03" | "alienrave";
+  ambientidm: "classic" | "boc" | "crystal";
+  drone: "classic" | "dark" | "pulse";
 }
 
 /**
@@ -34,7 +39,7 @@ export interface StationPack {
   key: string;
   /** Display name of the sound, 1..40 characters. */
   name: string;
-  /** 2..5 distinct opened genres; the first cycle plays them in this order, later cycles shuffle them. */
+  /** 2 or more distinct opened genres; the first cycle plays them in this order, later cycles shuffle them. */
   genres: readonly DataGenre[];
   /** For each genre in `genres` (and no other), 1..4 styles, in play order. */
   styles: { readonly [G in DataGenre]?: readonly StationStyle<G>[] };
@@ -64,6 +69,10 @@ const PACK_BPM: Record<DataGenre, readonly [number, number]> = {
   triphop: [66, 104],
   lofihouse: [112, 132],
   acid: [108, 140],
+  dubtechno: [112, 130],
+  electro: [110, 140],
+  ambientidm: [70, 124],
+  drone: [40, 100],
 };
 
 // ---------------------------------------------------------------------------------------------- checks
@@ -214,8 +223,8 @@ const padSpec = partial({
   drive: num(0.1, 4), noise: num(0, 1), hp: num(20, 1000),
 });
 const busLevels = (lo: number, hi: number) => partial(Object.fromEntries(BUS_NAMES.map((b) => [b, num(lo, hi)])));
-const fxData = partial({
-  echo: partial({ steps: int(1, 8), taps: int(1, 8), fb: num(0, 0.75), lp: num(400, 8000), hp: num(80, 1500) }),
+const FX_FIELDS = {
+  echo: partial({ steps: int(1, 8), taps: int(1, 12), fb: num(0, 0.75), lp: num(400, 8000), hp: num(80, 1500) }),
   echoSend: busLevels(0, 1),
   space: partial({ size: num(0.4, 2.5), fb: num(0, 0.85), lp: num(800, 9000) }),
   spaceSend: busLevels(0, 1),
@@ -225,7 +234,8 @@ const fxData = partial({
   duck: partial({ bass: num(0.1, 1), harm: num(0.3, 1) }),
   duckTime: partial({ bass: num(0.05, 0.6), harm: num(0.05, 0.6) }),
   master: partial({ lp: num(2000, 18000), hp: num(20, 200), crush: int(6, 12) }),
-});
+};
+const fxData = partial(FX_FIELDS);
 /** The fields every base reads (styledata.ts SoundData). */
 const SOUND_CHECKS = { mix: busLevels(-6, 6), fx: fxData, vinyl: num(0, 2.5) };
 
@@ -279,6 +289,153 @@ const garageKit = partial({ kick: kickSpec, snare: drumVoice, ghost: list(0, 6, 
 const tripHopKit = partial({ kick: kickSpec, snare: drumVoice, drag: num(0, 0.04), hat, open: hat });
 const lofiKit = partial({ kick: kickSpec, clap: drumVoice, snare: drumVoice, hat, open: hat, shaker });
 const acidKit = partial({ kick: kickSpec, clap: drumVoice, snare: drumVoice, hat, open: hat, perc: drumVoice });
+
+// Dub techno: every voice is merged field by field over the base's, so every field is optional.
+const dubKit = partial({
+  kick: partial({
+    center: num(30, 90), rise: num(1, 4), sweep: num(0.005, 0.3), hold: num(0.02, 0.3), decay: num(0.3, 1.5), drive: num(0.1, 4), lp: num(60, 2000),
+    click: num(0, 1), clickHz: num(300, 8000), level: num(0, 0.6),
+  }),
+  clap: partial({ level: num(0, 3), hz: num(300, 6000), decay: num(0.01, 0.5), rim: bool }),
+  hat: partial({
+    off: num(0, 1.2), decay: num(0.005, 0.5), hp: num(1000, 14000), metal: num(0, 1), shaker: num(0, 1), shakerDecay: num(0.005, 0.2),
+    shuffle: tuple(num(0, 1.5), num(0, 1.5), num(0, 1.5), num(0, 1.5)),
+  }),
+  perc: partial({ level: num(0, 1), decay: num(0.02, 0.5) }),
+});
+/** A sub note of a dub bassline: [step, length, level] or [step, length, level, interval]. */
+const dubSubNote: Check = (x, p, e) => {
+  if (!Array.isArray(x) || (x.length !== 3 && x.length !== 4)) return e(`${p}: expected [step, length, level] or [step, length, level, interval], got ${show(x)}`);
+  int(0, 15)(x[0], `${p}[0]`, e);
+  num(0.25, 16)(x[1], `${p}[1]`, e);
+  num(0, 1.5)(x[2], `${p}[2]`, e);
+  if (x.length === 4) int(0, 24)(x[3], `${p}[3]`, e);
+};
+
+// Electro.
+const electroSnare: Check = (x, p, e) => (typeof x === "string" ? oneOf(["808", "client", "alien"])(x, p, e) : drumVoice(x, p, e));
+const electroKit = partial({
+  kick: kickSpec,
+  snare: electroSnare,
+  ghost: drumVoice,
+  hat: shape({ hp: num(1000, 14000), decay: num(0.005, 1), metal: num(0, 1), q: num(0.3, 4) }, ["q"]),
+  open: shape({ hp: num(1000, 14000), decay: num(0.005, 1), metal: num(0, 1), q: num(0.3, 4), level: num(0, 1.5), crush: int(3, 8) }, ["q", "crush"]),
+  accents: tuple(num(0, 1), num(0, 1), num(0, 1), num(0, 1)),
+});
+/** A [plain, accent] pair, both in lo..hi. */
+const pair = (lo: number, hi: number) => tuple(num(lo, hi), num(lo, hi));
+const electroKicks = shape({
+  half: list(1, 6, list(1, 12, int(0, 31))),
+  lo: list(1, 6, list(1, 12, int(0, 31))),
+  mid: list(1, 6, list(1, 12, int(0, 31))),
+  hi: list(1, 6, list(1, 12, int(0, 31))),
+});
+const formant = tuple(num(200, 1200), num(600, 3000));
+const alienStep: Check = (x, p, e) => {
+  if (x === null) return;
+  tuple(int(-12, 24), int(0, 7))(x, p, e);
+};
+// Ambient IDM and drone (styledata.ts AmbientIdmData, DroneData). Their voices are long and stacked, so the counts
+// (oscillators, partials, layers, ring times) are capped as well as the levels.
+const osc = shape({ type: oneOf(waves), detune: num(-40, 40), level: num(0, 1) });
+/** Density thresholds [low, high] in 0..1, low first. */
+const tiers = both(tuple(num(0, 1), num(0, 1)), (x, p, e) => {
+  if (Array.isArray(x) && x[0] > x[1]) e(`${p}: expected [low, high] with low <= high, got ${show(x)}`);
+});
+/** An Ambient IDM chord; Tape Haze plays the pad tones at and above 0, so two of them must be there. */
+const ambientChord: Check = both(
+  shape({ bass: int(-12, 12), pad: list(2, 6, int(-24, 26)), glass: list(2, 6, int(-12, 31)), arp: list(4, 4, int(-12, 24)), sing: list(5, 5, int(-12, 24)) }),
+  (x, p, e) => {
+    const pad = isObj(x) && Array.isArray(x.pad) ? x.pad : [];
+    if (pad.filter((t) => typeof t === "number" && t >= 0).length < 2) e(`${p}.pad: needs at least two tones at or above 0`);
+  },
+);
+const ambientNoise = shape({ noise: oneOf(["bandpass", "highpass", "lowpass"]), freq: num(100, 16000), q: num(0.3, 12), decay: num(0.005, 0.5), level: num(0, 1) });
+const ambientKit = partial({
+  kick: kickSpec, thump: num(0, 0.2), click: drumVoice, snare: drumVoice, dust: drumVoice, ghost: drumVoice,
+  rim: shape({ level: num(0, 1), pitch: num(0.5, 2.5) }), crack: ambientNoise, tick: ambientNoise, hat, open: hat,
+});
+const dronePadFields = {
+  level: num(0.005, 0.15), waves: list(1, 6, oneOf(waves)), detune: num(0, 20), spread: num(0, 8),
+  cutoff: num(150, 2000), glow: num(0, 1500), range: num(1, 3), period: num(6, 60),
+};
+const sineBed = list(1, 6, tuple(int(-12, 24), num(-30, 30), num(0, 1)));
+const AMBIENT_CHECKS: Readonly<Record<keyof GenreDataMap["ambientidm"] & string, Check>> = {
+  chords: list(2, 8, ambientChord),
+  progressions: list(1, 6, list(1, 8, int(0, 7))),
+  figures: figures(1, 12, tuple(int(0, 31), int(0, 6), int(0, 2))),
+  phrases: figures(1, 12, tuple(int(0, 127), int(0, 4), num(1, 32), int(-1, 1), int(0, 2))),
+  arps: list(1, 6, list(2, 16, int(0, 8))),
+  tiers,
+  notes: list(2, 12, int(0, 24)),
+  ...SOUND_CHECKS,
+  kit: ambientKit,
+  pad: padSpec,
+  bass: partial({ osc: list(1, 4, osc), cutoff: num(80, 1200), level: num(0, 0.2), sub: num(0, 0.25) }),
+  lead: partial({
+    osc: list(1, 4, shape({ type: oneOf(waves), oct: int(-1, 2), detune: num(-40, 40), level: num(0, 1) })),
+    cutoff: num(200, 6000), level: num(0, 0.3), scoop: num(0, 100), vib: num(0, 30),
+  }),
+  line: partial({ level: num(0, 0.06), cutoff: num(600, 9000), osc: list(1, 4, osc) }),
+  glass: partial({
+    level: num(0.005, 0.25), partials: list(1, 6, shape({ type: oneOf(waves), ratio: num(0.5, 8), detune: num(-40, 40), level: num(0, 1) })),
+    cutoff: num(800, 9000), hp: num(40, 1000), attack: num(0.05, 8), release: num(0.1, 8),
+  }),
+  bell: partial({ level: num(0, 0.12), ratio: num(0.5, 8), index: num(0, 8), decay: num(0.1, 4) }),
+  // The arp can run in sixteenths: a long ring would stack dozens of voices.
+  shimmer: partial({ level: num(0, 0.4), partials: list(1, 4, shape({ ratio: num(0.5, 8), detune: num(-40, 40), level: num(0, 1) })), decay: num(0.05, 1.5), short: num(0.05, 1) }),
+};
+const DRONE_CHECKS: Readonly<Record<keyof GenreDataMap["drone"] & string, Check>> = {
+  bars: int(2, 16),
+  voicing: list(2, 6, int(-12, 48)),
+  colours: list(1, 4, list(2, 6, int(-12, 48))),
+  busy: int(-12, 48),
+  glints: list(1, 8, int(0, 36)),
+  partials: list(1, 12, shape({ n: int(1, 16), g: num(0, 0.5), group: int(0, 3) })),
+  figures: list(1, 6, list(1, 8, int(0, 1))),
+  mix: SOUND_CHECKS.mix,
+  // The drone's drums sit behind a very low wall (house 240 Hz), its master highpass is 18 Hz, and its echo is a
+  // long one (house 8 steps; the echo is capped at 2.4 s whatever the steps).
+  fx: partial({
+    ...FX_FIELDS,
+    echo: partial({ steps: int(1, 12), taps: int(1, 8), fb: num(0, 0.75), lp: num(400, 8000), hp: num(80, 1500) }),
+    drumLp: num(150, 18000),
+    master: partial({ lp: num(2000, 18000), hp: num(15, 200), crush: int(6, 12) }),
+  }),
+  vinyl: SOUND_CHECKS.vinyl,
+  wall: partial({ ...dronePadFields, depth: num(0, 0.6), drift: num(0, 12), core: list(0, 3, tuple(int(-24, 0), num(0, 0.5))) }),
+  pad: partial(dronePadFields),
+  bed: partial({ subLevel: num(0, 0.12), bodyLevel: num(0, 0.15), subs: sineBed, body: sineBed, beat: num(0.2, 2), drive: num(0.5, 3), cutoff: num(100, 900) }),
+  kick: partial({
+    osc: oneOf(waves), start: num(30, 120), end: num(20, 80), sweep: num(0.05, 1.5), decay: num(0.3, 3), click: num(0, 1), clickHp: num(500, 8000),
+    drive: num(0, 4), body: num(0, 1.5),
+  }),
+  overtone: partial({ level: num(0.02, 0.4), cutoff: num(400, 6000), glow: num(0, 3000), depths: list(4, 4, num(0, 1)) }),
+  glint: partial({ level: num(0, 0.06), decay: num(0.5, 10), attack: num(0.005, 1), top: num(500, 8000), gap: num(1, 8) }),
+  breath: num(0, 0.08),
+  rumble: num(0, 0.12),
+  swell: num(0, 0.15),
+};
+
+/** Rules that depend on the base: the Ambient IDM kit parts it plays, Overtone Pulse's glints (partial numbers). */
+function baseCheck(genre: DataGenre, base: string, data: Record<string, unknown>, p: string, e: Err) {
+  if (genre === "ambientidm" && Array.isArray(data.progressions)) {
+    const n = Array.isArray(data.chords) ? data.chords.length : 5;
+    data.progressions.forEach((prog, i) => {
+      if (Array.isArray(prog)) prog.forEach((c, j) => typeof c === "number" && c >= n && e(`${p}.progressions[${i}][${j}]: chord ${c} is not in chords (0..${n - 1})`));
+    });
+  }
+  if (genre === "ambientidm" && isObj(data.kit)) {
+    const parts = AMBIENT_KIT_PARTS[base as keyof typeof AMBIENT_KIT_PARTS] as readonly string[];
+    for (const k of Object.keys(data.kit)) {
+      if (!parts.includes(k)) e(`${p}.kit.${k}: base "${base}" does not play it (its kit: ${parts.join(", ")})`);
+    }
+  }
+  if (genre === "drone" && base === "pulse" && Array.isArray(data.glints)) {
+    if (data.glints.length < 2) e(`${p}.glints: Overtone Pulse needs at least 2 glints (it never repeats one), got ${data.glints.length}`);
+    data.glints.forEach((n, i) => typeof n === "number" && (n < 2 || n > 16) && e(`${p}.glints[${i}]: expected a harmonic number in 2..16, got ${show(n)}`));
+  }
+}
 
 /** The check of every data field, per genre (shapes and ranges as documented in styledata.ts). */
 const FIELD_CHECKS: { readonly [G in DataGenre]: Readonly<Record<keyof GenreDataMap[G] & string, Check>> } = {
@@ -373,6 +530,66 @@ const FIELD_CHECKS: { readonly [G in DataGenre]: Readonly<Record<keyof GenreData
       drive: num(0.5, 3), level: num(0.05, 0.4), accent: num(1, 1.6), gate: num(0.1, 4), sweep: num(4, 32),
     }),
   },
+  dubtechno: {
+    chords: (x, p, e) => {
+      if (!isObj(x)) return e(`${p}: expected an object of chords by name, got ${show(x)}`);
+      const chord = shape({ root: int(-12, 12), upper: list(2, 5, int(-12, 26)) });
+      for (const [name, c] of Object.entries(x)) chord(c, `${p}.${name}`, e);
+    },
+    progressions: list(1, 6, shape({
+      bars: int(1, 8),
+      seq: list(1, 8, (x, p, e) => typeof x !== "string" && e(`${p}: expected a chord name, got ${show(x)}`)),
+    })),
+    figures: list(1, 6, list(1, 6, int(0, 15))),
+    accents: list(1, 6, num(0, 1.5)),
+    bassline: list(1, 16, dubSubNote),
+    bells: list(1, 6, list(1, 8, tuple(int(0, 63), int(0, 5), num(0, 1.5)))),
+    percs: list(1, 8, tuple(int(0, 31), num(0.5, 3), num(0, 1.5))),
+    ...SOUND_CHECKS,
+    kit: dubKit,
+    subTone: partial({ level: num(0, 1.2), octave: num(0, 0.5), lp: num(80, 1000), attack: num(0.002, 0.2), release: num(0.01, 1), drive: num(0.1, 4) }),
+    stabTone: partial({
+      octave: int(-12, 12), wave: oneOf(waves), detune: num(0, 40), lp: num(150, 4000), env: num(1, 6), envTime: num(0.01, 1), q: num(0.3, 12),
+      hp: num(20, 1000), attack: num(0.001, 1), release: num(0.02, 3), gain: num(0, 1.5), pan: num(-1, 1), move: num(0, 1),
+    }),
+    padTone: partial({ level: num(0, 3), wave: oneOf(waves), detune: num(0, 40), octave: int(-12, 12), lp: num(150, 5000), attack: num(0.01, 8), release: num(0.05, 6) }),
+    bellTone: partial({ level: num(0, 3), every: int(1, 8), ratio: num(0.5, 8), index: num(0, 4), decay: num(0.1, 4) }),
+    sweep: partial({ stab: num(2, 64), echo: num(2, 64) }),
+    field: partial({ level: num(0, 3), hz: num(200, 6000) }),
+  },
+  electro: {
+    kicks: electroKicks,
+    arps: list(1, 6, list(1, 3, int(0, 24))),
+    chords: list(2, 8, shape({ bass: int(-12, 12), tones: list(3, 5, int(-12, 24)), third: oneOf([3, 4]), seventh: oneOf([10, 11]) }, ["third", "seventh"])),
+    progressions: list(1, 6, list(4, 4, int(0, 7))),
+    ghosts: list(1, 6, list(1, 12, shape({ s: int(0, 31), vel: num(0, 1), core: bool }))),
+    warps: list(1, 6, list(16, 16, num(0.5, 1.5))),
+    chops: list(1, 6, shape({ open: int(0, 15), steps: list(0, 4, int(0, 15)) })),
+    riffs: list(1, 6, list(1, 24, shape({ s: int(0, 31), semi: int(-12, 24), len: num(0.25, 16), f: int(0, 15) }))),
+    words: list(1, 6, shape({ s: int(0, 15), syl: list(1, 4, tuple(num(200, 1200), num(600, 3000), oneOf(["k", "t", "p", "s", null]))) })),
+    opens: list(1, 6, list(0, 4, int(0, 15))),
+    lines: list(1, 6, both(list(6, 16, alienStep), (x, p, e) => {
+      if (Array.isArray(x) && x.filter((n) => n !== null).length < 2) e(`${p}: needs at least 2 notes`);
+    })),
+    stabs: list(1, 6, list(1, 10, shape({ s: int(0, 31), len: num(0.25, 16), core: bool }))),
+    arpCells: list(1, 6, list(2, 16, int(0, 11))),
+    calls: list(1, 6, shape({ s: int(0, 15), len: num(1, 16), vowels: list(1, 4, formant) })),
+    ...SOUND_CHECKS,
+    kit: electroKit,
+    bassTone: partial({
+      osc: list(1, 4, shape({ type: oneOf(waves), detune: num(-40, 40), level: num(0, 1) })),
+      cutoff: num(60, 1200), color: num(0, 3000), q: pair(0.3, 14), open: pair(1, 12), decay: pair(0.01, 0.5), drive: num(0.1, 5),
+      level: pair(0.02, 0.3), sub: pair(0, 2), glide: num(0.001, 0.2), fm: pair(0, 4),
+    }),
+    pad: padSpec,
+    voice: partial({ pitch: num(60, 400), bits: int(3, 8), hp: num(100, 2000), lp: num(1000, 8000), level: num(0, 0.15) }),
+    hoover: partial({
+      cutoff: num(200, 4000), color: num(0, 4000), q: num(0.3, 8), hp: num(20, 1000), bend: num(0, 12), detune: list(1, 4, num(-50, 50)), level: num(0, 0.4),
+    }),
+    vox: partial({ ring: num(0.25, 4), level: num(0, 1.2) }),
+  },
+  ambientidm: AMBIENT_CHECKS,
+  drone: DRONE_CHECKS,
 };
 
 /** Fields whose valid values depend on another table (progression indices / names), checked on the tables in force. */
@@ -381,6 +598,27 @@ function crossCheck(genre: DataGenre, data: Record<string, unknown>, p: string, 
     const n = Array.isArray(data.chords) ? data.chords.length : 7;
     data.progressions.forEach((prog, i) => {
       if (Array.isArray(prog)) prog.forEach((c, j) => typeof c === "number" && c >= n && e(`${p}.progressions[${i}][${j}]: chord ${c} is not in chords (0..${n - 1})`));
+    });
+  } else if (genre === "futuregarage" && Array.isArray(data.chords) && data.chords.length < 7) {
+    e(`${p}.chords: the house progressions use chords 0..6; give 7 or more chords, or your own progressions`);
+  }
+  // Ambient IDM's progression indices are checked in baseCheck; here only the house progressions over fewer chords.
+  if (genre === "ambientidm" && !Array.isArray(data.progressions) && Array.isArray(data.chords) && data.chords.length < 5) {
+    e(`${p}.chords: the house progressions use chords 0..4; give 5 or more chords, or your own progressions`);
+  }
+  if (genre === "electro" && Array.isArray(data.progressions)) {
+    const n = Array.isArray(data.chords) ? data.chords.length : 6;
+    data.progressions.forEach((prog, i) => {
+      if (Array.isArray(prog)) prog.forEach((c, j) => typeof c === "number" && c >= n && e(`${p}.progressions[${i}][${j}]: chord ${c} is not in chords (0..${n - 1})`));
+    });
+  } else if (genre === "electro" && Array.isArray(data.chords) && data.chords.length < 6) {
+    e(`${p}.chords: the house progressions use chords 0..5; give 6 or more chords, or your own progressions`);
+  }
+  if (genre === "dubtechno" && Array.isArray(data.progressions)) {
+    const names = new Set(["i9", "i11", "iv7", "VI9", "VII9", "v7", ...(isObj(data.chords) ? Object.keys(data.chords) : [])]);
+    data.progressions.forEach((prog, i) => {
+      const seq = isObj(prog) && Array.isArray(prog.seq) ? prog.seq : [];
+      seq.forEach((c, j) => typeof c === "string" && !names.has(c) && e(`${p}.progressions[${i}].seq[${j}]: unknown chord "${c}" (known: ${[...names].join(" ")})`));
     });
   }
   if (genre === "triphop" && Array.isArray(data.progressions)) {
@@ -436,6 +674,7 @@ function checkStyle(genre: DataGenre, style: unknown, p: string, e: Err, seen: S
     else if (v !== undefined) checks[k](v, `${p}.data.${k}`, e);
   }
   crossCheck(genre, data, `${p}.data`, e);
+  baseCheck(genre, base, data, `${p}.data`, e);
 }
 
 /** Every rule a pack breaks, as "path: problem" lines; empty when the pack is valid. */
@@ -462,9 +701,9 @@ export function validatePack(pack: unknown): string[] {
   else if (HOUSE_KEYS.includes(key)) e(`key: "${key}" is a house station`);
   if (typeof name !== "string" || name.trim().length === 0 || name.length > 40) e(`name: expected 1..40 characters, got ${show(name)}`);
   const pool: DataGenre[] = [];
-  if (!Array.isArray(genres)) e(`genres: expected a list of 2..5 of ${DATA_GENRES.join(", ")}`);
+  if (!Array.isArray(genres)) e(`genres: expected a list of 2..${DATA_GENRES.length} of ${DATA_GENRES.join(", ")}`);
   else {
-    if (genres.length < 2 || genres.length > 5) e(`genres: expected 2..5 genres, got ${genres.length}`);
+    if (genres.length < 2 || genres.length > DATA_GENRES.length) e(`genres: expected 2..${DATA_GENRES.length} genres, got ${genres.length}`);
     genres.forEach((g, i) => {
       if (!(DATA_GENRES as readonly unknown[]).includes(g)) e(`genres[${i}]: expected one of ${DATA_GENRES.join(", ")}, got ${show(g)}`);
       else if (pool.includes(g as DataGenre)) e(`genres[${i}]: "${g}" is listed twice`);

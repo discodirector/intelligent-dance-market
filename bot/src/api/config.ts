@@ -58,7 +58,7 @@ export const PAY_CHAINS: Record<number, { name: string; confirmations: number }>
 };
 
 /** The genres a pack can restyle (synth styledata.ts DATA_GENRES; test/api.test.ts keeps them equal). */
-export const DATA_GENRES = ["liquid", "futuregarage", "triphop", "lofihouse", "acid"] as const;
+export const DATA_GENRES = ["liquid", "futuregarage", "triphop", "lofihouse", "acid", "dubtechno", "electro", "ambientidm", "drone"] as const;
 
 export const LIMITS = {
   /** A quote holds this long; a payment mined up to `graceMs` later is still accepted. */

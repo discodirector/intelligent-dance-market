@@ -104,7 +104,7 @@ function build(root: HTMLElement, cfg: Config, renewable: Station[], status: Sta
       <div class="ap-check" aria-live="polite"></div>
       <label>CONTACT<span class="ap-row"><select name="contactKind"><option value="x">X</option><option value="telegram">Telegram</option><option value="email">Email</option></select><input name="contact" placeholder="@handle" autocomplete="off" required /></span></label>
       <label>VIBE <span class="ap-count">0/${cfg.vibeChars}</span><textarea name="vibe" rows="3" maxlength="${cfg.vibeChars}" placeholder="What should the station sound like? A few words for the swarm." required></textarea></label>
-      <fieldset class="ap-genres"><legend>GENRES <span>optional · pick 2 to 5, or leave them to the owner</span></legend>
+      <fieldset class="ap-genres"><legend>GENRES <span>optional · pick 2 or more, or leave them to the owner</span></legend>
         ${DATA_GENRES.map((g) => `<label><input type="checkbox" name="genre" value="${g}" /> ${esc(genreName(g))}</label>`).join("")}
       </fieldset>
       <p class="ap-price">Setup: <b>${usd(p.setupUsd)} + ${p.setupImd} IMD</b> at the current IMD price, paid in stablecoins (USDC, USDT, USDT0, USDG) · first month included from the day it goes on air.</p>
@@ -194,7 +194,7 @@ function build(root: HTMLElement, cfg: Config, renewable: Station[], status: Sta
     const msg = q<HTMLElement>(".ap-out", fNew);
     const token = fNew.token.value.trim(), pool = fNew.pool.value.trim(), contact = fNew.contact.value.trim(), text = vibe.value.trim();
     const genres = [...fNew.querySelectorAll<HTMLInputElement>("input[name=genre]:checked")].map((x) => x.value);
-    const problem = !ADDRESS.test(token) ? "Token: a 0x address." : pool && !POOL.test(pool) ? "Pool: a pair address or a v4 pool id." : !contact ? "Contact: an X handle, a Telegram username or an email." : !text ? "Vibe: a few words on the sound." : genres.length === 1 ? "Genres: pick 2 to 5, or none." : "";
+    const problem = !ADDRESS.test(token) ? "Token: a 0x address." : pool && !POOL.test(pool) ? "Pool: a pair address or a v4 pool id." : !contact ? "Contact: an X handle, a Telegram username or an email." : !text ? "Vibe: a few words on the sound." : genres.length === 1 ? "Genres: pick 2 or more, or none." : "";
     if (problem) {
       msg.className = "ap-msg ap-out bad";
       msg.textContent = problem;

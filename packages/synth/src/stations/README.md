@@ -14,7 +14,7 @@ import type { StationPack } from "../pack.ts";
 export default {
   key: "pepe",                         // the station key: a-z 0-9 "-", 2..24 chars (not "idm" / "imd-eth")
   name: "Pepe Night Shift",            // 1..40 chars
-  genres: ["liquid", "triphop", "acid"],   // 2..5 distinct genres from the five below
+  genres: ["liquid", "triphop", "acid"],   // 2 or more distinct genres from those below
   styles: {                            // for every genre in `genres` (and no other): 1..4 styles, in play order
     liquid: [{ id: "pepe-keys", name: "Pepe Keys", base: "classic", leads: ["pepe-ep"], data: { /* tables, sound */ } }],
     triphop: [/* ... */],
@@ -40,7 +40,8 @@ A station style is a **variant of a house style**: same voice code in `engine.ts
 - `bpm` `[low, high]`, `swing` (0.5 straight .. 0.68), `microScale` (0..2.5), `trim` (loudness, 0.25..3), `leads`
   (1..4 lead patch ids from `leads.ts` or the pack's own `patches`): optional. **Left out, they are inherited from the base style**, so
   `{ id, name, base }` alone sounds exactly like the base. Tempo windows: liquid 160..180, futuregarage 120..145,
-  triphop 66..104, lofihouse 112..132, acid 108..140.
+  triphop 66..104, lofihouse 112..132, acid 108..140, dubtechno 112..130, electro 110..140, ambientidm 70..124,
+  drone 40..100.
 - `data` — the tables you change (below). A table left out keeps the house one. A table the base does not read is
   refused (it would do nothing).
 
@@ -72,6 +73,18 @@ figure 0..63. `core: true` notes play even in a quiet market; the others need th
 | `acid` | `classic` 303 Floor | `lines` | `kit` `voice` |
 | | `acidhouse` Acid House | `lines` | `kit` `voice` |
 | | `rubber` Slow Rubber | `lines` | `kit` `voice` |
+| `dubtechno` | `classic` Lucidflow | `chords` (merged over i9 i11 iv7 VI9 VII9 v7) `progressions` `figures` `accents` `bassline` `bells` `percs` | `kit` `subTone` `stabTone` `padTone` `bellTone` `sweep` `field` |
+| | `ixtlan` Ixtlan | the same | the same |
+| | `moment` The Moment | the same | the same |
+| `electro` | `classic` Cold 808 | `kicks` `arps` | `kit` `bassTone` |
+| | `client03` Client_03 | `chords` `progressions` (4 indices, 2 bars a chord) `kicks` `ghosts` `warps` `chops` `riffs` `words` | `kit` `bassTone` `pad` `voice` |
+| | `alienrave` Alien Rave | `chords` `progressions` (4 indices, 1 bar a chord) `kicks` `opens` `lines` `stabs` `arpCells` `calls` | `kit` `bassTone` `hoover` `vox` |
+| `ambientidm` | `classic` Tape Keys | `chords` `progressions` (4 bars a chord) `figures` `tiers` | `kit` `pad` `line` |
+| | `boc` Tape Haze | `chords` `progressions` `phrases` `tiers` `notes` | `kit` `pad` `bass` `lead` |
+| | `crystal` Crystal | `chords` `progressions` `arps` `tiers` `notes` | `kit` `line` `glass` `bell` `shimmer` |
+| `drone` | `classic` Wall | `bars` `voicing` `colours` `busy` `glints` | `wall` `glint` `breath` `swell` |
+| | `dark` Dark Low | `bars` `voicing` `busy` `glints` | `pad` `bed` `kick` `glint` `rumble` |
+| | `pulse` Overtone Pulse | `bars` `glints` (harmonic numbers) `partials` `figures` | `overtone` `glint` `swell` |
 
 The shapes in short (full rules in `styledata.ts`):
 
@@ -86,6 +99,30 @@ The shapes in short (full rules in `styledata.ts`):
 - `lines` (acid): 16 steps, each `null` (rest) or `{ degree 0..4, octave -1..1, flags (1 accent + 2 slide +
   4 ornament), gate? 16ths }`; at least 4 notes.
 - `sub`: the sub level 0..1 (futuregarage up to 1.2).
+- dubtechno: `progressions` `[{ bars, seq: ["i9", "VI9", ...] }]` (chord names, `bars` each); `chords`
+  `{ name: { root, upper } }` (your own names next to the house ones); `figures` the stab's steps in a bar (0..15; the
+  last hit is the answer a busy chain adds) with `accents` their levels; `bassline` `[[step, length, level,
+  interval?]]` per bar; `bells` four-bar fragments `[[16th 0..63, tone from the top, level]]`; `percs` the two-bar
+  percussion `[[16th 0..31, pitch ratio (1 tonic, 1.5 fifth), level]]`.
+- electro: `kicks` `{ half, lo, mid, hi }` lists of **two-bar** kick figures (onsets 0..31; `half` plays in the intro);
+  `arps` (classic) 1..3 semitones the bass cycles through; `chords` `[{ bass, tones, third?, seventh? }]` with
+  `progressions` of 4 indices (give 6+ chords or your own progressions); `riffs` (client03) two-bar bass notes
+  `{ s, semi, len, f }` (f: 1 accent, 2 slide, 4 ornament, 8 dead note); `lines` (alienrave) 6..16 steps of `null` or
+  `[semi, flags]`; `ghosts`, `stabs` two-bar `{ s, ... , core }` figures; `warps` 16 hat pitch multipliers; `chops`
+  `{ open, steps }`; `opens` open-hat steps; `arpCells` chord-tone indices; `words` / `calls` the computer voice's
+  syllables `[F1, F2, consonant]` and the robot's vowels `[F1, F2]`.
+- `chords` (ambientidm): `[{ bass, pad, glass, arp, sing }]`, 2..8 chords in the minor pentatonic: `pad` over the pad
+  root (Tape Haze plays the tones at and above 0), `glass` Crystal's bed an octave up, `arp` the four chord tones
+  low to high, `sing` the melody roles `[3rd, 5th, colour, root, 7th]`. `progressions`: indices into `chords`.
+- `figures` (Tape Keys, two bars): `[step 0..31, arp tone 0..6, tier 0..2]`; `phrases` (Tape Haze, eight bars):
+  `[step 0..127, sing role 0..4, length 1..32, octave -1..1, tier 0..2]`; `arps` (Crystal): cells of chord-tone
+  indices 0..8. Tier 0 always plays; `tiers: [low, high]` (0..1) is how busy the chain must be for tiers 1 and 2
+  (Crystal: for the arp to go from quarters to eighths to sixteenths). `notes`: the pool of the blips / micro-edits.
+- `bars` (drone): phrase length, 2..16 bars (a new layer each phrase). `voicing` / `colours`: the pad's tones
+  (Wall over the pad root, alternating the voicing with a colour; Dark Low over the bass tonic); `busy` the tone a
+  busy chain adds. `glints`: the bell pitches (Overtone Pulse: harmonic numbers 2..16 of its series). `partials`:
+  `[{ n 1..16, g level, group 0..3 }]`, the series Overtone Pulse breathes through; `figures`: which phrases bring
+  its just fifth in (0/1).
 
 ## Sound: kit, patches, effects, mix
 
@@ -118,6 +155,10 @@ Per genre (which base reads which: the table above and `DATA_FIELDS` in `styleda
 | `triphop` | `kit` `{ kick, snare, drag, hat, open }`, `bass`, `bassTone` (bristol, cinematic), `bowed` (the strings) |
 | `lofihouse` | `kit` `{ kick, clap, snare, hat, open, shaker }`, `bass`, `organTone` + `pad` (rave), `chop` + `pump` (chop) |
 | `acid` | `kit` `{ kick, clap, snare, hat, open, perc }`, `voice` (the 303: `wave` saw/square, `cutoff`, `envMod`, `resonance`, `decay`, `drive`, `level`, `accent`, `gate`, `sweep`) |
+| `dubtechno` | `kit` `{ kick: { center, rise, sweep, hold, decay, drive, lp, click, clickHz, level }, clap: { level, hz, decay, rim }, hat: { off, decay, hp, metal, shaker, shakerDecay, shuffle }, perc: { level, decay } }` (each voice merged field by field); `subTone` `{ level, octave, lp, attack, release, drive }`; `stabTone` `{ wave, detune, lp, env, envTime, q, hp, attack, release, gain, pan, move, octave }`; `padTone` `{ level, wave, detune, octave, lp, attack, release }`; `bellTone` `{ level, every, ratio, index, decay }`; `sweep` `{ stab, echo }` bars per filter open-close; `field` `{ level, hz }` the rain. The echo is `fx.echo` (`steps` 3 = dotted 8th, up to 12 `taps`, `fb` < 0.75) |
+| `electro` | `kit` `{ kick, snare: "808" \| "client" \| "alien" \| layers, ghost (client03), hat: { hp, decay, metal, q }, open: { hp, decay, metal, q, level, crush? }, accents: [on, e, and, a] }`; `bassTone` `{ osc, cutoff, color, q, open, decay, drive, level, sub, glide, fm }` (pairs `[plain, accent]`; classic reads `cutoff color q decay level sub`); `pad` (client03); `voice` `{ pitch, bits, hp, lp, level }` (client03's speak-and-spell); `hoover` `{ cutoff, color, q, hp, bend, detune, level }` and `vox` `{ ring, level }` (alienrave) |
+| `ambientidm` | `kit`: each base its own parts (classic `{ kick, snare, hat }`, boc `{ kick, thump, snare, dust, ghost, hat, open }`, crystal `{ click, rim, crack, tick, hat, open }`), `pad` (classic, boc), `bass` + `lead` (boc), `line` (classic, crystal), `glass` + `bell` + `shimmer` (crystal) |
+| `drone` | `wall` (classic) / `pad` (dark) the breathing layers, `bed` (dark: the beating subs), `overtone` (pulse), `glint` (all), `kick` (dark's concussion), `breath` (classic), `rumble` (dark), `swell` (classic, pulse) |
 
 The shapes:
 
@@ -141,12 +182,26 @@ The shapes:
   `LeadPatch` shape of `leads.ts` without `id`: `{ name, osc, fm?, filter, formants?, amp, vib?, glide?, blip?,
   noise?, drive?, gain }`. A style uses them with `leads: ["my-patch"]`. Ids like style ids, not a house patch id;
   ranges are those of the house patches (`PATCH_CHECK` in `pack.ts`). Copy a house patch from `leads.ts` and change it.
+- **ambientidm voices**: `bass` `{ osc, cutoff, level, sub }` and `lead` `{ osc: [{ type, oct, detune, level }],
+  cutoff, level, scoop (cents into each note), vib }` (Tape Haze's cassette); `line` `{ level, cutoff, osc }` (the slow
+  high note); `glass` `{ level, partials: [{ type, ratio, detune, level }], cutoff, hp, attack, release }` (Crystal's
+  bed), `bell` `{ level, ratio, index, decay }` (an FM bell: 3.49 glass, integers a music box), `shimmer` `{ level,
+  partials: [{ ratio, detune, level }], decay, short }` (the arp's ring on eighths / sixteenths). Crystal's `crack` and
+  `tick` are `{ noise, freq, q, decay, level }`, its `rim` `{ level, pitch }`.
+- **drone voices**: `wall` / `pad` `{ level, waves (per voice, low to high), detune, spread, cutoff, glow, range,
+  period }` (+ Wall's `depth`, `drift`, `core`): detuned pairs through a lowpass breathing from `cutoff` to `range`
+  times it every `period` s. `bed` `{ subLevel, bodyLevel, subs, body: [[semitones, cents, level]], beat, drive,
+  cutoff }`: sine pairs a few cents apart beat against each other (`beat` scales the cents). `overtone` `{ level,
+  cutoff, glow, depths: [4 groups] }`. `glint` `{ level, decay, attack, top, gap (beats between glints) }`. `breath`,
+  `rumble`, `swell`: levels of the noise breath, the cave rumble and the rare sub swell (0 = none).
 
 ### Taste
 
 - **Keep the genre recognisable.** Liquid stays a fast rolling break with a sub; trip-hop slow and heavy; acid a
-  303 over four-to-the-floor. Change the producer, not the genre: kick and snare character, the keys' patch, the
-  room, the grit.
+  303 over four-to-the-floor; dub techno a round four-on-the-floor kick under minor chord stabs into the echo; electro
+  a syncopated 808 break (never four-on-the-floor) and a machine bass; ambient IDM soft chords over a dusty pocket with
+  a few long notes; the drone beatless, held and slowly breathing (no fast `period`, no busy glints). Change the
+  producer, not the genre: kick and snare character, the keys' patch, the room, the grit.
 - **Use contrast between your styles**, and against the house. Pick one idea per style and commit: dry and tight
   (small `space`, no echo, short kick and snare, closed hats) vs dub-delay heavy (`echo` with taps and feedback, big
   `spaceSend`); lofi crushed (`fx.master.crush` 8..10, `master.lp` 6000..8000, `drumLp`, crushed layers, `vinyl`) vs
@@ -182,6 +237,10 @@ style: median loudest-3s within ±1 dB of -14.3 dBFS, peak under -0.5 dBFS, no n
 than 2 bars, and the same SHA-256 on two renders of each clip. It prints a pass/fail table, writes the clips to
 `sim/stations/<key>/<genre>-<style>-e<epoch>.wav` and exits non-zero on any fail. Too quiet or too loud: change the
 style's `trim` by the dB difference (`trim *= 10 ** (dB / 20)`) and run it again.
+
+Known: the house Tape Haze (`ambientidm` base `boc`) renders differently on two runs in Chromium even with no data, so
+every style on that base fails the determinism check for now. Use `classic` or `crystal` for ambientidm until it is
+fixed on our side.
 
 To hear what you changed, `node web/scripts/station-ab.mjs <key>` writes `sim/stations/<key>/ab-house-vs-pack.wav`:
 for each style, 20 s of its house base then 20 s of your style, same key, same tape. If the two halves sound like the

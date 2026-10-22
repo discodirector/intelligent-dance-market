@@ -54,7 +54,7 @@ packages/synth/src/stations/<key>.ts   export default { key, name, genres: [...]
 
 Each `GenreStyle` gets `base: "<existing style id>"` and `data: {...}` overrides for the tables that renderer reads.
 The engine reads `c.style.data?.<table> ?? <DEFAULT_TABLE>`; renderers are opened to data overrides genre by genre
-(start: liquid, futuregarage, triphop, lofihouse, acid — the most table-driven).
+(start: liquid, futuregarage, triphop, lofihouse, acid — the most table-driven; then dubtechno, electro, ambientidm, drone).
 
 Implemented: the data contract per genre is `packages/synth/src/styledata.ts`; `pack.ts` has `validatePack` and
 `programFromPack` (fields a style leaves out are inherited from its base, so `{ id, name, base }` plays exactly like
@@ -68,6 +68,30 @@ sends, drum filter, saturation, sidechain, master lowpass/highpass/crusher, viny
 base's values (`SOUND_DEFAULTS` in `engine.ts`); a style that restates them plays exactly like its base.
 `packages/synth/scripts/engine-trace.ts --ref <ref>` proves a refactor leaves the house schedule untouched;
 `web/scripts/station-ab.mjs <key>` renders house-base-vs-style A/B clips for listening.
+
+Dub techno and electro (opened 2026-10-22, same level). A pack names 2 or more of the opened genres (the apply
+form, the API and the swarm order take the same range). Dub techno opens every table of its three bases
+(Lucidflow, Ixtlan, The Moment): chords (by name, over the house m9/m11 set) and progressions, the stab figures and
+accents, the sub's bassline, the bell fragments and the percussion figure; the kit (kick, clap or rim, offbeat hat
+and swung shaker, percussion), the sub, the chord stab (wave, detune, filter envelope, resonance, wobble), the pad,
+the bell (FM ratio, index, decay, how often), the filter sweeps (bars per open-close of the stab and the echo loop)
+and the rain; its dub echo is `fx.echo` (now up to 12 taps; feedback < 0.75, feed-forward, so it can never ring).
+Electro opens Cold 808 (two-bar kick figures, the bass arp, the 808 kit, the bass filter), Client_03 (chords and
+progressions, kicks, ghost-snare funk, the break hats' warp and chops, the bass riffs, the computer voice's words;
+the kit, the grimy bass, the ghost pad, the speak-and-spell voice) and Alien Rave (chords and progressions, kicks,
+open hats, the phase bass lines, hoover stabs, arp cells, robot calls; the kit, the FM bass, the hoover, the ring-
+modulated vox). `test/fixtures/dub-electro.ts` is the reference pack for both (not a station).
+
+Ambient IDM and drone (opened after the first five, same level): ambientidm opens its harmony (`chords`,
+`progressions`), the phrase material of each base (Tape Keys `figures`, Tape Haze `phrases`, Crystal `arps`), how fast
+it gets busy (`tiers`), the blip/edit note pool (`notes`), and its voices: a kit per base, the tape and haze pads, the
+haze bass and keyboard lead, the high line, Crystal's glass bed, bells and arp voice. The drone opens its layers
+(`bars` phrase length, `voicing`, `colours`, `busy`), the Overtone Pulse series (`partials`, `figures`), the glint
+pitches, the breathing pads (`wall`, `pad`: waves, detune, filter range, breathing period), Dark Low's beating sub
+`bed` and concussion `kick`, the series' `overtone` levels, the glints' voice and rate, and the breath, rumble and
+sub-swell levels. Counts are capped (oscillators, partials, layers, ring times) to bound CPU. The house sound of both
+is unchanged (engine-trace: all 30 house styles identical). Known: the house Tape Haze (`boc`) is not deterministic in
+Chromium (two renders differ, also before it was opened), so styles on that base fail the gate's determinism check.
 
 Pack checks (`web/scripts/station-check-pack.mjs`, run by the swarm job and again here):
 types compile, only the pack file changed, every style renders 3 epochs offline, loudest-3s within ±1 dB of
@@ -286,13 +310,13 @@ meme token ("UpSideDownCat on robinhood", 18 decimals, 1e9 supply); USDG there i
 **Pay-to**: 0x12a7c4567eEF583ca6bC73F72aB980fd40F89CEA (owner-approved), set only in the deploy env (`api.env`
 `STATION_PAY_TO`, documented in `bot/api.env.example`), never in code.
 
-**API** (`/api/stations/*`, Caddy proxies to 127.0.0.1:8787):
+**API** (`/api/stations/*`, Caddy proxies to 127.0.0.1:8797):
 
 ```
 GET  /config              prices, stables per chain, genres, open or not
 POST /check               {chainId, token, pool?}                    -> eligibility report
 POST /apply               {chainId, token, pool?, contact: {kind: x|telegram|email, value}, vibe (<= 300 chars),
-                           genres?: 2..5 of liquid|futuregarage|triphop|lofihouse|acid, plan: "setup"} -> quote
+                           genres?: 2..9 of liquid|futuregarage|triphop|lofihouse|acid|dubtechno|electro|ambientidm|drone, plan: "setup"} -> quote
 POST /renew               {key, months: 1|3}                         -> quote for a registry station (not house)
 POST /pay                 {applicationId, chainId, txHash}           -> 200 paid | 202 not mined / confirming | 4xx
 GET  /application/:id     the form's poll (no contact, no vibe)
@@ -380,14 +404,14 @@ route) on `/stations` and the player; missing, unreadable or slower than 2.5 s -
    `STATION_PAY_TO=0x12a7c4567eEF583ca6bC73F72aB980fd40F89CEA`, `STATIONS_OPEN=1` (when ready), `STATION_PRICE_TIER=launch`. In the bot's `/opt/swarm-sequencer/.env`:
    `STATION_CHECKPOINTS=1`.
 3. **Services**: `docker compose up -d bot` (checkpoints + status.json), then
-   `docker compose --profile api up -d api` (port 127.0.0.1:8787 only). Check:
-   `curl -s 127.0.0.1:8787/api/stations/config`.
+   `docker compose --profile api up -d api` (host port 127.0.0.1:8797 only; 8787 is taken on the VPS). Check:
+   `curl -s 127.0.0.1:8797/api/stations/config`.
 4. **Caddy** (`/etc/caddy/sites.d/theidm.caddy`, theidm.fun site block, before the SPA fallback), then
    `caddy validate` and `systemctl reload caddy`:
 
    ```
    handle /api/* {
-   	reverse_proxy 127.0.0.1:8787
+   	reverse_proxy 127.0.0.1:8797
    }
    handle_path /stations-data/* {
    	root * /opt/swarm-sequencer/out/stations-data

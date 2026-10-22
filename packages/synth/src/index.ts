@@ -76,6 +76,8 @@ export type {
   SubSpec,
   TripHopData,
 } from "./styledata.ts";
+export { AMBIENT_KIT_PARTS } from "./styledata.ts";
+export type { AmbientIdmData, DroneData } from "./styledata.ts";
 export type { Program } from "./program.ts";
 export { SYNTH_VERSION } from "./version.ts";
 

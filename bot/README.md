@@ -42,7 +42,7 @@ Four compose services (`bot/docker-compose.yml`) run the same image:
 - `bot` — `npx tsx src/scheduler.ts`, env `../.env`, volume `../out:/app/out`, always on;
 - `pulse` — `npx tsx src/pulse.ts`, env `../pulse.env` only, profile `pulse` (not started by a plain `up`);
 - `api` — `npx tsx src/api/index.ts`, the stations API (docs/STATIONS.md "Applications and payment"), env
-  `../api.env` only, volume `../out:/app/out`, port 127.0.0.1:8787, profile `api`;
+  `../api.env` only, volume `../out:/app/out`, host port 127.0.0.1:8797 (8787 inside), profile `api`;
 - `stations` — `npx tsx src/stations/worker.ts`, the automatic station pipeline (docs/STATIONS.md "Automatic
   pipeline"), env `../stations.env` only (the only file with SWARM_KEY), volume `../out:/app/out`, profile `stations`.
 ```

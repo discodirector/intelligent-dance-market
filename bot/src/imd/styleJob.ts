@@ -25,7 +25,19 @@ const GENRE_CORE: Record<StyleGenre, string> = {
   triphop: "slow and heavy, a dusty break",
   lofihouse: "a dusty four-to-the-floor house groove",
   acid: "a 303 line over four-to-the-floor",
+  dubtechno: "a round four-to-the-floor kick, minor chord stabs into a dub echo, a rolling sub",
+  electro: "a syncopated 808 break, never four-to-the-floor, and a machine bass line",
+  ambientidm: "slow chords on a soft dusty pocket, a few long melodic notes",
+  drone: "held, slowly breathing layers with no beat",
 };
+
+/** Where the character of the later-opened genres lives (styledata.ts AmbientIdmData, DroneData; README "Sound fields"). */
+const GENRE_FIELDS = {
+  ambientidm:
+    "harmony in chords/progressions, the phrase material in figures (Tape Keys), phrases (Tape Haze) or arps (Crystal), tiers for how fast it gets busy, notes for the blips; sound in kit (each base its own parts), pad, bass, lead, line, glass, bell, shimmer.",
+  drone:
+    "the layers in voicing/colours/busy and bars (phrase length), the Overtone Pulse series in partials/figures, glints for the bell pitches; sound in wall/pad (waves, detune, breathing), bed (beating subs), overtone, glint, kick, breath, rumble, swell. Keep it beatless and slow.",
+} as const;
 
 export const packPath = (key: string) => `packages/synth/src/stations/${key}.ts`;
 
@@ -45,7 +57,7 @@ export interface StyleOrder {
 export function orderProblems(o: StyleOrder): string[] {
   const out: string[] = [];
   if (!/^[a-z0-9-]{2,24}$/.test(o.key) || o.key === "idm" || o.key === "imd-eth") out.push(`key "${o.key}": a-z 0-9 "-", 2..24 chars, not idm / imd-eth`);
-  if (o.genres.length < 2 || o.genres.length > 5) out.push(`genres: 2..5 of ${DATA_GENRES.join(", ")}, got ${o.genres.length}`);
+  if (o.genres.length < 2 || o.genres.length > DATA_GENRES.length) out.push(`genres: 2..${DATA_GENRES.length} of ${DATA_GENRES.join(", ")}, got ${o.genres.length}`);
   for (const g of o.genres) if (!(DATA_GENRES as readonly string[]).includes(g)) out.push(`genre "${g}": not one of ${DATA_GENRES.join(", ")}`);
   if (new Set(o.genres).size !== o.genres.length) out.push("genres: listed twice");
   const n = o.styles ?? 2;
@@ -77,7 +89,8 @@ export function styleObjective(o: StyleOrder): string {
     "",
     "Taste:",
     `- Keep each genre recognisable (${genres.map((g) => `${g}: ${GENRE_CORE[g]}`).join("; ")}). Change the producer, not the genre.`,
-    "- One idea per style, committed; contrast the styles with each other and with the house. Use the sound fields (kit, bass, pad/strings/voice, fx, mix, vinyl, the pack's own lead patches), not only notes and rhythm.",
+    "- One idea per style, committed; contrast the styles with each other and with the house. Use the sound fields (kit, bass, the genre's voices: pad/strings/voice/bassTone/stabTone/hoover..., fx, mix, vinyl, the pack's own lead patches), not only notes and rhythm.",
+    ...genres.filter((g) => g in GENRE_FIELDS).map((g) => `- ${g}: ${GENRE_FIELDS[g as keyof typeof GENRE_FIELDS]}`),
     "- Avoid harshness: hats under ~0.6 level, snare noise q under ~2, never resonance and drive both at the top of their ranges, fx.master.crush under 8 bits only on purpose.",
     "- One thing owns the sub. Send snares, leads, pads and percussion to the echo and the room, not the kick and the bass.",
     "",

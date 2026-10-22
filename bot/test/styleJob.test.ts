@@ -42,8 +42,8 @@ describe("styleOpenBody", () => {
     expect(o).toContain('The owner\'s vibe: "slow \\"smoky\\" rooms"');
   });
 
-  it("fits the API: objective <= 8000 chars, body < 16 KiB even with the longest brief and five genres", () => {
-    const body = styleOpenBody(chog({ genres: ["liquid", "futuregarage", "triphop", "lofihouse", "acid"], styles: 4, brief: "x".repeat(1500) }));
+  it("fits the API: objective <= 8000 chars, body < 16 KiB even with the longest brief and seven genres", () => {
+    const body = styleOpenBody(chog({ genres: ["liquid", "futuregarage", "triphop", "lofihouse", "acid", "dubtechno", "electro"], styles: 4, brief: "x".repeat(1500) }));
     expect(body.objective.length).toBeLessThanOrEqual(8000);
     expect(JSON.stringify({ requestKey: "0".repeat(36), action: "job.open", input: body }).length).toBeLessThan(16 * 1024);
     expect(body.paths.length).toBeLessThanOrEqual(16);
@@ -59,7 +59,7 @@ describe("styleOpenBody", () => {
     expect(bad({ key: "idm" })).toThrow(/key "idm"/);
     expect(bad({ key: "Chog" })).toThrow(/key/);
     expect(bad({ key: "c" })).toThrow(/key/);
-    expect(bad({ genres: ["liquid"] })).toThrow(/genres: 2..5/);
+    expect(bad({ genres: ["liquid"] })).toThrow(/genres: 2\.\./);
     expect(bad({ genres: ["liquid", "dubstep"] })).toThrow(/genre "dubstep"/);
     expect(bad({ genres: ["liquid", "liquid"] })).toThrow(/listed twice/);
     expect(bad({ styles: 5 })).toThrow(/styles per genre/);

@@ -167,14 +167,15 @@ describe("validation", () => {
     expect(() => contact({ kind: "phone", value: "1" })).toThrow(Invalid);
   });
 
-  it("vibe: one clean paragraph, bounded; genres: none or 2..5 known", () => {
+  it("vibe: one clean paragraph, bounded; genres: none or 2 or more known", () => {
     expect(vibe("a\u0000b‮c", 300)).toBe("a b c");
     expect(() => vibe("  \n ", 300)).toThrow(Invalid);
     expect(() => vibe("x".repeat(301), 300)).toThrow(/300/);
     expect(vibe("é".repeat(300), 300)).toHaveLength(300);
     expect(genres(undefined)).toEqual([]);
     expect(genres(["liquid", "acid"])).toEqual(["liquid", "acid"]);
-    expect(() => genres(["liquid"])).toThrow(/2 to 5/);
+    expect(() => genres(["liquid"])).toThrow(/2 or more/);
+    expect(genres(["dubtechno", "electro"])).toEqual(["dubtechno", "electro"]);
     expect(() => genres(["liquid", "liquid"])).toThrow(/twice/);
     expect(() => genres(["liquid", "techno"])).toThrow(/one of/);
   });

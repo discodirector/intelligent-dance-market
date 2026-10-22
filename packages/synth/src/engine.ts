@@ -12,12 +12,29 @@ import type {
   CrushLayer,
   DataGenre,
   DrumVoice,
+  DubBellSpec,
+  DubChordSpec,
+  DubClapSpec,
+  DubHatSpec,
+  DubKickSpec,
+  DubPadSpec,
+  DubPercSpec,
+  DubStabSpec,
+  DubSubSpec,
+  DubTechnoData,
+  ElectroBassSpec,
+  ElectroChord,
+  ElectroData,
+  ElectroKicks,
+  ElectroKit,
+  ElectroVoiceSpec,
   FxData,
   GarageChord,
   GarageData,
   GarageKit,
   GenreDataMap,
   HatSpec,
+  HooverSpec,
   KickFigures,
   KickSpec,
   LiquidData,
@@ -36,6 +53,23 @@ import type {
   TripHopData,
   TripHopKeys,
   TripHopKit,
+  VoxSpec,
+} from "./styledata.ts";
+import type {
+  AmbientBassSpec,
+  AmbientBellSpec,
+  AmbientChord,
+  AmbientGlassSpec,
+  AmbientIdmData,
+  AmbientKit,
+  AmbientLeadSpec,
+  AmbientLineSpec,
+  AmbientShimmerSpec,
+  DroneBedSpec,
+  DroneData,
+  DroneGlintSpec,
+  DroneOvertoneSpec,
+  DronePadSpec,
 } from "./styledata.ts";
 import type { IdleGains } from "./idle.ts";
 import { arrange, euclid, type Arrangement, type Section } from "./arrange.ts";
@@ -927,7 +961,7 @@ export class VoiceEngine {
     if (step === 0) {
       this.dubEchoSweep(c, d);
       this.dubPad(c, d, chord);
-      this.vinyl(c, d.vinyl);
+      this.styleVinyl(c, d.vinyl);
       if (d.field > 0) this.dubField(c, d.field, d.fieldHz);
     }
     if (this.fourFloor(c)) {
@@ -983,8 +1017,10 @@ export class VoiceEngine {
     }
   }
 
+  /** The style's tables: the house style's, with a station style's data merged over its base's (dubStyleOf). */
   private dubStyle(c: Ctx): DubStyle {
-    return DUB_STYLES[c.sid] ?? DUB_STYLES.classic;
+    const house = DUB_STYLES[c.sid] ?? DUB_STYLES.classic;
+    return c.style.data ? dubStyleOf(c.style, house) : house;
   }
 
   /** Stab / pad register: the tonic between D3 and C#4. */
@@ -996,7 +1032,8 @@ export class VoiceEngine {
   private dubChordAt(c: Ctx, d: DubStyle): DubChord {
     const prog = d.progs[hash32(c.epoch, 0xc407) % d.progs.length];
     const i = Math.floor(c.hit.bar / prog.bars);
-    return DUB_CHORDS[prog.seq[((i % prog.seq.length) + prog.seq.length) % prog.seq.length]];
+    const name = prog.seq[((i % prog.seq.length) + prog.seq.length) % prog.seq.length];
+    return dataOf<DubTechnoData>(c).chords?.[name] ?? DUB_CHORDS[name as DubChordName];
   }
 
   /** The sub's root for a chord, folded into E1..D#2 so the low end never jumps out of the kick's register. */
@@ -1045,7 +1082,7 @@ export class VoiceEngine {
     const cutoff = s.lp * (0.55 + 0.9 * slow) * wobble * (0.85 + 0.3 * c.color) * (1 + 0.6 * c.heat) * dark * (bus === "fx" ? 1.25 : 1);
     const hp = this.ctx.createBiquadFilter();
     hp.type = "highpass";
-    hp.frequency.value = 170;
+    hp.frequency.value = s.hp;
     hp.Q.value = 0.5;
     const f = this.ctx.createBiquadFilter();
     f.type = "lowpass";
@@ -1189,7 +1226,7 @@ export class VoiceEngine {
     a.connect(sum);
     og.connect(sum);
     const shaper = this.ctx.createWaveShaper();
-    shaper.curve = new Float32Array(tanhCurve(1.3));
+    shaper.curve = new Float32Array(tanhCurve(b.drive));
     shaper.oversample = "none";
     const lp = this.ctx.createBiquadFilter();
     lp.type = "lowpass";
@@ -1244,7 +1281,7 @@ export class VoiceEngine {
    * Dub techno kick: a long round sine tuned to the key (root or fifth nearest `center` Hz), a soft pitch fall,
    * tanh warmth under a closed lowpass so the harmonics stay felt, and only a hint of click.
    */
-  private dubKick(c: Ctx, velocity: number, k: DubKick) {
+  private dubKick(c: Ctx, velocity: number, k: DubKickSpec) {
     const t = c.t;
     let freq = 0;
     for (let m = 24; m < 48; m++) {
@@ -1317,6 +1354,7 @@ export class VoiceEngine {
    * (Denso, Manao): hard break, snarling 16th bass, hoovers and lasers.
    */
   private electro(c: Ctx) {
+    this.styleVinyl(c, 0);
     if (c.sid === "client03") {
       this.electroClient(c);
       return;
@@ -1326,32 +1364,35 @@ export class VoiceEngine {
       return;
     }
     const { v, step, t, sec } = c;
+    const d = dataOf<ElectroData>(c);
+    const kit = specOf(d.kit, ELECTRO_KITS.classic);
     const k = rowCount(v[0]);
     const lvl = rowMax(v[0]);
     if (k > 0 && lvl > 0) {
-      const figs = k <= 2 ? [[0, 10]] : k <= 4 ? [[0, 6, 10], [0, 10, 11]] : [[0, 3, 6, 10], [0, 6, 10, 11], [0, 3, 10, 14]];
-      let fig = figs[hash32(c.epoch, k, 0xe1) % figs.length];
-      if (sec.name === "intro" || (sec.name === "rebuild" && sec.bar < 30)) fig = [0];
-      if (fig.includes(step)) {
+      const kicks = d.kicks ?? ELECTRO_KICKS.classic;
+      const bank = sec.name === "intro" || (sec.name === "rebuild" && sec.bar < 30) ? kicks.half : kickTier(kicks, k);
+      const fig = bank[hash32(c.epoch, k, 0xe1) % bank.length];
+      if (fig.includes((c.hit.bar & 1) * 16 + step)) {
         // Rounder 808: a longer pitch drop into a low body, less click than the other styles.
-        this.kick(t, c.vel * lvl * (step === 0 ? 1 : 0.85), { start: 190, end: 46, sweep: 0.07, decay: 0.62, click: 0.1, drive: 1.4, body: 1.02 });
+        this.kick(t, c.vel * lvl * (step === 0 ? 1 : 0.85), kit.kick);
         this.duck(t);
       }
     }
     // 808 snare on the backbeat (and the chain's fill rolls); ghosts stay out of a cold groove.
-    if (v[1][step] >= 0.9 || (v[1][step] > 0 && step >= 13)) this.snare808(t, c.vel * v[1][step], -c.pan * 0.3);
+    if (v[1][step] >= 0.9 || (v[1][step] > 0 && step >= 13)) this.electroSnare(c, kit.snare, t, c.vel * v[1][step], -c.pan * 0.3);
     if (v[2][step] > 0) {
       const open = step % 8 === 6 && rowCount(v[2]) >= 8;
-      this.hat(t, c.vel * v[2][step] * 0.5, { hp: 7400, decay: open ? 0.14 : 0.03, metal: 0.9, pan: c.pan * 0.6, q: 1.5 });
+      if (open) this.hatVoice(t, c.vel * v[2][step] * kit.open.level, kit.open, c.pan * 0.6);
+      else this.hat(t, c.vel * v[2][step] * kit.accents[step % 4], { ...kit.hat, pan: c.pan * 0.6 });
     }
     if (v[3][step] > 0) this.zap(c, c.vel * 0.5);
     // Bass arpeggio: the chain's onsets cycle through one, two or three notes (density decides how many).
     const onsets = this.onsets(c.arr.bass);
     const at = onsets.indexOf(step);
     if (at >= 0) {
-      const sets = [[0, 12, 10], [0, 12, 7], [0, 10, 12]];
+      const sets = d.arps ?? ELECTRO_ARPS;
       const set = sets[hash32(c.epoch, 0xa2) % sets.length].slice(0, onsets.length <= 2 ? 1 : onsets.length <= 4 ? 2 : 3);
-      this.electroBass(c, c.low + 12 + set[at % set.length], this.holdSteps(c.arr.bass, step, 2) * c.dur);
+      this.electroBass(c, c.low + 12 + set[at % set.length], this.holdSteps(c.arr.bass, step, 2) * c.dur, specOf(d.bassTone, ELECTRO_BASS_TONES.classic));
     }
     // Cold stabs: at most one per two bars, on the motif's first onset, as an open fifth.
     if (sec.lead > 0 && c.hit.bar % 2 === 1) {
@@ -1364,7 +1405,15 @@ export class VoiceEngine {
         this.motifNote(c, base + 7, Math.min(2, note.len) * c.dur, sec.lead * 0.5);
       }
     }
-    if (c.heat >= 0.5 && v[1][step] === 0) this.rollUp(c, (time, vel) => this.snare808(time, vel, 0));
+    if (c.heat >= 0.5 && v[1][step] === 0) this.rollUp(c, (time, vel) => this.electroSnare(c, kit.snare, time, vel, 0));
+  }
+
+  /** The kit's backbeat snare: a house voice by name (each keeps its own pan), or the style's layers at `pan`. */
+  private electroSnare(c: Ctx, snare: ElectroKit["snare"], time: number, velocity: number, pan: number) {
+    if (snare === "808") this.snare808(time, velocity, pan);
+    else if (snare === "client") this.clientSnare(c, velocity, time);
+    else if (snare === "alien") this.alienSnare(c, velocity, time);
+    else this.drum(snare, time, velocity, pan, 1, c);
   }
 
   /**
@@ -1375,45 +1424,48 @@ export class VoiceEngine {
    */
   private electroClient(c: Ctx) {
     const { v, step, t, sec } = c;
+    const d = dataOf<ElectroData>(c);
+    const kit = specOf(d.kit, ELECTRO_KITS.client03);
     const half = sec.name === "intro" || (sec.name === "rebuild" && sec.bar < 30);
-    const chord = this.clientChord(c);
-    const odd = (c.hit.bar & 1) === 1;
+    const chord = this.electroChord(c, CLIENT_CHORDS, CLIENT_PROGRESSIONS, 0xc20, c.hit.bar >> 1);
     const k = rowCount(v[0]);
     const lvl = rowMax(v[0]);
     if (k > 0 && lvl > 0) {
-      const bank = half ? CLIENT_KICK_HALF : k <= 2 ? CLIENT_KICK_LO : k <= 4 ? CLIENT_KICK_MID : CLIENT_KICK_HI;
+      const kicks = d.kicks ?? ELECTRO_KICKS.client03;
+      const bank = half ? kicks.half : kickTier(kicks, k);
       const fig = bank[hash32(c.epoch, k, 0xc11) % bank.length];
-      if ((odd ? fig.b : fig.a).includes(step)) {
-        // 808 with a short click: round enough to boom, tight enough to punch through the bass.
-        this.kick(t, c.vel * lvl * (step === 0 ? 1.2 : 1.05), {
-          start: 168, end: 47, sweep: 0.042, decay: 0.44, click: 0.3, clickHp: 2600,
-          drive: 1.8 + 0.6 * c.heat + 0.4 * Math.max(0, c.press), body: 1.12,
-        });
-        this.duck(t, 0.5, 0.16);
+      if (fig.includes((c.hit.bar & 1) * 16 + step)) {
+        // 808 with a short click: round enough to boom, tight enough to punch through the bass. Heat and buys drive it.
+        this.kick(t, c.vel * lvl * (step === 0 ? 1.2 : 1.05), { ...kit.kick, drive: (kit.kick.drive ?? 0) + 0.6 * c.heat + 0.4 * Math.max(0, c.press) });
+        this.duck(t, d.fx?.duck?.bass ?? 0.5, d.fx?.duckTime?.bass ?? 0.16);
       }
     }
     if (rowMax(v[1]) > 0) {
-      if (step === 4 || step === 12) this.clientSnare(c, c.vel * Math.max(0.65, sec.snare));
-      else if (v[1][step] > 0 && step >= 13 && sec.name !== "intro") this.clientGhost(c, c.vel * v[1][step] * 0.8, c.t);
-      if (!half) this.clientGhostStep(c);
+      if (step === 4 || step === 12) this.electroSnare(c, kit.snare, c.t, c.vel * Math.max(0.65, sec.snare), -c.pan * 0.15);
+      else if (v[1][step] > 0 && step >= 13 && sec.name !== "intro") this.drum(kit.ghost, c.t, c.vel * v[1][step] * 0.8, c.pan * 0.5, 1, c);
+      if (!half) this.clientGhostStep(c, kit.ghost);
     }
-    if (rowCount(v[2]) > 0) this.clientHatStep(c, half);
+    if (rowCount(v[2]) > 0) this.clientHatStep(c, half, kit);
     if (v[3][step] > 0 && sec.name !== "intro") this.clientBlip(c, chord, c.vel * v[3][step]);
-    this.clientBassStep(c, chord);
-    if (sec.pad > 0 && step === 0 && c.hit.bar % 2 === 0) this.clientPad(c, chord);
+    this.clientBassStep(c, chord, specOf(d.bassTone, ELECTRO_BASS_TONES.client03));
+    if (sec.pad > 0 && step === 0 && c.hit.bar % 2 === 0) this.clientPad(c, chord, specOf(d.pad, CLIENT_PAD));
     this.clientVoiceStep(c);
-    if (c.heat >= 0.5 && v[1][step] === 0) this.rollUp(c, (time, vel) => this.clientGhost(c, vel * 1.3, time));
+    if (c.heat >= 0.5 && v[1][step] === 0) this.rollUp(c, (time, vel) => this.drum(kit.ghost, time, vel * 1.3, c.pan * 0.5, 1, c));
   }
 
-  /** This bar's chord: a four-chord progression per epoch, two bars a chord. */
-  private clientChord(c: Ctx): ClientChord {
-    const prog = CLIENT_PROGRESSIONS[hash32(c.epoch, 0xc20) % CLIENT_PROGRESSIONS.length];
-    return CLIENT_CHORDS[prog[(((c.hit.bar >> 1) % 4) + 4) % 4]];
+  /**
+   * This bar's chord (Client_03, Alien Rave): a four-chord progression per epoch from the house tables or the style's
+   * `chords` / `progressions`; `pos` counts chords (bars, or bar pairs).
+   */
+  private electroChord(c: Ctx, chords: readonly ElectroChord[], progs: readonly (readonly number[])[], salt: number, pos: number): ElectroChord {
+    const d = dataOf<ElectroData>(c);
+    const table = d.progressions ?? progs;
+    const prog = table[hash32(c.epoch, salt) % table.length];
+    return (d.chords ?? chords)[prog[((pos % 4) + 4) % 4]];
   }
 
   /** Crisp 808 snare: a short tuned body, a bright noise snap and a clap layered a hair late. */
-  private clientSnare(c: Ctx, velocity: number) {
-    const t = c.t;
+  private clientSnare(c: Ctx, velocity: number, t = c.t) {
     const pan = -c.pan * 0.15;
     this.toneHit(t, 0.5 * velocity, { type: "triangle", freq: 246, to: 188, sweep: 0.04, decay: 0.08, pan, bus: this.busIn.snare });
     this.toneHit(t, 0.22 * velocity, { type: "triangle", freq: 492, decay: 0.035, pan, bus: this.busIn.snare });
@@ -1421,20 +1473,15 @@ export class VoiceEngine {
     this.clap(t + 0.006, velocity * 0.5, c.pan * 0.25);
   }
 
-  /** Ghost snare from a break: a short bandpassed slice with a low tick, quiet. `time` lets rolls reuse it. */
-  private clientGhost(c: Ctx, velocity: number, time: number) {
-    this.noiseHit(time, 0.42 * velocity, { type: "bandpass", freq: 1900 + 500 * c.color, q: 0.9, decay: 0.06, pan: c.pan * 0.5, bus: this.busIn.snare });
-    this.toneHit(time, 0.16 * velocity, { type: "triangle", freq: 210, to: 175, sweep: 0.02, decay: 0.03, pan: c.pan * 0.5, bus: this.busIn.snare });
-  }
-
   /** The funk layer: a composed ghost figure per epoch. A quiet chain plays its core, a busy one the whole figure. */
-  private clientGhostStep(c: Ctx) {
-    const fig = CLIENT_GHOSTS[hash32(c.epoch, 0xc13) % CLIENT_GHOSTS.length];
+  private clientGhostStep(c: Ctx, ghost: DrumVoice) {
+    const figs = dataOf<ElectroData>(c).ghosts ?? CLIENT_GHOSTS;
+    const fig = figs[hash32(c.epoch, 0xc13) % figs.length];
     const hit = fig.find((x) => x.s === (c.hit.bar & 1) * 16 + c.step);
     if (!hit) return;
     const busy = c.arr.energy > 0.4 || rowCount(c.v[1]) >= 4 || c.heat > 0.45;
     if (!hit.core && !busy) return;
-    this.clientGhost(c, c.vel * hit.vel, c.t);
+    this.drum(ghost, c.t, c.vel * hit.vel, c.pan * 0.5, 1, c);
   }
 
   /**
@@ -1442,18 +1489,22 @@ export class VoiceEngine {
    * accents fall on the offbeats, one open slice per epoch figure, and the chop steps stutter in 32nds
    * when the chain is busy or hot.
    */
-  private clientHatStep(c: Ctx, half: boolean) {
+  private clientHatStep(c: Ctx, half: boolean, kit: ElectroKit) {
     const { v, step } = c;
-    const warp = CLIENT_HAT_WARP[hash32(c.epoch, 0xc14) % CLIENT_HAT_WARP.length];
-    const chops = CLIENT_HAT_CHOPS[hash32(c.epoch, 0xc15) % CLIENT_HAT_CHOPS.length];
+    const d = dataOf<ElectroData>(c);
+    const warps = d.warps ?? CLIENT_HAT_WARP;
+    const warp = warps[hash32(c.epoch, 0xc14) % warps.length];
+    const chopTable = d.chops ?? CLIENT_HAT_CHOPS;
+    const chops = chopTable[hash32(c.epoch, 0xc15) % chopTable.length];
     const hats = rowCount(v[2]);
     const play = v[2][step] > 0 || (hats >= 6 && !half && step % 2 === 0);
     if (!play) return;
     const open = hats >= 4 && step === chops.open;
-    const hp = (open ? 5200 : 7600 + 2200 * c.color) * warp[step];
-    const accent = open ? 0.62 : step % 4 === 2 ? 0.6 : step % 2 === 0 ? 0.44 : 0.32;
+    const h = open ? kit.open : kit.hat;
+    const hp = (open ? h.hp : h.hp + 2200 * c.color) * warp[step];
+    const accent = open ? kit.open.level : kit.accents[step % 4];
     const level = c.vel * Math.max(0.55, v[2][step]) * accent;
-    this.hat(c.t, level, { hp, decay: open ? 0.1 : 0.022 + 0.012 * (warp[step] < 1 ? 1 : 0), metal: open ? 0.25 : 0.4, pan: c.pan * 0.8, q: 1.1 });
+    this.hat(c.t, level, { hp, decay: open ? h.decay : h.decay + 0.012 * (warp[step] < 1 ? 1 : 0), metal: h.metal, pan: c.pan * 0.8, q: h.q });
     // A grain of the break's snare body under the hat, so the slices sound cut from a loop.
     this.noiseHit(c.t, 0.05 * level, { type: "bandpass", freq: 3400 * warp[step], q: 1.6, decay: 0.03, pan: -c.pan * 0.4, bus: this.busIn.perc });
     const chop = chops.steps.includes(step) && (c.arr.energy > 0.45 || c.heat > 0.3 || hats >= 8) && !half;
@@ -1469,9 +1520,10 @@ export class VoiceEngine {
    * A quiet chain plays the core notes, a normal one the line, a busy one adds the ornaments.
    * The breakdown holds the bar's first note.
    */
-  private clientBassStep(c: Ctx, chord: ClientChord) {
+  private clientBassStep(c: Ctx, chord: ElectroChord, b: Omit<ElectroBassSpec, "fm">) {
     if (c.sec.bass <= 0 || c.arr.bass === 0n) return;
-    const fig = CLIENT_BASS[hash32(c.epoch, 0xc40) % CLIENT_BASS.length];
+    const riffs = dataOf<ElectroData>(c).riffs ?? CLIENT_BASS;
+    const fig = riffs[hash32(c.epoch, 0xc40) % riffs.length];
     const pos = (c.hit.bar & 1) * 16 + c.step;
     const at = fig.findIndex((x) => x.s === pos);
     if (at < 0) return;
@@ -1486,13 +1538,13 @@ export class VoiceEngine {
     const root = c.low + 12 + chord.bass;
     const pitch = (s: number) => {
       const pc = ((s % 12) + 12) % 12;
-      return root + s + (pc === 3 ? chord.third - 3 : pc === 10 ? chord.seventh - 10 : 0);
+      return root + s + (pc === 3 ? (chord.third ?? 3) - 3 : pc === 10 ? (chord.seventh ?? 10) - 10 : 0);
     };
     const prev = fig[(at + fig.length - 1) % fig.length];
     const from = (note.f & 2) !== 0 ? pitch(prev.semi) : null;
     const ghost = (note.f & 8) !== 0;
     const length = breakdown ? c.dur * 12 : note.len * c.dur * (ghost ? 0.5 : 0.9);
-    this.clientBass(c, pitch(note.semi), from, length, accent, ghost);
+    this.clientBass(c, pitch(note.semi), from, length, accent, ghost, b);
   }
 
   /**
@@ -1500,19 +1552,20 @@ export class VoiceEngine {
    * then tanh. A clean sine an octave down carries the weight. Dead notes barely open the filter.
    * The tick and buy pressure open it, sell pressure shuts it and adds resonance, heat adds grit.
    */
-  private clientBass(c: Ctx, midi: number, from: number | null, length: number, accent: boolean, ghost: boolean) {
+  private clientBass(c: Ctx, midi: number, from: number | null, length: number, accent: boolean, ghost: boolean, b: Omit<ElectroBassSpec, "fm">) {
     const t = c.t;
     const freq = midiToFreq(midi);
     const buy = Math.max(0, c.press);
     const sell = Math.max(0, -c.press);
-    const floorHz = Math.max(110, (150 + 260 * c.color + 220 * buy) * (1 - 0.3 * sell));
-    const peakHz = ghost ? floorHz * 1.6 : Math.min(5200, floorHz * (accent ? 7 : 4.2) * (1 + 0.4 * c.heat));
-    const env = ghost ? 0.03 : accent ? 0.16 : 0.1;
+    const a = accent ? 1 : 0;
+    const floorHz = Math.max(110, (b.cutoff + b.color * c.color + 220 * buy) * (1 - 0.3 * sell));
+    const peakHz = ghost ? floorHz * 1.6 : Math.min(5200, floorHz * b.open[a] * (1 + 0.4 * c.heat));
+    const env = ghost ? 0.03 : b.decay[a];
     const lps: BiquadFilterNode[] = [];
     for (let i = 0; i < 2; i++) {
       const lp = this.ctx.createBiquadFilter();
       lp.type = "lowpass";
-      lp.Q.value = i === 0 ? 0.7 : (accent ? 5.5 : 3.8) + 2.5 * sell;
+      lp.Q.value = i === 0 ? 0.7 : b.q[a] + 2.5 * sell;
       lp.frequency.setValueAtTime(peakHz, t);
       lp.frequency.exponentialRampToValueAtTime(floorHz, t + env);
       lps.push(lp);
@@ -1520,32 +1573,32 @@ export class VoiceEngine {
     lps[0].connect(lps[1]);
     const hold = Math.max(0.035, length);
     const amp = this.ctx.createGain();
-    const peak = ghost ? 0.08 : accent ? 0.19 : 0.155;
+    const peak = ghost ? 0.08 : b.level[a];
     amp.gain.setValueAtTime(0.0001, t);
     amp.gain.linearRampToValueAtTime(peak, t + 0.003);
     amp.gain.setValueAtTime(peak * 0.8, t + hold * 0.75);
     amp.gain.exponentialRampToValueAtTime(0.0001, t + hold + 0.02);
     amp.gain.setValueAtTime(0, t + hold + 0.02);
     const startF = from !== null ? midiToFreq(from) : freq;
-    const glide = from !== null ? 0.05 : 0.001;
+    const glide = from !== null ? b.glide : 0.001;
     const oscs: OscillatorNode[] = [];
     const rest: AudioNode[] = [...lps];
     let chain: AudioNode | null = null;
-    for (const [type, cents, level] of [["sawtooth", -6, 0.5], ["square", 7, 0.34]] as const) {
+    for (const o of b.osc) {
       const osc = this.ctx.createOscillator();
-      osc.type = type;
+      osc.type = o.type;
       osc.frequency.setValueAtTime(startF, t);
       osc.frequency.exponentialRampToValueAtTime(freq, t + glide);
-      osc.detune.setValueAtTime(cents, t);
+      osc.detune.setValueAtTime(o.detune, t);
       const g = this.ctx.createGain();
-      g.gain.value = level;
+      g.gain.value = o.level;
       osc.connect(g);
       rest.push(g);
       chain = this.pairSum(chain, g, rest);
       oscs.push(osc);
     }
     const shaper = this.ctx.createWaveShaper();
-    shaper.curve = new Float32Array(tanhCurve(2.4 + 1.4 * c.heat + 0.5 * buy));
+    shaper.curve = new Float32Array(tanhCurve(b.drive + 1.4 * c.heat + 0.5 * buy));
     shaper.oversample = "none";
     chain!.connect(lps[0]);
     lps[1].connect(shaper);
@@ -1557,7 +1610,7 @@ export class VoiceEngine {
       sub.frequency.setValueAtTime(startF / 2, t);
       sub.frequency.exponentialRampToValueAtTime(freq / 2, t + glide);
       const sg = this.ctx.createGain();
-      sg.gain.value = accent ? 1.45 : 1.2;
+      sg.gain.value = b.sub[a];
       sub.connect(sg);
       sg.connect(amp);
       rest.push(sg);
@@ -1571,26 +1624,27 @@ export class VoiceEngine {
   /**
    * Ghostly pad: the chord as three slow, detuned triangle pairs and a faint sine an octave up, through
    * a dark lowpass that breathes over the two bars. A little of it goes to the lead bus for the echo and room.
+   * `p`: CLIENT_PAD or a style's (its oscillators per chord tone, cutoff, q, attack cap, release, level).
    */
-  private clientPad(c: Ctx, chord: ClientChord) {
+  private clientPad(c: Ctx, chord: ElectroChord, p: PadSpec) {
     const t = c.t;
     const length = c.dur * 32;
     const base = 50 + ((c.tonic - 2 + 12) % 12);
     const level = c.sec.pad * (0.7 + 0.3 * c.arr.energy);
     const lp = this.ctx.createBiquadFilter();
     lp.type = "lowpass";
-    lp.Q.value = 1.4;
-    const dark = (700 + 1100 * c.color + 500 * c.heat) * (1 - 0.3 * Math.max(0, -c.press));
+    lp.Q.value = p.q;
+    const dark = (p.cutoff + 1100 * c.color + 500 * c.heat) * (1 - 0.3 * Math.max(0, -c.press));
     lp.frequency.setValueAtTime(dark * 0.6, t);
     lp.frequency.linearRampToValueAtTime(dark, t + length * 0.45);
     lp.frequency.linearRampToValueAtTime(dark * 0.55, t + length);
     const amp = this.ctx.createGain();
-    const attack = Math.min(0.9, length * 0.2);
+    const attack = Math.min(p.attack, length * 0.2);
     amp.gain.setValueAtTime(0.0001, t);
-    amp.gain.linearRampToValueAtTime(0.11 * level, t + attack);
-    amp.gain.setValueAtTime(0.11 * level, t + length * 0.7);
-    amp.gain.linearRampToValueAtTime(0.0001, t + length + 0.3);
-    amp.gain.setValueAtTime(0, t + length + 0.3);
+    amp.gain.linearRampToValueAtTime(p.level * level, t + attack);
+    amp.gain.setValueAtTime(p.level * level, t + length * 0.7);
+    amp.gain.linearRampToValueAtTime(0.0001, t + length + p.release);
+    amp.gain.setValueAtTime(0, t + length + p.release);
     lp.connect(amp);
     const pan = this.panNode(-0.12, this.busIn.harm);
     pan.add(amp);
@@ -1602,10 +1656,10 @@ export class VoiceEngine {
     const oscs: OscillatorNode[] = [];
     let chain: AudioNode | null = null;
     const voices: [OscillatorType, number, number, number][] = [];
-    for (const semi of chord.pad) {
-      voices.push(["triangle", base + semi, -9, 0.5], ["triangle", base + semi, 8, 0.5]);
+    for (const semi of chord.tones) {
+      for (const o of p.osc) voices.push([o.type, base + semi, o.detune, o.level]);
     }
-    voices.push(["sine", base + chord.pad[0] + 12, 0, 0.18]);
+    voices.push(["sine", base + chord.tones[0] + 12, 0, 0.18]);
     for (const [type, midi, cents, gain] of voices) {
       const osc = this.ctx.createOscillator();
       osc.type = type;
@@ -1620,13 +1674,13 @@ export class VoiceEngine {
     }
     chain!.connect(lp);
     for (const osc of oscs) osc.start(t);
-    oscs.forEach((osc, i) => this.end(osc, i === 0 ? rest : [], t + length + 0.35));
+    oscs.forEach((osc, i) => this.end(osc, i === 0 ? rest : [], t + length + (p.release + 0.05)));
   }
 
   /** Sci-fi blip on the glitch row: a short square pip on a chord tone, high up, dropping a hair; into the echo. */
-  private clientBlip(c: Ctx, chord: ClientChord, velocity: number) {
+  private clientBlip(c: Ctx, chord: ElectroChord, velocity: number) {
     const t = c.t;
-    const tones = chord.pad;
+    const tones = chord.tones;
     const semi = tones[hash32(c.epoch, c.n, 0xc30) % tones.length];
     const midi = 74 + ((c.tonic - 2 + 12) % 12) + semi;
     const freq = midiToFreq(midi);
@@ -1650,13 +1704,15 @@ export class VoiceEngine {
 
   /** The computer voice: one word per epoch, every eight bars in the full section and once in the breakdown. */
   private clientVoiceStep(c: Ctx) {
-    const word = CLIENT_WORDS[hash32(c.epoch, 0xc50) % CLIENT_WORDS.length];
+    const d = dataOf<ElectroData>(c);
+    const words = d.words ?? CLIENT_WORDS;
+    const word = words[hash32(c.epoch, 0xc50) % words.length];
     const sec = c.sec;
     const on =
       (sec.name === "full" && c.hit.bar % 8 === 6 && c.step === word.s) ||
       (sec.name === "breakdown" && sec.bar % 8 === 2 && c.step === word.s);
     if (!on) return;
-    this.clientVoice(c, word);
+    this.clientVoice(c, word, specOf(d.voice, CLIENT_VOICE));
   }
 
   /**
@@ -1664,9 +1720,9 @@ export class VoiceEngine {
    * from syllable to syllable, gated per syllable, crushed to a few bits and band-limited like a cheap speaker.
    * Consonants are short noise ticks. Quiet, so it reads as a fragment in the back, not a hook.
    */
-  private clientVoice(c: Ctx, word: ClientWord) {
+  private clientVoice(c: Ctx, word: ClientWord, vs: ElectroVoiceSpec) {
     const t = c.t;
-    const f0 = 118 + 10 * (hash32(c.epoch, 0xc51) % 3);
+    const f0 = vs.pitch + 10 * (hash32(c.epoch, 0xc51) % 3);
     const syl = c.dur * 1.5;
     const total = syl * word.syl.length;
     const src = this.ctx.createOscillator();
@@ -1709,7 +1765,7 @@ export class VoiceEngine {
     gate.gain.setValueAtTime(0, t + total);
     chain!.connect(gate);
     const crush = this.ctx.createWaveShaper();
-    crush.curve = new Float32Array(bitCurve(4));
+    crush.curve = new Float32Array(bitCurve(vs.bits));
     crush.oversample = "none";
     const pre = this.ctx.createGain();
     pre.gain.value = 3.2;
@@ -1717,12 +1773,12 @@ export class VoiceEngine {
     pre.connect(crush);
     const hp = this.ctx.createBiquadFilter();
     hp.type = "highpass";
-    hp.frequency.value = 340;
+    hp.frequency.value = vs.hp;
     const lp = this.ctx.createBiquadFilter();
     lp.type = "lowpass";
-    lp.frequency.value = 3600;
+    lp.frequency.value = vs.lp;
     const out = this.ctx.createGain();
-    out.gain.value = 0.06 * Math.max(0.6, c.sec.lead);
+    out.gain.value = vs.level * Math.max(0.6, c.sec.lead);
     crush.connect(hp);
     hp.connect(lp);
     lp.connect(out);
@@ -1742,23 +1798,23 @@ export class VoiceEngine {
   private electroAlien(c: Ctx) {
     const { v, step, t, sec } = c;
     const half = sec.name === "intro" || (sec.name === "rebuild" && sec.bar < 30);
-    const chord = this.alienChord(c);
+    const d = dataOf<ElectroData>(c);
+    const kit = specOf(d.kit, ELECTRO_KITS.alienrave);
+    const chord = this.electroChord(c, ALIEN_CHORDS, ALIEN_PROGRESSIONS, 0xa20, c.hit.bar);
     const k = rowCount(v[0]);
     const lvl = rowMax(v[0]);
     if (k > 0 && lvl > 0) {
-      const bank = half ? ALIEN_KICK_HALF : k <= 2 ? ALIEN_KICK_LO : k <= 4 ? ALIEN_KICK_MID : ALIEN_KICK_HI;
+      const kicks = d.kicks ?? ELECTRO_KICKS.alienrave;
+      const bank = half ? kicks.half : kickTier(kicks, k);
       const fig = bank[hash32(c.epoch, k, 0xa11) % bank.length];
-      if (fig.includes(step)) {
+      if (fig.includes((c.hit.bar & 1) * 16 + step)) {
         // Tight 909-ish body with a hard click; buy pressure and heat push the drive.
-        this.kick(t, c.vel * lvl * (step === 0 ? 1.25 : 1.1), {
-          start: 172, end: 48, sweep: 0.034, decay: 0.3, click: 0.5, clickHp: 2400,
-          drive: 2 + 0.8 * Math.max(0, c.press) + 0.8 * c.heat, body: 1.08,
-        });
+        this.kick(t, c.vel * lvl * (step === 0 ? 1.25 : 1.1), { ...kit.kick, drive: (kit.kick.drive ?? 0) + 0.8 * Math.max(0, c.press) + 0.8 * c.heat });
         this.duck(t);
       }
     }
     if (rowMax(v[1]) > 0) {
-      if (step === 4 || step === 12) this.alienSnare(c, 1.35 * c.vel * Math.max(0.6, sec.snare));
+      if (step === 4 || step === 12) this.electroSnare(c, kit.snare, t, 1.35 * c.vel * Math.max(0.6, sec.snare), -c.pan * 0.15);
       else if (v[1][step] > 0 && step >= 13 && sec.name !== "intro") this.alienTom(c, c.vel * v[1][step], step);
       else if (v[1][step] > 0 && v[1][step] < 0.75) this.rim(t, c.vel * v[1][step] * 0.32, c.pan * 0.8, 1.45);
     }
@@ -1766,31 +1822,26 @@ export class VoiceEngine {
     if (hats > 0) {
       // A busy hat row locks into straight 16ths; a quiet one plays only the chain's steps.
       const play = v[2][step] > 0 || (hats >= 7 && !half);
-      const opens = ALIEN_OPEN_HATS[hash32(c.epoch, 0xa12) % ALIEN_OPEN_HATS.length];
+      const openTable = d.opens ?? ALIEN_OPEN_HATS;
+      const opens = openTable[hash32(c.epoch, 0xa12) % openTable.length];
       const open = hats >= 4 && opens.includes(step);
       if (open) {
-        this.hat(t, c.vel * 0.5, { hp: 6200, decay: 0.11, metal: 0.45, pan: c.pan * 0.3, q: 0.8 });
+        this.hatVoice(t, c.vel * kit.open.level, kit.open, c.pan * 0.3);
       } else if (play) {
-        const accent = step % 4 === 2 ? 0.56 : step % 2 === 0 ? 0.42 : 0.3;
-        this.hat(t, c.vel * Math.max(0.5, v[2][step]) * accent, { hp: 9400 + 1400 * c.color, decay: 0.019, metal: 0.6, pan: c.pan * 0.7, q: 1.3 });
+        const h = kit.hat;
+        this.hat(t, c.vel * Math.max(0.5, v[2][step]) * kit.accents[step % 4], { hp: h.hp + 1400 * c.color, decay: h.decay, metal: h.metal, pan: c.pan * 0.7, q: h.q });
       }
       if (c.heat > 0.15 && play) this.hatRoll(c, 9800);
     }
     if (v[3][step] > 0) this.alienLaser(c, c.vel * v[3][step]);
-    this.alienBassStep(c, chord);
+    this.alienBassStep(c, chord, specOf(d.bassTone, ELECTRO_BASS_TONES.alienrave));
     if (sec.lead > 0) this.alienStabStep(c, chord);
     const arpOn = sec.texture > 0 || (sec.name === "build" && sec.bar >= 12 && c.arr.energy > 0.5) || c.heat > 0.6;
     if (arpOn && sec.lead > 0) this.alienArpStep(c, chord);
     this.alienVoxStep(c, chord);
     if (step === 0 && (sec.bar === 15 || sec.bar === 31)) this.alienRiser(c);
     if (step === 0 && sec.bar === 16) this.noiseHit(t, 0.07 * c.vel, { type: "highpass", freq: 4200, q: 0.6, decay: 0.9, pan: 0.1, bus: this.busIn.fx });
-    if (c.heat >= 0.5 && v[1][step] === 0) this.rollUp(c, (time, vel) => this.alienSnare(c, vel * 0.6, time));
-  }
-
-  /** This bar's chord: a four-bar progression per epoch, over the instance tonic. */
-  private alienChord(c: Ctx): AlienChord {
-    const prog = ALIEN_PROGRESSIONS[hash32(c.epoch, 0xa20) % ALIEN_PROGRESSIONS.length];
-    return ALIEN_CHORDS[prog[((c.hit.bar % 4) + 4) % 4]];
+    if (c.heat >= 0.5 && v[1][step] === 0) this.rollUp(c, (time, vel) => this.electroSnare(c, kit.snare, time, vel * 0.6, -c.pan * 0.15));
   }
 
   /** 909 snare with a clap layered in. `time` lets heat rolls reuse it inside the step. */
@@ -1836,9 +1887,10 @@ export class VoiceEngine {
    * accents only, a normal one the line, a busy one adds the ornaments. Phase lines run a 6- or 10-step
    * cell against the bar (Electro Phase). Breakdown keeps the accents, longer.
    */
-  private alienBassStep(c: Ctx, chord: AlienChord) {
+  private alienBassStep(c: Ctx, chord: ElectroChord, b: ElectroBassSpec) {
     if (c.sec.bass <= 0 || c.arr.bass === 0n) return;
-    const line = ALIEN_BASS[hash32(c.epoch, 0xa40) % ALIEN_BASS.length];
+    const lines = dataOf<ElectroData>(c).lines ?? ALIEN_BASS;
+    const line = lines[hash32(c.epoch, 0xa40) % lines.length];
     const at = (s: number) => (line.length === 16 ? s % 16 : (c.hit.bar * 16 + s) % line.length);
     const note = line[at(c.step)];
     if (!note) return;
@@ -1852,7 +1904,7 @@ export class VoiceEngine {
     const prev = line[at(c.step + 15)];
     const from = prev && (prev[1] & 2) !== 0 && c.step > 0 ? root + prev[0] : null;
     const gate = breakdown ? 3.4 : (flags & 2) !== 0 ? 1.05 : 0.62;
-    this.alienBass(c, root + semi, from, gate * c.dur, (flags & 1) !== 0);
+    this.alienBass(c, root + semi, from, gate * c.dur, (flags & 1) !== 0, b);
     if ((flags & 1) !== 0 && semi === 0 && (c.step === 0 || c.step === 8 || breakdown)) {
       this.sub(c, root - 12, Math.min(c.dur * 3, 0.32), 0.5);
     }
@@ -1863,41 +1915,42 @@ export class VoiceEngine {
    * resonant lowpass with its own envelope, then hard tanh. The pool tick and buy pressure open it,
    * sell pressure shuts it and adds resonance, heat pushes the FM and the drive.
    */
-  private alienBass(c: Ctx, midi: number, from: number | null, length: number, accent: boolean) {
+  private alienBass(c: Ctx, midi: number, from: number | null, length: number, accent: boolean, b: ElectroBassSpec) {
     const t = c.t;
     const freq = midiToFreq(midi);
     const buy = Math.max(0, c.press);
     const sell = Math.max(0, -c.press);
+    const a = accent ? 1 : 0;
     // A slow sweep across eight bars, as a hand on the cutoff.
     const knob = 0.5 - 0.5 * Math.cos(2 * Math.PI * ((c.hit.bar + c.step / 16) / 8 + (hash32(c.epoch, 0xa41) % 4) / 8));
-    const floorHz = Math.max(120, (170 + 420 * c.color + 260 * knob + 300 * buy) * (1 - 0.3 * sell));
-    const peakHz = Math.min(7000, floorHz * (accent ? 6.5 : 3.6) * (1 + 0.6 * c.heat));
+    const floorHz = Math.max(120, (b.cutoff + b.color * c.color + 260 * knob + 300 * buy) * (1 - 0.3 * sell));
+    const peakHz = Math.min(7000, floorHz * b.open[a] * (1 + 0.6 * c.heat));
     const lp = this.ctx.createBiquadFilter();
     lp.type = "lowpass";
-    lp.Q.value = (accent ? 9 : 6.5) + 3 * sell;
+    lp.Q.value = b.q[a] + 3 * sell;
     lp.frequency.setValueAtTime(peakHz, t);
-    lp.frequency.exponentialRampToValueAtTime(floorHz, t + (accent ? 0.11 : 0.07));
+    lp.frequency.exponentialRampToValueAtTime(floorHz, t + b.decay[a]);
     const hold = Math.max(0.05, length);
     const amp = this.ctx.createGain();
-    const peak = accent ? 0.2 : 0.155;
+    const peak = b.level[a];
     amp.gain.setValueAtTime(0.0001, t);
     amp.gain.linearRampToValueAtTime(peak, t + 0.003);
     amp.gain.setValueAtTime(peak * 0.75, t + hold * 0.7);
     amp.gain.exponentialRampToValueAtTime(0.0001, t + hold);
     amp.gain.setValueAtTime(0, t + hold);
     const startF = from !== null ? midiToFreq(from) : freq;
-    const glide = from !== null ? 0.045 : 0.001;
+    const glide = from !== null ? b.glide : 0.001;
     const oscs: OscillatorNode[] = [];
     const rest: AudioNode[] = [];
     let chain: AudioNode | null = null;
-    for (const [type, cents, level] of [["sawtooth", -9, 0.42], ["sawtooth", 10, 0.36]] as const) {
+    for (const o of b.osc) {
       const osc = this.ctx.createOscillator();
-      osc.type = type;
+      osc.type = o.type;
       osc.frequency.setValueAtTime(startF, t);
       osc.frequency.exponentialRampToValueAtTime(freq, t + glide);
-      osc.detune.setValueAtTime(cents, t);
+      osc.detune.setValueAtTime(o.detune, t);
       const g = this.ctx.createGain();
-      g.gain.value = level;
+      g.gain.value = o.level;
       osc.connect(g);
       rest.push(g);
       chain = this.pairSum(chain, g, rest);
@@ -1912,7 +1965,7 @@ export class VoiceEngine {
     mod.frequency.setValueAtTime(startF * 2, t);
     mod.frequency.exponentialRampToValueAtTime(freq * 2, t + glide);
     const index = this.ctx.createGain();
-    const depth = freq * (accent ? 2.2 : 1.3) * (1 + 1.2 * c.heat + 0.6 * buy);
+    const depth = freq * b.fm[a] * (1 + 1.2 * c.heat + 0.6 * buy);
     index.gain.setValueAtTime(depth, t);
     index.gain.exponentialRampToValueAtTime(Math.max(1, depth * 0.18), t + 0.09);
     mod.connect(index);
@@ -1924,7 +1977,7 @@ export class VoiceEngine {
     chain = this.pairSum(chain, cg, rest);
     oscs.push(carrier, mod);
     const shaper = this.ctx.createWaveShaper();
-    shaper.curve = new Float32Array(tanhCurve(2.1 + 1.2 * c.heat + 0.6 * buy));
+    shaper.curve = new Float32Array(tanhCurve(b.drive + 1.2 * c.heat + 0.6 * buy));
     shaper.oversample = "none";
     chain!.connect(lp);
     lp.connect(shaper);
@@ -1936,7 +1989,7 @@ export class VoiceEngine {
     sub.frequency.setValueAtTime(startF / 2, t);
     sub.frequency.exponentialRampToValueAtTime(freq / 2, t + glide);
     const sg = this.ctx.createGain();
-    sg.gain.value = accent ? 1.5 : 1.25;
+    sg.gain.value = b.sub[a];
     sub.connect(sg);
     sg.connect(amp);
     rest.push(sg);
@@ -1947,38 +2000,41 @@ export class VoiceEngine {
   }
 
   /** Hoover stabs: a two-bar figure per epoch on the bar's chord. Core hits whenever the lead layer is open. */
-  private alienStabStep(c: Ctx, chord: AlienChord) {
-    const fig = ALIEN_STABS[hash32(c.epoch, 0xa50) % ALIEN_STABS.length];
+  private alienStabStep(c: Ctx, chord: ElectroChord) {
+    const d = dataOf<ElectroData>(c);
+    const stabs = d.stabs ?? ALIEN_STABS;
+    const fig = stabs[hash32(c.epoch, 0xa50) % stabs.length];
     const hit = fig.find((x) => x.s === (c.hit.bar & 1) * 16 + c.step);
     if (!hit) return;
     const busy = rowCount(c.v[3]) > 0 || c.sec.name === "full" || c.arr.energy > 0.5 || c.heat > 0.55;
     if (!hit.core && !busy) return;
     const level = (hit.core ? 1 : 0.72) * Math.max(0.45, c.sec.lead);
-    this.alienHoover(c, chord.tones, hit.len * c.dur, level);
+    this.alienHoover(c, chord.tones, hit.len * c.dur, level, specOf(d.hoover, ALIEN_HOOVER));
   }
 
   /**
    * Detuned saw stack, three a note plus a saw an octave under the root. Every voice scoops up from a
    * whole tone below (the hoover bend), a resonant lowpass snaps open and closes. Heat widens the detune.
+   * `h`: ALIEN_HOOVER or a style's.
    */
-  private alienHoover(c: Ctx, tones: readonly number[], length: number, level: number) {
+  private alienHoover(c: Ctx, tones: readonly number[], length: number, level: number, h: HooverSpec) {
     const t = c.t;
     const root = 52 + ((c.tonic - 4 + 12) % 12);
     const buy = Math.max(0, c.press);
     const sell = Math.max(0, -c.press);
-    const cut = (900 + 2600 * c.color + 1500 * buy + 1500 * c.heat) * (1 - 0.35 * sell);
+    const cut = (h.cutoff + h.color * c.color + 1500 * buy + 1500 * c.heat) * (1 - 0.35 * sell);
     const lp = this.ctx.createBiquadFilter();
     lp.type = "lowpass";
-    lp.Q.value = 3.2;
+    lp.Q.value = h.q;
     lp.frequency.setValueAtTime(Math.min(12000, cut * 2.4), t);
     lp.frequency.exponentialRampToValueAtTime(Math.max(300, cut * 0.55), t + Math.max(0.09, length * 0.8));
     const hp = this.ctx.createBiquadFilter();
     hp.type = "highpass";
-    hp.frequency.value = 180;
+    hp.frequency.value = h.hp;
     hp.Q.value = 0.7;
     const hold = Math.max(0.06, length * 0.92);
     const amp = this.ctx.createGain();
-    const peak = 0.22 * level;
+    const peak = h.level * level;
     amp.gain.setValueAtTime(0.0001, t);
     amp.gain.linearRampToValueAtTime(peak, t + 0.004);
     amp.gain.setValueAtTime(peak * 0.8, t + hold * 0.5);
@@ -1994,14 +2050,14 @@ export class VoiceEngine {
     let chain: AudioNode | null = null;
     const voices: [number, number, number][] = [];
     tones.forEach((semi) => {
-      for (const cents of [-17, 2, 16]) voices.push([root + semi, cents * spread, 0.3]);
+      for (const cents of h.detune) voices.push([root + semi, cents * spread, 0.3]);
     });
     voices.push([root + tones[0] - 12, 0, 0.42]);
     for (const [midi, cents, gain] of voices) {
       const osc = this.ctx.createOscillator();
       osc.type = "sawtooth";
       const f = midiToFreq(midi);
-      osc.frequency.setValueAtTime(f * Math.pow(2, -2 / 12), t);
+      osc.frequency.setValueAtTime(f * Math.pow(2, -h.bend / 12), t);
       osc.frequency.exponentialRampToValueAtTime(f, t + 0.06);
       osc.detune.setValueAtTime(cents, t);
       const g = this.ctx.createGain();
@@ -2017,8 +2073,9 @@ export class VoiceEngine {
   }
 
   /** Sci-fi arp: 16ths through the chord over two octaves, a cell per epoch cycling against the bar. Into the echo. */
-  private alienArpStep(c: Ctx, chord: AlienChord) {
-    const cell = ALIEN_ARPS[hash32(c.epoch, 0xa60) % ALIEN_ARPS.length];
+  private alienArpStep(c: Ctx, chord: ElectroChord) {
+    const cells = dataOf<ElectroData>(c).arpCells ?? ALIEN_ARPS;
+    const cell = cells[hash32(c.epoch, 0xa60) % cells.length];
     // Quiet chains thin it to 8ths; a busy one runs every 16th.
     if (c.step % 2 === 1 && c.arr.energy < 0.45 && c.heat < 0.6) return;
     const i = cell[c.n % cell.length];
@@ -2049,18 +2106,23 @@ export class VoiceEngine {
   }
 
   /** Robot call: a formant stab on the chord root, a four-bar call in the full section, every two bars in the breakdown. */
-  private alienVoxStep(c: Ctx, chord: AlienChord) {
-    const call = ALIEN_VOX[hash32(c.epoch, 0xa70) % ALIEN_VOX.length];
+  private alienVoxStep(c: Ctx, chord: ElectroChord) {
+    const d = dataOf<ElectroData>(c);
+    const calls = d.calls ?? ALIEN_VOX;
+    const call = calls[hash32(c.epoch, 0xa70) % calls.length];
     const sec = c.sec;
     let on = false;
     if (sec.name === "breakdown") on = c.hit.bar % 2 === 0 && c.step === call.s % 16;
     else if (sec.name === "full" || (sec.name === "build" && sec.bar >= 12)) on = c.hit.bar % 4 === 3 && c.step === call.s;
     if (!on) return;
-    this.alienVox(c, 52 + ((c.tonic - 4 + 12) % 12) + chord.tones[0], call.len * c.dur, call.vowels);
+    this.alienVox(c, 52 + ((c.tonic - 4 + 12) % 12) + chord.tones[0], call.len * c.dur, call.vowels, specOf(d.vox, ALIEN_VOX_TONE));
   }
 
-  /** Saw and square through two bandpass formants gliding between vowels; ring-modulated so it talks like a machine. */
-  private alienVox(c: Ctx, midi: number, length: number, vowels: readonly (readonly [number, number])[]) {
+  /**
+   * Saw and square through two bandpass formants gliding between vowels; ring-modulated so it talks like a machine.
+   * `tone`: ALIEN_VOX_TONE or a style's.
+   */
+  private alienVox(c: Ctx, midi: number, length: number, vowels: readonly (readonly [number, number])[], tone: VoxSpec) {
     const t = c.t;
     const freq = midiToFreq(midi);
     const hold = Math.max(0.1, length);
@@ -2077,16 +2139,16 @@ export class VoiceEngine {
     sqg.gain.value = 0.3;
     sq.connect(sqg);
     sqg.connect(src);
-    // Ring modulator at a fixed alien interval: a carrier gain wobbling at 1.5x the note.
+    // Ring modulator at a fixed alien interval: a carrier gain wobbling at `ring` (1.5) times the note.
     const ring = this.ctx.createGain();
     ring.gain.value = 0;
     const rm = this.ctx.createOscillator();
     rm.type = "sine";
-    rm.frequency.setValueAtTime(freq * 1.5, t);
+    rm.frequency.setValueAtTime(freq * tone.ring, t);
     rm.connect(ring.gain);
     src.connect(ring);
     const out = this.ctx.createGain();
-    const peak = 0.75 * Math.max(0.5, c.sec.lead);
+    const peak = tone.level * Math.max(0.5, c.sec.lead);
     out.gain.setValueAtTime(0.0001, t);
     out.gain.linearRampToValueAtTime(peak, t + 0.01);
     out.gain.setValueAtTime(peak, t + hold * 0.75);
@@ -2402,32 +2464,36 @@ export class VoiceEngine {
    */
   private ambientTapeKeys(c: Ctx) {
     const { v, step, t, sec } = c;
+    const d = dataOf<AmbientIdmData>(c);
+    const kit = specOf<typeof AMBIENT_KITS.classic>(d.kit, AMBIENT_KITS.classic);
     const kv = v[0][step];
     if (kv > 0) {
-      this.kick(t, c.vel * kv * 0.78, { start: 88, end: 50, sweep: 0.07, decay: 0.24, click: 0.01, body: 0.9 });
+      this.kick(t, c.vel * kv * 0.78, kit.kick);
       this.duck(t);
     }
-    if (v[1][step] > 0) this.tapeSnare(t, c.vel * v[1][step] * (v[1][step] >= 0.9 ? 0.6 : 0.26), -c.pan * 0.4);
-    if (v[2][step] > 0 && step % 2 === 0) this.hat(t, c.vel * v[2][step] * 0.34, { hp: 2600, decay: 0.045, metal: 0.12, pan: c.pan });
+    if (v[1][step] > 0) this.drum(kit.snare, t, c.vel * v[1][step] * (v[1][step] >= 0.9 ? 0.6 : 0.26), -c.pan * 0.4, 1, null);
+    if (v[2][step] > 0 && step % 2 === 0) this.hatVoice(t, c.vel * v[2][step] * kit.hat.level, kit.hat, c.pan);
     if (c.heat > 0.4 && v[2][step] > 0) this.hatRoll(c, 2400);
     const { chord, left, since } = this.ambientChord(c, 0x7a9e, 4);
     const root = 48 + c.tonic;
     // Voices overlap so the change is a blend.
     if (step === 0 && (since === 0 || t >= this.padUntil - c.dur * 2)) {
       const length = left * 16 * c.dur;
-      this.pad(c, root, [...chord.pad], length);
+      this.pad(c, root, [...chord.pad], length, 1, 1, specOf(d.pad, TAPE_PAD));
     }
     const level = Math.max(sec.lead, 0.55 * sec.pad);
     const bar = c.hit.bar;
     if (level > 0 && ((bar % 8) + 8) % 8 !== 7) {
       const dens = this.ambientDensity(c);
-      const fig = AMBIENT_KEYS_FIGURES[hash32(c.epoch, 0x7a91) % AMBIENT_KEYS_FIGURES.length];
+      const [lo, hi] = d.tiers ?? AMBIENT_TIERS.classic;
+      const figures = d.figures ?? AMBIENT_KEYS_FIGURES;
+      const fig = figures[hash32(c.epoch, 0x7a91) % figures.length];
       const at = (((bar % 2) + 2) % 2) * 16 + step;
       const cycle = Math.floor(bar / 2);
       const h = hash32(c.epoch, cycle, 0x7a92);
       const tweak = (h >>> 4) % fig.length;
       fig.forEach(([s, idx, tier], i) => {
-        if (s !== at || tier > (dens > 0.68 ? 2 : dens > 0.36 ? 1 : 0)) return;
+        if (s !== at || tier > (dens > hi ? 2 : dens > lo ? 1 : 0)) return;
         // Tiny variation per two-bar cycle: one note leaves for the chord's colour tone, or drops out.
         if (i === tweak && h % 5 === 1) return;
         const tone = i === tweak && h % 5 === 0 ? 6 : idx;
@@ -2437,17 +2503,21 @@ export class VoiceEngine {
     }
     // Now and then one long high note, the chord's colour tone an octave over the figure.
     if (step === 0 && ((bar % 8) + 8) % 8 === 4 && sec.pad > 0 && hash32(c.epoch, Math.floor(bar / 8), 0x7a93) % 3 !== 0) {
-      this.ambientHighLine(c, root + 24 + chord.sing[2], 2 * 16 * c.dur, 0.016 * Math.max(0.6, sec.pad), 2600);
+      const line = specOf(d.line, AMBIENT_LINES.classic);
+      this.ambientHighLine(c, root + 24 + chord.sing[2], 2 * 16 * c.dur, line.level * Math.max(0.6, sec.pad), line.cutoff, line);
     }
-    if (step === 0) this.vinyl(c, 0.55);
+    this.styleVinyl(c, 0.55);
   }
 
   /** The epoch's progression (chosen by salt) and the chord at this bar: steps since it began, bars left. */
   private ambientChord(c: Ctx, salt: number, bars: number) {
-    const prog = AMBIENT_PROGRESSIONS[hash32(c.epoch, salt) % AMBIENT_PROGRESSIONS.length];
+    const d = dataOf<AmbientIdmData>(c);
+    const progressions = d.progressions ?? AMBIENT_PROGRESSIONS;
+    const chords = d.chords ?? AMBIENT_CHORDS;
+    const prog = progressions[hash32(c.epoch, salt) % progressions.length];
     const slot = Math.floor(c.hit.bar / bars);
     const inBar = ((c.hit.bar % bars) + bars) % bars;
-    return { chord: AMBIENT_CHORDS[prog[((slot % prog.length) + prog.length) % prog.length]], left: bars - inBar, since: inBar * 16 + c.step };
+    return { chord: chords[prog[((slot % prog.length) + prog.length) % prog.length]], left: bars - inBar, since: inBar * 16 + c.step };
   }
 
   /** How busy the composed figures may get: the chain's hats/glitches, the arranged energy, the heat. 0..1. */
@@ -2464,8 +2534,8 @@ export class VoiceEngine {
     return colour;
   }
 
-  /** A slow, quiet sine-and-triangle line note that swells in and hangs in the room. */
-  private ambientHighLine(c: Ctx, midi: number, length: number, peak: number, open: number) {
+  /** A slow, quiet sine-and-triangle line note that swells in and hangs in the room (`line`: its oscillators). */
+  private ambientHighLine(c: Ctx, midi: number, length: number, peak: number, open: number, line: AmbientLineSpec) {
     const t = c.t;
     const freq = midiToFreq(midi);
     const attack = Math.min(1.2, length * 0.3);
@@ -2488,7 +2558,7 @@ export class VoiceEngine {
     const oscs: OscillatorNode[] = [...tape.oscs];
     const rest: AudioNode[] = [...tape.nodes, f, amp, pan.dest];
     let chain: AudioNode | null = null;
-    for (const [type, cents, lvl] of [["sine", -4, 0.7], ["triangle", 5, 0.3]] as const) {
+    for (const { type, detune: cents, level: lvl } of line.osc) {
       const osc = this.ctx.createOscillator();
       osc.type = type;
       osc.frequency.setValueAtTime(freq, t);
@@ -2512,18 +2582,25 @@ export class VoiceEngine {
    */
   private ambientHaze(c: Ctx) {
     const { v, step, t, sec } = c;
+    const d = dataOf<AmbientIdmData>(c);
+    const kit = specOf<typeof AMBIENT_KITS.boc>(d.kit, AMBIENT_KITS.boc);
     if (v[0][step] > 0) {
-      this.kick(t, c.vel * v[0][step] * 0.7, { start: 90, end: 58, sweep: 0.08, decay: 0.2, click: 0, body: 0.78, drive: 1.05 });
+      this.kick(t, c.vel * v[0][step] * 0.7, kit.kick);
       this.duck(t);
-      this.noiseHit(t, 0.04 * v[0][step], { type: "lowpass", freq: 460, q: 0.5, decay: 0.16, pan: 0, bus: this.busIn.tex });
+      this.noiseHit(t, kit.thump * v[0][step], { type: "lowpass", freq: 460, q: 0.5, decay: 0.16, pan: 0, bus: this.busIn.tex });
     }
     if (v[1][step] > 0) {
       const accent = v[1][step] >= 0.7;
-      this.ambientDustSnare(t, c.vel * v[1][step] * (accent ? 0.78 : 0.32), -c.pan * 0.3, accent);
+      // SP-style snare: on the backbeat a body, a crack and a darker dust layer nearer the centre; ghosts are short.
+      const velocity = c.vel * v[1][step] * (accent ? 0.78 : 0.32);
+      const panAmount = -c.pan * 0.3;
+      this.drum(accent ? kit.snare : kit.ghost, t, velocity, panAmount, 1, null);
+      if (accent) this.drum(kit.dust, t, velocity, panAmount * 0.4, 1, null);
     }
     if (v[2][step] > 0) {
       const off = step % 4 === 2;
-      this.hat(t, c.vel * v[2][step] * (off ? 0.34 : 0.2), { hp: 1100, decay: off ? 0.065 : 0.032, metal: 0.04, pan: c.pan * 0.45 });
+      const h = off ? kit.open : kit.hat;
+      this.hatVoice(t, c.vel * v[2][step] * h.level, h, c.pan * 0.45);
       if (c.heat > 0.45 && hash32(this.patternId, c.step, c.hit.bar, 0x0c0c) % 100 < Math.round(c.heat * 60)) {
         this.hat(t + c.dur * 0.5, c.vel * 0.14 * c.heat, { hp: 900, decay: 0.028, metal: 0, pan: -c.pan });
       }
@@ -2531,54 +2608,58 @@ export class VoiceEngine {
     if (v[3][step] > 0) this.ambientHazeBlip(c);
     const { chord, left, since } = this.ambientChord(c, 0x77b0, 4);
     if (step === 0 && (since === 0 || t >= this.padUntil - c.dur * 2)) {
-      this.ambientHazePad(c, 48 + c.tonic, chord.pad.filter((semi) => semi >= 0), left * 16 * c.dur);
+      this.ambientHazePad(c, 48 + c.tonic, chord.pad.filter((semi) => semi >= 0), left * 16 * c.dur, specOf(d.pad, AMBIENT_HAZE_PAD));
     }
-    if (bassAt(c.arr.bass, step) > 0 && sec.bass > 0) this.ambientHazeBass(c, chord.bass, this.holdSteps(c.arr.bass, step, 4) * c.dur);
+    if (bassAt(c.arr.bass, step) > 0 && sec.bass > 0) {
+      this.ambientHazeBass(c, chord.bass, this.holdSteps(c.arr.bass, step, 4) * c.dur, specOf(d.bass, AMBIENT_HAZE_BASS));
+    }
     // The tune: an eight-bar phrase of a few long notes on the chord's 3rd/5th/colour, many rests.
     const level = Math.max(sec.lead, 0.5 * sec.pad);
     if (level > 0) {
-      const phrase = AMBIENT_HAZE_PHRASES[hash32(c.epoch, 0x77b1) % AMBIENT_HAZE_PHRASES.length];
+      const phrases = d.phrases ?? AMBIENT_HAZE_PHRASES;
+      const phrase = phrases[hash32(c.epoch, 0x77b1) % phrases.length];
       const at = (((c.hit.bar % 8) + 8) % 8) * 16 + step;
       const again = Math.floor(c.hit.bar / 8) % 2 !== 0;
       const dens = this.ambientDensity(c);
-      const tier = dens > 0.72 ? 2 : dens > 0.42 ? 1 : 0;
+      const [lo, hi] = d.tiers ?? AMBIENT_TIERS.boc;
+      const tier = dens > hi ? 2 : dens > lo ? 1 : 0;
       const lastCore = phrase.reduce((k, n, i) => (n[4] === 0 ? i : k), 0);
       phrase.forEach(([s, role, len, oct, need], i) => {
         if (s !== at || need > tier) return;
         // The repeat answers itself: its last long note moves (3rd <-> colour, anything else to the 3rd).
         const r = again && i === lastCore ? (role === 0 ? 2 : 0) : role;
         const midi = 60 + c.tonic + chord.sing[r] + 12 * oct;
-        this.ambientHazeLead(c, midi, len * c.dur, level * 0.62);
+        this.ambientHazeLead(c, midi, len * c.dur, level * 0.62, specOf(d.lead, AMBIENT_HAZE_LEAD));
       });
     }
-    if (step === 0) this.vinyl(c, 1.05);
+    this.styleVinyl(c, 1.05);
   }
 
-  /** Wide-detuned saws under one slow tape wow, so the whole chord swims together. Four bars a chord. */
-  private ambientHazePad(c: Ctx, root: number, chord: readonly number[], length: number) {
+  /** Wide-detuned saws under one slow tape wow, so the whole chord swims together. Four bars a chord. `p`: AMBIENT_HAZE_PAD or a style's. */
+  private ambientHazePad(c: Ctx, root: number, chord: readonly number[], length: number, p: PadSpec) {
     const t = c.t;
-    const attack = Math.min(2.4, length * 0.28);
-    const release = 3.2;
+    const attack = Math.min(p.attack, length * 0.28);
+    const release = p.release;
     const end = t + length + release;
     this.padUntil = t + length;
     const dark = c.press < 0 ? 1 + 0.48 * c.press : 1 + 0.1 * c.press;
-    const cutoff = Math.max(260, (1500 + 1300 * c.color + 1500 * c.heat) * dark);
+    const cutoff = Math.max(260, (p.cutoff + 1300 * c.color + 1500 * c.heat) * dark);
     const f = this.ctx.createBiquadFilter();
     f.type = "lowpass";
-    f.Q.value = 0.65;
+    f.Q.value = p.q;
     f.frequency.setValueAtTime(Math.max(80, cutoff * 0.55), t);
     f.frequency.exponentialRampToValueAtTime(cutoff, t + Math.min(length, 6));
     const shaper = this.ctx.createWaveShaper();
-    shaper.curve = new Float32Array(tanhCurve(1.35));
+    shaper.curve = new Float32Array(tanhCurve(p.drive ?? 1));
     shaper.oversample = "none";
     const hp = this.ctx.createBiquadFilter();
     hp.type = "highpass";
-    hp.frequency.value = 140;
+    hp.frequency.value = p.hp ?? 20;
     hp.Q.value = 0.7;
     const trim = this.ctx.createGain();
     trim.gain.value = 0.78;
     const amp = this.ctx.createGain();
-    const level = 0.058 * (1 + 0.28 * c.heat) * Math.max(0.7, c.sec.pad);
+    const level = p.level * (1 + 0.28 * c.heat) * Math.max(0.7, c.sec.pad);
     amp.gain.setValueAtTime(0.0001, t);
     amp.gain.linearRampToValueAtTime(level, t + attack);
     amp.gain.setValueAtTime(level, t + length);
@@ -2592,17 +2673,12 @@ export class VoiceEngine {
     pan.add(amp);
     const drift = 0.07 + (hash32(c.epoch, 0x77a1) % 5) / 100;
     const wowRate = 0.24 + (hash32(c.epoch, 0x77a2) % 16) / 100;
-    const tape = this.ambientWow(t, 16, drift, 14, wowRate, 4.5);
+    const tape = this.ambientWow(t, 16, drift, p.vib, wowRate, 4.5);
     const oscs: OscillatorNode[] = [...tape.oscs];
     const rest: AudioNode[] = [...tape.nodes, shaper, trim, hp, f, amp, pan.dest];
     let chain: AudioNode | null = null;
-    const layers: readonly (readonly [OscillatorType, number, number])[] = [
-      ["sawtooth", -18, 0.2],
-      ["sawtooth", 13, 0.18],
-      ["triangle", 3, 0.3],
-    ];
     chord.forEach((semi) => {
-      for (const [type, cents, lvl] of layers) {
+      for (const { type, detune: cents, level: lvl } of p.osc) {
         const osc = this.ctx.createOscillator();
         osc.type = type;
         osc.frequency.setValueAtTime(midiToFreq(root + semi), t);
@@ -2622,7 +2698,7 @@ export class VoiceEngine {
   }
 
   /** Round analog bass on the chord root: a detuned mid over a quiet sine sub. Rhythm is the chain's bass onsets. */
-  private ambientHazeBass(c: Ctx, rootSemi: number, length: number) {
+  private ambientHazeBass(c: Ctx, rootSemi: number, length: number, p: AmbientBassSpec) {
     const t = c.t;
     const hold = Math.max(0.12, length * 0.9);
     const end = t + hold + 0.06;
@@ -2630,11 +2706,11 @@ export class VoiceEngine {
     const lp = this.ctx.createBiquadFilter();
     lp.type = "lowpass";
     lp.Q.value = 0.7;
-    const cut = Math.max(120, (200 + 240 * c.color + 160 * c.heat) * (c.press < 0 ? 1 + 0.35 * c.press : 1 + 0.08 * c.press));
+    const cut = Math.max(120, (p.cutoff + 240 * c.color + 160 * c.heat) * (c.press < 0 ? 1 + 0.35 * c.press : 1 + 0.08 * c.press));
     lp.frequency.setValueAtTime(cut * 1.7, t);
     lp.frequency.exponentialRampToValueAtTime(cut, t + 0.16);
     const amp = this.ctx.createGain();
-    const peak = 0.06 * c.sec.bass;
+    const peak = p.level * c.sec.bass;
     amp.gain.setValueAtTime(0.0001, t);
     amp.gain.linearRampToValueAtTime(peak, t + 0.028);
     amp.gain.setValueAtTime(peak, t + hold * 0.5);
@@ -2646,7 +2722,7 @@ export class VoiceEngine {
     const oscs: OscillatorNode[] = [...tape.oscs];
     const rest: AudioNode[] = [...tape.nodes, lp, amp];
     let chain: AudioNode | null = null;
-    for (const [type, cents, lvl] of [["triangle", -9, 0.72], ["sawtooth", 12, 0.26]] as const) {
+    for (const { type, detune: cents, level: lvl } of p.osc) {
       const osc = this.ctx.createOscillator();
       osc.type = type;
       osc.frequency.setValueAtTime(freq, t);
@@ -2662,23 +2738,23 @@ export class VoiceEngine {
     (chain as AudioNode | null)?.connect(lp);
     for (const osc of oscs) osc.start(t);
     oscs.forEach((osc, i) => this.end(osc, i === 0 ? rest : [], end));
-    this.sub(c, c.low + rootSemi, length * 0.65, 0.08 * c.sec.bass);
+    this.sub(c, c.low + rootSemi, length * 0.65, p.sub * c.sec.bass);
   }
 
-  /** A cheap keyboard through the same cassette: two flat triangles and a faint music-box octave. */
-  private ambientHazeLead(c: Ctx, midi: number, length: number, level: number) {
+  /** A cheap keyboard through the same cassette: two flat triangles and a faint music-box octave (AMBIENT_HAZE_LEAD). */
+  private ambientHazeLead(c: Ctx, midi: number, length: number, level: number, p: AmbientLeadSpec) {
     const t = c.t;
     const freq = midiToFreq(midi);
     const hold = Math.max(0.18, length * 0.92);
     const end = t + hold + 0.55;
     const dark = c.press < 0 ? 1 + 0.4 * c.press : 1 + 0.12 * c.press;
-    const cut = Math.max(500, (900 + 1100 * c.color + 700 * c.heat) * dark);
+    const cut = Math.max(500, (p.cutoff + 1100 * c.color + 700 * c.heat) * dark);
     const f = this.ctx.createBiquadFilter();
     f.type = "lowpass";
     f.Q.value = 0.6;
     f.frequency.setValueAtTime(cut, t);
     const amp = this.ctx.createGain();
-    const peak = 0.11 * level;
+    const peak = p.level * level;
     amp.gain.setValueAtTime(0.0001, t);
     amp.gain.linearRampToValueAtTime(peak, t + 0.06);
     amp.gain.setValueAtTime(peak * 0.72, t + Math.max(0.12, hold * 0.7));
@@ -2688,16 +2764,16 @@ export class VoiceEngine {
     const pan = this.panNode(-c.pan * 0.35, this.busIn.lead);
     pan.add(amp);
     const wowRate = 0.3 + (hash32(c.epoch, 0x7ea0) % 12) / 100;
-    const tape = this.ambientWow(t, 8, 0.11, 11, wowRate, 2.4);
+    const tape = this.ambientWow(t, 8, 0.11, p.vib, wowRate, 2.4);
     const oscs: OscillatorNode[] = [...tape.oscs];
     const rest: AudioNode[] = [...tape.nodes, f, amp, pan.dest];
     let chain: AudioNode | null = null;
-    for (const [oct, cents, lvl] of [[0, -12, 0.62], [0, 11, 0.58], [1, 4, 0.16]] as const) {
+    for (const { type, oct, detune: cents, level: lvl } of p.osc) {
       const osc = this.ctx.createOscillator();
-      osc.type = "triangle";
-      osc.frequency.setValueAtTime(freq * (oct === 1 ? 2 : 1), t);
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq * 2 ** oct, t);
       // A slow scoop up into the note, the cassette catching up.
-      osc.detune.setValueAtTime(cents - 38, t);
+      osc.detune.setValueAtTime(cents - p.scoop, t);
       osc.detune.linearRampToValueAtTime(cents, t + 0.16);
       tape.mod.connect(osc.detune);
       const g = this.ctx.createGain();
@@ -2712,22 +2788,9 @@ export class VoiceEngine {
     oscs.forEach((osc, i) => this.end(osc, i === 0 ? rest : [], end + 0.05));
   }
 
-  /** SP-style snare: a short body, a narrow noise crack, and a darker dust layer on the backbeat. */
-  private ambientDustSnare(time: number, velocity: number, panAmount: number, accent: boolean) {
-    this.toneHit(time, 0.22 * velocity, {
-      type: "triangle", freq: accent ? 172 : 196, to: 130, sweep: 0.045, decay: accent ? 0.09 : 0.04, pan: panAmount, bus: this.busIn.snare,
-    });
-    this.noiseHit(time, (accent ? 0.62 : 0.28) * velocity, {
-      type: "bandpass", freq: accent ? 1400 : 1600, q: 0.7, decay: accent ? 0.22 : 0.06, pan: panAmount, bus: this.busIn.snare,
-    });
-    if (accent) {
-      this.noiseHit(time, 0.12 * velocity, { type: "lowpass", freq: 2200, q: 0.4, decay: 0.1, pan: panAmount * 0.4, bus: this.busIn.snare });
-    }
-  }
-
   /** One scale-tone skate, the glitch row heard as a tape slip rather than a digital click. */
   private ambientHazeBlip(c: Ctx) {
-    const notes = this.era.notes;
+    const notes = dataOf<AmbientIdmData>(c).notes ?? this.era.notes;
     const h = hash32(c.epoch, c.n, 0xb10c);
     const from = notes[h % notes.length];
     const to = notes[(h >>> 8) % notes.length];
@@ -2742,38 +2805,42 @@ export class VoiceEngine {
   /** Crystal. Struck glass, a slow bright bed, and small edited clicks. Straight, not swung. */
   private ambientCrystal(c: Ctx) {
     const { v, step, t, sec } = c;
+    const d = dataOf<AmbientIdmData>(c);
+    const kit = specOf<typeof AMBIENT_KITS.crystal>(d.kit, AMBIENT_KITS.crystal);
     const { chord: prog, left, since } = this.ambientChord(c, 0x51c0, 4);
     const chord = prog.glass;
     const root = 60 + c.tonic;
     if (v[0][step] > 0) {
       const kv = c.vel * v[0][step];
-      this.toneHit(t, 0.3 * kv, { type: "sine", freq: 188, to: 74, sweep: 0.032, decay: 0.08, pan: 0, bus: this.busIn.kick });
-      this.noiseHit(t, 0.055 * kv, { type: "highpass", freq: 3400, q: 0.7, decay: 0.01, pan: 0, bus: this.busIn.kick });
+      this.drum(kit.click, t, kv, 0, 1, null, true, this.busIn.kick);
     }
     if (v[1][step] > 0) {
       const accent = v[1][step] >= 0.7;
       if (accent) {
-        this.rim(t, c.vel * v[1][step] * 0.32, -c.pan * 0.35, 1.6);
-        this.noiseHit(t, 0.14 * c.vel * v[1][step], { type: "highpass", freq: 4000, q: 0.8, decay: 0.035, pan: -c.pan * 0.5, bus: this.busIn.snare });
+        const crack = kit.crack;
+        this.rim(t, c.vel * v[1][step] * kit.rim.level, -c.pan * 0.35, kit.rim.pitch);
+        this.noiseHit(t, crack.level * c.vel * v[1][step], { type: crack.noise, freq: crack.freq, q: crack.q, decay: crack.decay, pan: -c.pan * 0.5, bus: this.busIn.snare });
       } else {
-        this.noiseHit(t, 0.07 * c.vel * v[1][step], { type: "bandpass", freq: 3000, q: 2.2, decay: 0.016, pan: c.pan, bus: this.busIn.perc });
+        const tick = kit.tick;
+        this.noiseHit(t, tick.level * c.vel * v[1][step], { type: tick.noise, freq: tick.freq, q: tick.q, decay: tick.decay, pan: c.pan, bus: this.busIn.perc });
       }
     }
     if (v[2][step] > 0) {
-      const tick = step % 2 === 0;
-      this.hat(t, c.vel * v[2][step] * (tick ? 0.3 : 0.18), { hp: 4600, decay: tick ? 0.018 : 0.01, metal: 0.22, pan: c.pan * 0.8 });
+      const h = step % 2 === 0 ? kit.hat : kit.open;
+      this.hatVoice(t, c.vel * v[2][step] * h.level, h, c.pan * 0.8);
     }
     const glitch = v[3][step];
     if (glitch > 0 || (c.heat > 0.55 && hash32(c.epoch, c.n, 0xc1a) % 100 < Math.round(c.heat * 40))) {
       this.ambientMicro(c, glitch > 0 ? glitch : 0.4);
     }
     if (step === 0 && (since === 0 || t >= this.padUntil - c.dur * 2)) {
-      this.ambientGlassBed(c, root, chord, left * 16 * c.dur);
+      this.ambientGlassBed(c, root, chord, left * 16 * c.dur, specOf(d.glass, AMBIENT_GLASS));
     }
     if (sec.pad > 0 && (step === 0 || (step === 8 && (rowCount(v[0]) >= 3 || c.arr.energy > 0.4)))) {
+      const bell = specOf(d.bell, AMBIENT_BELL);
       const highs = [...chord].filter((semi) => semi >= 7 && semi <= 19).slice(-3);
       highs.forEach((semi, i) => {
-        this.ambientBell(c, t + i * 0.014, root + semi, 0.04 * (1 - i * 0.16) * sec.pad, 0.9, "harm");
+        this.ambientBell(c, t + i * 0.014, root + semi, bell.level * (1 - i * 0.16) * sec.pad, bell.decay, "harm", bell);
       });
     }
     if (bassAt(c.arr.bass, step) > 0 && sec.bass > 0) {
@@ -2784,24 +2851,29 @@ export class VoiceEngine {
     // No tune: the chord's tones cycle over two octaves, eighths or sixteenths, ping-ponging into the dotted echo.
     const level = Math.max(sec.lead, 0.6 * sec.pad);
     const dens = this.ambientDensity(c);
-    const gap = dens >= 0.5 ? 1 : dens >= 0.1 ? 2 : 4;
+    const [lo, hi] = d.tiers ?? AMBIENT_TIERS.crystal;
+    const gap = dens >= hi ? 1 : dens >= lo ? 2 : 4;
     if (level > 0 && since % gap === 0) {
-      const cells = AMBIENT_CRYSTAL_ARPS[hash32(c.epoch, 0x51c1) % AMBIENT_CRYSTAL_ARPS.length];
+      const arps = d.arps ?? AMBIENT_CRYSTAL_ARPS;
+      const shimmer = specOf(d.shimmer, AMBIENT_SHIMMER);
+      const cells = arps[hash32(c.epoch, 0x51c1) % arps.length];
       const k = Math.floor(since / gap);
       const cell = cells[k % cells.length];
       const tone = cell >= 8 ? prog.arp[0] + 24 : prog.arp[cell % 4] + 12 * Math.floor(cell / 4);
       const beat = step % 4 === 0 ? 1 : 0.72;
-      const peak = 0.15 * level * beat * (0.85 + 0.15 * (cell / 8)) * (gap === 1 ? 0.78 : 1);
-      this.ambientShimmer(c, root + tone, peak, (gap === 1 ? 0.32 : 0.55) + 0.25 * (1 - c.heat), k % 2 === 0 ? -0.55 : 0.55);
+      const peak = shimmer.level * level * beat * (0.85 + 0.15 * (cell / 8)) * (gap === 1 ? 0.78 : 1);
+      this.ambientShimmer(c, root + tone, peak, (gap === 1 ? shimmer.short : shimmer.decay) + 0.25 * (1 - c.heat), k % 2 === 0 ? -0.55 : 0.55, shimmer);
     }
     // The slow high line: the chord's colour tone held for two bars, half way through the chord.
     if (step === 0 && since === 32 && sec.pad > 0 && hash32(c.epoch, c.hit.bar, 0x51c2) % 2 === 0) {
-      this.ambientHighLine(c, root + 12 + prog.sing[2], 2 * 16 * c.dur, 0.013 * Math.max(0.6, sec.pad), 4200);
+      const line = specOf(d.line, AMBIENT_LINES.crystal);
+      this.ambientHighLine(c, root + 12 + prog.sing[2], 2 * 16 * c.dur, line.level * Math.max(0.6, sec.pad), line.cutoff, line);
     }
+    this.styleVinyl(c, 0);
   }
 
-  /** One arp step: sine, a soft octave and a faint twelfth, a 15 ms attack (no strike), a short ring. */
-  private ambientShimmer(c: Ctx, midi: number, peak: number, decay: number, panAmount: number) {
+  /** One arp step: sine, a soft octave and a faint twelfth, a 15 ms attack (no strike), a short ring (AMBIENT_SHIMMER). */
+  private ambientShimmer(c: Ctx, midi: number, peak: number, decay: number, panAmount: number, s: AmbientShimmerSpec) {
     const t = c.t;
     const freq = midiToFreq(midi);
     const dark = c.press < 0 ? 1 + 0.45 * c.press : 1 + 0.14 * c.press;
@@ -2818,7 +2890,7 @@ export class VoiceEngine {
     const oscs: OscillatorNode[] = [];
     const rest: AudioNode[] = [f, amp, pan.dest];
     let chain: AudioNode | null = null;
-    for (const [ratio, cents, lvl] of [[1, 0, 0.72], [2, 5, 0.22], [3, -4, 0.07]] as const) {
+    for (const { ratio, detune: cents, level: lvl } of s.partials) {
       const osc = this.ctx.createOscillator();
       osc.type = "sine";
       osc.frequency.setValueAtTime(freq * ratio, t);
@@ -2836,18 +2908,18 @@ export class VoiceEngine {
     oscs.forEach((osc, i) => this.end(osc, i === 0 ? rest : [], stop));
   }
 
-  /** Sustained consonant glass: slow attack, detuned octaves, a slightly sharp shimmer. The chime is the attack. */
-  private ambientGlassBed(c: Ctx, root: number, chord: readonly number[], length: number) {
+  /** Sustained consonant glass: slow attack, detuned octaves, a slightly sharp shimmer. The chime is the attack. `p`: AMBIENT_GLASS or a style's. */
+  private ambientGlassBed(c: Ctx, root: number, chord: readonly number[], length: number, p: AmbientGlassSpec) {
     const t = c.t;
-    const attack = Math.min(2.1, length * 0.34);
-    const release = 2.6;
+    const attack = Math.min(p.attack, length * 0.34);
+    const release = p.release;
     const end = t + length + release;
     this.padUntil = t + length;
     const dark = c.press < 0 ? 1 + 0.42 * c.press : 1 + 0.14 * c.press;
-    const cutoff = Math.max(1600, (3400 + 5200 * c.color + 2600 * c.heat) * dark);
+    const cutoff = Math.max(1600, (p.cutoff + 5200 * c.color + 2600 * c.heat) * dark);
     const hp = this.ctx.createBiquadFilter();
     hp.type = "highpass";
-    hp.frequency.value = 180;
+    hp.frequency.value = p.hp;
     hp.Q.value = 0.6;
     const f = this.ctx.createBiquadFilter();
     f.type = "lowpass";
@@ -2855,7 +2927,7 @@ export class VoiceEngine {
     f.frequency.setValueAtTime(Math.max(400, cutoff * 0.62), t);
     f.frequency.exponentialRampToValueAtTime(Math.min(14000, cutoff), t + Math.min(length, 5));
     const amp = this.ctx.createGain();
-    const level = 0.11 * (0.85 + 0.3 * c.heat) * Math.max(0.75, c.sec.pad);
+    const level = p.level * (0.85 + 0.3 * c.heat) * Math.max(0.75, c.sec.pad);
     amp.gain.setValueAtTime(0.0001, t);
     amp.gain.linearRampToValueAtTime(level, t + attack);
     amp.gain.setValueAtTime(level, t + length);
@@ -2868,16 +2940,9 @@ export class VoiceEngine {
     const oscs: OscillatorNode[] = [];
     const rest: AudioNode[] = [hp, f, amp, pan.dest];
     let chain: AudioNode | null = null;
-    const partials: readonly (readonly [OscillatorType, number, number, number])[] = [
-      ["sine", 1, 0, 0.46],
-      ["triangle", 1, -8, 0.28],
-      ["sine", 2, 9, 0.2],
-      ["sine", 4.02, -5, 0.12],
-      ["sine", 6.07, 4, 0.045],
-    ];
     chord.forEach((semi) => {
       const freq = midiToFreq(root + semi);
-      for (const [type, ratio, cents, lvl] of partials) {
+      for (const { type, ratio, detune: cents, level: lvl } of p.partials) {
         const osc = this.ctx.createOscillator();
         osc.type = type;
         osc.frequency.setValueAtTime(freq * ratio, t);
@@ -2895,8 +2960,8 @@ export class VoiceEngine {
     oscs.forEach((osc, i) => this.end(osc, i === 0 ? rest : [], end + 0.05));
   }
 
-  /** One decaying FM bell. Ratio 3.49 so the strike is glass and the tail falls back to a sine. */
-  private ambientBell(c: Ctx, time: number, midi: number, peak: number, decay: number, bus: "harm" | "lead") {
+  /** One decaying FM bell. Ratio 3.49 so the strike is glass and the tail falls back to a sine (AMBIENT_BELL). */
+  private ambientBell(c: Ctx, time: number, midi: number, peak: number, decay: number, bus: "harm" | "lead", b: AmbientBellSpec) {
     const freq = midiToFreq(midi);
     const dark = c.press < 0 ? 1 + 0.45 * c.press : 1 + 0.12 * c.press;
     const open = Math.max(900, (2200 + 6400 * c.color + 2200 * c.heat) * dark);
@@ -2915,9 +2980,9 @@ export class VoiceEngine {
     car.frequency.setValueAtTime(freq, time);
     const mod = this.ctx.createOscillator();
     mod.type = "sine";
-    mod.frequency.setValueAtTime(freq * 3.49, time);
+    mod.frequency.setValueAtTime(freq * b.ratio, time);
     const idx = this.ctx.createGain();
-    idx.gain.setValueAtTime(freq * 3.1, time);
+    idx.gain.setValueAtTime(freq * b.index, time);
     idx.gain.exponentialRampToValueAtTime(Math.max(1, freq * 0.12), time + Math.min(0.5, decay));
     mod.connect(idx);
     idx.connect(car.frequency);
@@ -2946,7 +3011,7 @@ export class VoiceEngine {
 
   /** A few tuned clicks inside one 16th. Offsets come from the epoch, so a bar edits the same way twice. */
   private ambientMicro(c: Ctx, vel: number) {
-    const notes = this.era.notes;
+    const notes = dataOf<AmbientIdmData>(c).notes ?? this.era.notes;
     const n = 2 + (hash32(c.epoch, c.n, 0xb11) % (c.heat > 0.75 ? 3 : 2));
     for (let i = 0; i < n; i++) {
       const h = hash32(c.epoch, c.n, i, 0xc1ed);
@@ -3026,45 +3091,56 @@ export class VoiceEngine {
   /** Stars of the Lid: a new wide pad layer every four bars crossfades over the last; breath; glints; a rare sub. */
   private droneWall(c: Ctx) {
     const { step } = c;
+    const d = dataOf<DroneData>(c);
     const mood = this.droneMood(c);
-    if (step === 0 && (c.hit.bar % 4 === 0 || c.t >= this.padUntil - c.dur * 2)) {
-      const bars = 4 - (((c.hit.bar % 4) + 4) % 4);
-      this.droneWallLayer(c, bars * 16 * c.dur, mood);
+    const len = d.bars ?? 4;
+    if (step === 0 && (c.hit.bar % len === 0 || c.t >= this.padUntil - c.dur * 2)) {
+      const bars = len - (((c.hit.bar % len) + len) % len);
+      this.droneWallLayer(c, bars * 16 * c.dur, mood, len);
     }
-    if (step === 0) this.breath(c);
-    if (this.droneGlintDue(c, mood, 2)) {
-      const semi = DRONE_GLINT_NOTES[hash32(c.epoch, c.n, 0x9a) % DRONE_GLINT_NOTES.length];
-      this.droneGlint(c, 60 + c.tonic + semi, 0.016 * (0.7 + 0.5 * mood.glow), 3.2 + 1.6 * (1 - c.heat));
+    const breath = d.breath ?? 0.022;
+    if (step === 0 && breath > 0) this.breath(c, breath);
+    const glint = specOf(d.glint, DRONE_GLINTS.classic);
+    if (this.droneGlintDue(c, mood, glint.gap)) {
+      const notes = d.glints ?? DRONE_GLINT_NOTES;
+      const semi = notes[hash32(c.epoch, c.n, 0x9a) % notes.length];
+      this.droneGlint(c, 60 + c.tonic + semi, glint.level * (0.7 + 0.5 * mood.glow), glint.decay + 1.6 * (1 - c.heat), glint.attack, glint.top);
     }
     this.droneRareSub(c, 0xd5b);
+    this.styleVinyl(c, 0);
   }
 
   /**
    * One Wall layer: each voice two detuned saws/triangles panned apart, through two gentle lowpasses whose cutoff
    * drifts on a slow sine, a still sine core under it. Voicings alternate the open fifths with a soft colour.
+   * `len`: the phrase length in bars (a layer per phrase).
    */
-  private droneWallLayer(c: Ctx, length: number, mood: { busy: number; glow: number; move: number }) {
+  private droneWallLayer(c: Ctx, length: number, mood: { busy: number; glow: number; move: number }, len: number) {
     const t = c.t;
+    const d = dataOf<DroneData>(c);
+    const w = specOf(d.wall, DRONE_WALL);
     const fade = clamp(length * 0.5, 1.2, 6.5);
     const span = length + fade;
     this.padUntil = t + length;
-    const phrase = c.hit.bar >> 2;
-    const colour = DRONE_WALL_COLOURS[(hash32(c.epoch, 0xd0a) + (phrase >> 1)) % DRONE_WALL_COLOURS.length];
-    const voicing = phrase % 2 === 0 ? DRONE_WALL_OPEN : colour;
-    const notes = mood.busy >= 8 ? [...voicing, 31] : voicing;
+    const phrase = Math.floor(c.hit.bar / len);
+    const colours = d.colours ?? DRONE_WALL_COLOURS;
+    const colour = colours[(hash32(c.epoch, 0xd0a) + (phrase >> 1)) % colours.length];
+    const voicing = phrase % 2 === 0 ? (d.voicing ?? DRONE_WALL_OPEN) : colour;
+    const notes = mood.busy >= 8 ? [...voicing, d.busy ?? 31] : voicing;
     // The pad sits in octave 3; a still sine core an octave under it keeps it warm.
     const root = 48 + c.tonic;
-    const level = 0.05 * (1 + 0.15 * c.heat) * Math.max(0.6, c.sec.pad);
-    const lo = 440 + 380 * mood.glow;
-    const hi = lo * (1.55 + 0.35 * c.heat);
-    const period = (19 + (hash32(c.epoch, 0xd0f) % 7)) / mood.move;
+    const level = w.level * (1 + 0.15 * c.heat) * Math.max(0.6, c.sec.pad);
+    const lo = w.cutoff + w.glow * mood.glow;
+    const hi = lo * (w.range + 0.35 * c.heat);
+    const period = (w.period + (hash32(c.epoch, 0xd0f) % 7)) / mood.move;
+    const depth = w.depth ?? 0;
     const rest: AudioNode[] = [];
     const oscs: OscillatorNode[] = [];
     // Detune drift: opposite on each side, so the beating moves instead of sitting at one rate.
     const drift = this.ctx.createOscillator();
     drift.frequency.setValueAtTime(0.05 + (hash32(c.epoch, 0xd0e) % 8) / 160, t);
     const driftG = this.ctx.createGain();
-    driftG.gain.value = 3;
+    driftG.gain.value = w.drift ?? 0;
     drift.connect(driftG);
     const invert = this.ctx.createGain();
     invert.gain.value = -1;
@@ -3075,9 +3151,9 @@ export class VoiceEngine {
       let chain: AudioNode | null = null;
       notes.forEach((semi, i) => {
         const osc = this.ctx.createOscillator();
-        osc.type = i < 2 ? "sawtooth" : "triangle";
+        osc.type = w.waves[Math.min(i, w.waves.length - 1)];
         osc.frequency.setValueAtTime(midiToFreq(root + semi), t);
-        osc.detune.setValueAtTime(side * (3 + i * 1.5), t);
+        osc.detune.setValueAtTime(side * (w.detune + i * w.spread), t);
         (side < 0 ? driftG : invert).connect(osc.detune);
         const g = this.ctx.createGain();
         g.gain.value = (i === 0 ? 0.5 : 0.42) / (1 + i * 0.45);
@@ -3086,7 +3162,7 @@ export class VoiceEngine {
         chain = this.pairSum(chain, g, rest);
         oscs.push(osc);
       });
-      for (const [semi, lvl] of [[-12, 0.26], [-5, 0.1]] as const) {
+      for (const [semi, lvl] of w.core ?? []) {
         const osc = this.ctx.createOscillator();
         osc.type = "sine";
         osc.frequency.setValueAtTime(midiToFreq(root + semi), t);
@@ -3106,7 +3182,7 @@ export class VoiceEngine {
         this.droneCurve(f.frequency, t, span, (s) => lo + (hi - lo) * (0.5 - 0.5 * Math.cos((2 * Math.PI * s) / period + (side < 0 ? 0 : Math.PI / 2))));
       }
       const amp = this.ctx.createGain();
-      this.droneCurve(amp.gain, t, span, (s) => level * droneEnv(s, fade, length, fade) * (1 - 0.12 * (0.5 - 0.5 * Math.cos((2 * Math.PI * s) / (period * 0.7) + side))));
+      this.droneCurve(amp.gain, t, span, (s) => level * droneEnv(s, fade, length, fade) * (1 - depth * (0.5 - 0.5 * Math.cos((2 * Math.PI * s) / (period * 0.7) + side))));
       chain!.connect(f1);
       f1.connect(f2);
       f2.connect(amp);
@@ -3124,51 +3200,54 @@ export class VoiceEngine {
    */
   private droneDark(c: Ctx) {
     const { v, step, t, sec } = c;
+    const d = dataOf<DroneData>(c);
     const mood = this.droneMood(c);
-    if (step === 0 && (c.hit.bar % 8 === 0 || t >= this.padUntil - c.dur * 2)) {
-      const bars = 8 - (((c.hit.bar % 8) + 8) % 8);
+    const len = d.bars ?? 8;
+    if (step === 0 && (c.hit.bar % len === 0 || t >= this.padUntil - c.dur * 2)) {
+      const bars = len - (((c.hit.bar % len) + len) % len);
       const length = bars * 16 * c.dur;
-      this.droneDarkBed(c, length);
-      this.droneDarkPad(c, length, mood);
+      this.droneDarkBed(c, length, len, specOf(d.bed, DRONE_BED));
+      this.droneDarkPad(c, length, mood, specOf(d.pad, DRONE_DARK_PAD));
     }
     // A concussion, not a kick pattern: only when the chain is actually putting weight on the downbeats.
     if (step === 0 && c.hit.bar % 2 === 0 && rowCount(v[0]) >= 3 && sec.kick > 0.45) {
-      this.kick(t, c.vel * 0.34 * sec.kick * (0.75 + 0.4 * c.heat), { start: 42, end: 28, sweep: 0.7, decay: 1.8, click: 0, body: 1.2 });
+      this.kick(t, c.vel * 0.34 * sec.kick * (0.75 + 0.4 * c.heat), specOf(d.kick, DRONE_KICK));
     }
-    if (this.droneGlintDue(c, mood, 2.5)) {
-      const semi = DRONE_BOWL_NOTES[hash32(c.epoch, c.n, 0xb017) % DRONE_BOWL_NOTES.length];
-      this.droneGlint(c, c.low + 24 + semi, 0.02 * (0.75 + 0.4 * mood.glow), 4 + 1.5 * (1 - c.heat), 0.22, 1100 + 400 * mood.glow);
+    const glint = specOf(d.glint, DRONE_GLINTS.dark);
+    if (this.droneGlintDue(c, mood, glint.gap)) {
+      const notes = d.glints ?? DRONE_BOWL_NOTES;
+      const semi = notes[hash32(c.epoch, c.n, 0xb017) % notes.length];
+      this.droneGlint(c, c.low + 24 + semi, glint.level * (0.75 + 0.4 * mood.glow), glint.decay + 1.5 * (1 - c.heat), glint.attack, glint.top + 400 * mood.glow);
     }
-    if (step === 0) this.droneRumble(c);
+    const rumble = d.rumble ?? 0.042;
+    if (step === 0 && rumble > 0) this.droneRumble(c, rumble);
+    this.styleVinyl(c, 0);
   }
 
   /** Sub pressure on the bass bus, a hollow fifth/octave in the room. Beats quicken with heat; the market never retunes them. */
-  private droneDarkBed(c: Ctx, length: number) {
+  private droneDarkBed(c: Ctx, length: number, len: number, b: DroneBedSpec) {
     const t = c.t;
     const attack = Math.min(4.2, length * 0.32);
     const release = 5;
     const end = t + length + release;
     this.padUntil = t + length;
-    const beat = 0.72 + c.heat * 1.05;
+    const beat = b.beat + c.heat * 1.05;
     const dark = c.press < 0 ? 1 + 0.62 * c.press : 1 + 0.18 * c.press;
     const rest: AudioNode[] = [];
     const oscs: OscillatorNode[] = [];
+    // [semitones over the bass tonic, cents x the beat, level]: the pairs beat against each other.
+    const sines = (voices: DroneBedSpec["subs"]) => voices.map(([semi, cents, lvl]) => [c.low + semi, cents * beat, lvl] as const);
 
-    const subChain = this.droneSineBed(t, rest, oscs, [
-      [c.low - 12, -13 * beat, 0.58],
-      [c.low - 12, 14 * beat, 0.58],
-      [c.low, -7 * beat, 0.34],
-      [c.low, 8 * beat, 0.34],
-    ]);
+    const subChain = this.droneSineBed(t, rest, oscs, sines(b.subs));
     const subLp = this.ctx.createBiquadFilter();
     subLp.type = "lowpass";
     subLp.Q.value = 0.6;
     subLp.frequency.value = Math.max(70, (130 + 50 * c.heat) * Math.max(0.55, dark));
     const subShape = this.ctx.createWaveShaper();
-    subShape.curve = new Float32Array(tanhCurve(1.2 + 0.55 * c.heat));
+    subShape.curve = new Float32Array(tanhCurve(b.drive + 0.55 * c.heat));
     subShape.oversample = "none";
     const subAmp = this.ctx.createGain();
-    const subLevel = 0.046 * (1 + 0.35 * c.heat) * Math.max(0.7, c.sec.bass);
+    const subLevel = b.subLevel * (1 + 0.35 * c.heat) * Math.max(0.7, c.sec.bass);
     this.droneFade(subAmp.gain, t, attack, length, release, subLevel);
     subChain.connect(subShape);
     subShape.connect(subLp);
@@ -3177,23 +3256,18 @@ export class VoiceEngine {
     subPan.add(subAmp);
     rest.push(subShape, subLp, subAmp, subPan.dest);
 
-    const bodyChain = this.droneSineBed(t, rest, oscs, [
-      [c.low + 7, -5 * beat, 0.48],
-      [c.low + 7, 6 * beat, 0.48],
-      [c.low + 12, 3 * beat, 0.22],
-      [c.low + 19, -4 * beat, 0.12],
-    ]);
+    const bodyChain = this.droneSineBed(t, rest, oscs, sines(b.body));
     const body = this.ctx.createBiquadFilter();
     body.type = "lowpass";
     // No resonance: the sweep is a slow change of colour, not a peak travelling through the partials.
     body.Q.value = 0.6;
-    const lo = Math.max(190, (260 + 240 * c.color) * Math.max(0.6, dark));
+    const lo = Math.max(190, (b.cutoff + 240 * c.color) * Math.max(0.6, dark));
     const hi = Math.min(900, Math.max(lo + 50, lo * (1.5 + 0.4 * c.heat)));
-    const phrase = hash32(c.epoch, c.hit.bar >> 3, 0xd0c);
+    const phrase = hash32(c.epoch, Math.floor(c.hit.bar / len), 0xd0c);
     body.frequency.setValueAtTime(phrase % 2 ? lo : hi, t);
     body.frequency.linearRampToValueAtTime(phrase % 2 ? hi : lo, t + length);
     const bodyAmp = this.ctx.createGain();
-    const bodyLevel = 0.064 * (1 + 0.2 * c.heat) * Math.max(0.65, c.sec.pad);
+    const bodyLevel = b.bodyLevel * (1 + 0.2 * c.heat) * Math.max(0.65, c.sec.pad);
     this.droneFade(bodyAmp.gain, t, attack, length, release, bodyLevel);
     bodyChain.connect(body);
     body.connect(bodyAmp);
@@ -3209,24 +3283,26 @@ export class VoiceEngine {
    * The cave's pad: tonic, fifth and octave two octaves over the bass, wide triangles under a low lowpass that
    * breathes on a long sine. Busy markets add the upper octave; sells close it towards the floor.
    */
-  private droneDarkPad(c: Ctx, length: number, mood: { busy: number; glow: number; move: number }) {
+  private droneDarkPad(c: Ctx, length: number, mood: { busy: number; glow: number; move: number }, p: DronePadSpec) {
     const t = c.t;
+    const d = dataOf<DroneData>(c);
     const fade = clamp(length * 0.3, 1.5, 7);
     const span = length + fade;
-    const notes = mood.busy >= 8 ? [24, 31, 36, 43] : [24, 31, 36];
-    const lo = 300 + 200 * mood.glow;
-    const hi = lo * (1.35 + 0.25 * c.heat);
-    const period = (24 + (hash32(c.epoch, 0xdad) % 9)) / mood.move;
-    const level = 0.042 * Math.max(0.65, c.sec.pad);
+    const voicing = d.voicing ?? DRONE_DARK_VOICING;
+    const notes = mood.busy >= 8 ? [...voicing, d.busy ?? 43] : voicing;
+    const lo = p.cutoff + p.glow * mood.glow;
+    const hi = lo * (p.range + 0.25 * c.heat);
+    const period = (p.period + (hash32(c.epoch, 0xdad) % 9)) / mood.move;
+    const level = p.level * Math.max(0.65, c.sec.pad);
     const rest: AudioNode[] = [];
     const oscs: OscillatorNode[] = [];
     for (const side of [-1, 1]) {
       let chain: AudioNode | null = null;
       notes.forEach((semi, i) => {
         const osc = this.ctx.createOscillator();
-        osc.type = "triangle";
+        osc.type = p.waves[Math.min(i, p.waves.length - 1)];
         osc.frequency.setValueAtTime(midiToFreq(c.low + semi), t);
-        osc.detune.setValueAtTime(side * (4 + 2 * i), t);
+        osc.detune.setValueAtTime(side * (p.detune + p.spread * i), t);
         const g = this.ctx.createGain();
         g.gain.value = 0.5 / (1 + i * 0.6);
         osc.connect(g);
@@ -3250,8 +3326,8 @@ export class VoiceEngine {
     oscs.forEach((osc, i) => this.end(osc, i === 0 ? rest : [], t + span + 0.05));
   }
 
-  /** Cave air: a low rumble that follows the sell. No hiss on top: the far wall is the reverb. */
-  private droneRumble(c: Ctx) {
+  /** Cave air: a low rumble that follows the sell, at `level` (0.042). No hiss on top: the far wall is the reverb. */
+  private droneRumble(c: Ctx, level: number) {
     const bar = c.dur * 16;
     const end = c.t + bar * 1.75;
     const dark = 1 + 0.85 * Math.max(0, -c.press);
@@ -3264,7 +3340,7 @@ export class VoiceEngine {
     lp.frequency.setValueAtTime(70 + 80 * c.color, c.t);
     lp.frequency.linearRampToValueAtTime(60 + 120 * fold(c.color + 0.18) * Math.max(0.4, 1 + 0.5 * Math.min(0, c.press)), c.t + bar * 1.5);
     const g = this.ctx.createGain();
-    const peak = 0.042 * dark * (1 + 0.35 * c.heat) * Math.max(0.35, c.sec.hat);
+    const peak = level * dark * (1 + 0.35 * c.heat) * Math.max(0.35, c.sec.hat);
     g.gain.setValueAtTime(0.0001, c.t);
     g.gain.linearRampToValueAtTime(peak, c.t + bar * 0.7);
     g.gain.linearRampToValueAtTime(0.0001, end);
@@ -3283,22 +3359,30 @@ export class VoiceEngine {
    */
   private dronePulse(c: Ctx) {
     const { step } = c;
+    const d = dataOf<DroneData>(c);
     const mood = this.droneMood(c);
-    if (step === 0 && (c.hit.bar % 4 === 0 || c.t >= this.padUntil - c.dur * 2)) {
-      const bars = 4 - (((c.hit.bar % 4) + 4) % 4);
-      this.droneOvertone(c, bars * 16 * c.dur, mood);
+    const len = d.bars ?? 4;
+    if (step === 0 && (c.hit.bar % len === 0 || c.t >= this.padUntil - c.dur * 2)) {
+      const bars = len - (((c.hit.bar % len) + len) % len);
+      this.droneOvertone(c, bars * 16 * c.dur, mood, len);
     }
-    if (this.droneGlintDue(c, mood, 3)) {
+    const glint = specOf(d.glint, DRONE_GLINTS.pulse);
+    if (this.droneGlintDue(c, mood, glint.gap)) {
       // A glass partial of the same series: a glint, not a new pitch. Never the same partial twice running.
-      this.droneGlassAt = (this.droneGlassAt + 1 + (hash32(c.epoch, c.n, 0xd3e) % (DRONE_GLASS.length - 1))) % DRONE_GLASS.length;
-      const n = DRONE_GLASS[this.droneGlassAt];
-      this.droneGlint(c, 0, 0.012 * (0.7 + 0.5 * mood.glow), 2.6 + 1.4 * (1 - c.heat), 0.12, 2200, midiToFreq(c.low + 12) * n);
+      const glass = d.glints ?? DRONE_GLASS;
+      this.droneGlassAt = (this.droneGlassAt + 1 + (hash32(c.epoch, c.n, 0xd3e) % (glass.length - 1))) % glass.length;
+      const n = glass[this.droneGlassAt];
+      this.droneGlint(c, 0, glint.level * (0.7 + 0.5 * mood.glow), glint.decay + 1.4 * (1 - c.heat), glint.attack, glint.top, midiToFreq(c.low + 12) * n);
     }
     this.droneRareSub(c, 0xd5c);
+    this.styleVinyl(c, 0);
   }
 
-  private droneOvertone(c: Ctx, length: number, mood: { busy: number; glow: number; move: number }) {
+  /** One phrase of the series (`len` bars a phrase): DRONE_PARTIALS and DRONE_OVERTONE, or a style's. */
+  private droneOvertone(c: Ctx, length: number, mood: { busy: number; glow: number; move: number }, len: number) {
     const t = c.t;
+    const d = dataOf<DroneData>(c);
+    const o = specOf(d.overtone, DRONE_OVERTONE);
     const fade = clamp(length * 0.35, 1, 4);
     const span = length + fade;
     this.padUntil = t + length;
@@ -3306,10 +3390,11 @@ export class VoiceEngine {
     const bar = c.dur * 16;
     // One breath per two bars when the chain is quiet, per bar when it is busy or hot. Never quicker.
     const breath = (mood.busy >= 10 || c.heat >= 0.6 ? 1 : 2) * bar;
-    const level = 0.2 * (1 + 0.15 * c.heat) * Math.max(0.65, c.sec.pad);
-    const figure = DRONE_PULSE_FIGURES[hash32(c.epoch, 0x0d17) % DRONE_PULSE_FIGURES.length];
-    const fifth = figure[Math.floor(c.hit.bar / 4) % figure.length] === 1;
-    const partials = DRONE_PARTIALS.filter((p) => p.group < 3 || mood.busy >= 6 || c.heat >= 0.5);
+    const level = o.level * (1 + 0.15 * c.heat) * Math.max(0.65, c.sec.pad);
+    const figures = d.figures ?? DRONE_PULSE_FIGURES;
+    const figure = figures[hash32(c.epoch, 0x0d17) % figures.length];
+    const fifth = figure[Math.floor(c.hit.bar / len) % figure.length] === 1;
+    const partials = (d.partials ?? DRONE_PARTIALS).filter((p) => p.group < 3 || mood.busy >= 6 || c.heat >= 0.5);
     const rest: AudioNode[] = [];
     const oscs: OscillatorNode[] = [];
     const chains: (AudioNode | null)[] = [null, null, null, null];
@@ -3329,14 +3414,14 @@ export class VoiceEngine {
     const lp = this.ctx.createBiquadFilter();
     lp.type = "lowpass";
     lp.Q.value = 0.5;
-    const top = 1000 + 900 * mood.glow;
+    const top = o.cutoff + o.glow * mood.glow;
     this.droneCurve(lp.frequency, t, span, (s) => top * (0.85 + 0.15 * Math.sin((2 * Math.PI * s) / (breath * 4))));
     const sum = this.ctx.createGain();
     sum.connect(lp);
     rest.push(lp, sum);
     const mix = new MixChain(this.ctx, sum, false);
     // Group 0 (1, 2) barely moves; groups 1-3 breathe a third of a cycle apart, so the light climbs the series.
-    const depth = [0.12, 0.5, 0.55, 0.6];
+    const depth = o.depths;
     chains.forEach((chain, i) => {
       if (!chain) return;
       const g = this.ctx.createGain();
@@ -3378,6 +3463,8 @@ export class VoiceEngine {
   private droneGlint(c: Ctx, midi: number, level: number, decay: number, attack = 0.05, top = 2600, freq = 0) {
     const t = c.t;
     const f0 = freq > 0 ? freq : midiToFreq(midi);
+    // A glint above its own lowpass would be silent (a station's glint pitches or `top` can put it there).
+    if (f0 > top) return;
     const idlePerc = Math.max(c.hit.idle?.hat ?? 1, c.hit.idle?.glitch ?? 1);
     const peak = level * c.vel * Math.min(1, idlePerc) * clamp(c.sec.hat + c.sec.glitch, 0.5, 1);
     const lp = this.ctx.createBiquadFilter();
@@ -3413,7 +3500,8 @@ export class VoiceEngine {
     const bar = ((c.hit.bar % 8) + 8) % 8;
     const every4 = rowCount(v[0]) >= 4 || c.heat >= 0.6;
     if (bar !== slot && !(every4 && bar === (slot + 4) % 8)) return;
-    this.droneSubSwell(c, 0.06 * sec.kick * (0.8 + 0.3 * c.heat));
+    const swell = dataOf<DroneData>(c).swell ?? 0.06;
+    if (swell > 0) this.droneSubSwell(c, swell * sec.kick * (0.8 + 0.3 * c.heat));
   }
 
   private droneSubSwell(c: Ctx, level: number) {
@@ -6207,11 +6295,6 @@ export class VoiceEngine {
     this.drum(CLAP, time, velocity, panAmount, 1, null);
   }
 
-  /** A dull tape snare (Tape Keys, Rhodes Break): TAPE_SNARE. */
-  private tapeSnare(time: number, velocity: number, panAmount: number) {
-    this.drum(TAPE_SNARE, time, velocity, panAmount, 1, null);
-  }
-
   private cowbell(time: number, velocity: number, panAmount: number) {
     for (const f of [540, 800]) {
       const osc = this.ctx.createOscillator();
@@ -6273,36 +6356,36 @@ export class VoiceEngine {
     if (s.octave > 0) this.sub(c, midi + 12, length, s.octave, false, s);
   }
 
-  /** Electro bass: square/saw with a snappy resonant filter; the tick sets how far it opens. */
-  private electroBass(c: Ctx, midi: number, length: number) {
+  /** Electro bass: square/saw with a snappy resonant filter; the tick sets how far it opens. `b`: ELECTRO_BASS_TONES.classic or a style's. */
+  private electroBass(c: Ctx, midi: number, length: number, b: Pick<ElectroBassSpec, "cutoff" | "color" | "q" | "decay" | "level" | "sub">) {
     const t = c.t;
     const freq = midiToFreq(midi);
     const f = this.ctx.createBiquadFilter();
     f.type = "lowpass";
-    f.Q.value = 7;
-    const open = 600 + 1800 * c.color + 1200 * Math.max(0, c.press);
+    f.Q.value = b.q[0];
+    const open = b.cutoff + b.color * c.color + 1200 * Math.max(0, c.press);
     f.frequency.setValueAtTime(open, t);
-    f.frequency.exponentialRampToValueAtTime(Math.max(120, freq * 1.5), t + 0.13);
+    f.frequency.exponentialRampToValueAtTime(Math.max(120, freq * 1.5), t + b.decay[0]);
     const amp = this.ctx.createGain();
     const hold = Math.max(0.06, length * 0.8);
     amp.gain.setValueAtTime(0.0001, t);
-    amp.gain.linearRampToValueAtTime(0.2, t + 0.004);
-    amp.gain.setValueAtTime(0.2, t + hold * 0.5);
+    amp.gain.linearRampToValueAtTime(b.level[0], t + 0.004);
+    amp.gain.setValueAtTime(b.level[0], t + hold * 0.5);
     amp.gain.exponentialRampToValueAtTime(0.0001, t + hold);
     amp.gain.setValueAtTime(0, t + hold);
     const a = this.ctx.createOscillator();
     a.type = "square";
     a.frequency.setValueAtTime(freq, t);
-    const b = this.ctx.createOscillator();
-    b.type = "sawtooth";
-    b.frequency.setValueAtTime(freq, t);
-    b.detune.setValueAtTime(7, t);
+    const saw = this.ctx.createOscillator();
+    saw.type = "sawtooth";
+    saw.frequency.setValueAtTime(freq, t);
+    saw.detune.setValueAtTime(7, t);
     const ga = this.ctx.createGain();
     ga.gain.value = 0.5;
     const gb = this.ctx.createGain();
     gb.gain.value = 0.45;
     a.connect(ga);
-    b.connect(gb);
+    saw.connect(gb);
     const mix = this.ctx.createGain();
     ga.connect(mix);
     gb.connect(mix);
@@ -6310,10 +6393,10 @@ export class VoiceEngine {
     f.connect(amp);
     this.busIn.bass.add(amp);
     a.start(t);
-    b.start(t);
+    saw.start(t);
     this.end(a, [ga, gb, mix, f, amp], t + hold + 0.05);
-    this.end(b, [], t + hold + 0.05);
-    this.sub(c, midi - 12, length * 0.9, 0.45);
+    this.end(saw, [], t + hold + 0.05);
+    this.sub(c, midi - 12, length * 0.9, b.sub[0]);
   }
 
   /** Ambient IDM pad: detuned saw+triangle per note, slow attack, tape wow and flutter on every oscillator. `p`: TAPE_PAD or a style's. */
@@ -6376,8 +6459,8 @@ export class VoiceEngine {
     oscs.forEach((osc, i) => this.end(osc, i === 0 ? rest : [], end + 0.05));
   }
 
-  /** Drone breath: one and a half bars of soft, low band-limited noise whose band follows the tick. */
-  private breath(c: Ctx) {
+  /** Drone breath: one and a half bars of soft, low band-limited noise whose band follows the tick, at `level` (0.022). */
+  private breath(c: Ctx, level: number) {
     const bar = c.dur * 16;
     const src = this.ctx.createBufferSource();
     src.buffer = this.noise();
@@ -6392,7 +6475,7 @@ export class VoiceEngine {
     lp.Q.value = 0.5;
     lp.frequency.value = 1400;
     const g = this.ctx.createGain();
-    const peak = 0.022 * Math.max(0.3, c.sec.hat) * (1 + 0.5 * Math.max(0, -c.press));
+    const peak = level * Math.max(0.3, c.sec.hat) * (1 + 0.5 * Math.max(0, -c.press));
     // 1.6 bars long, peaking mid-bar: consecutive breaths overlap into one slow-moving texture.
     g.gain.setValueAtTime(0.0001, c.t);
     g.gain.linearRampToValueAtTime(peak, c.t + bar * 0.8);
@@ -7378,20 +7461,8 @@ const LOFIHOUSE_RAVE_STABS: readonly { s: number; len: number; core: boolean }[]
 /**
  * Ambient IDM harmony. The genre note set is the minor pentatonic (0 3 5 7 10), so every chord is a sus /
  * add9 / quartal colour built only from it: i m7, bIII add9, bVII 6/9sus4, iv 9sus4, i m11 (quartal).
- * All values are semitones from the tonic; every pitch class is a genre note.
+ * All values are semitones from the tonic; every pitch class is a genre note. Fields: styledata.ts AmbientChord.
  */
-interface AmbientChord {
-  /** Root for the bass, near the tonic. */
-  bass: number;
-  /** Pad voicing over 48 + tonic (Tape Keys, Tape Haze takes the part at and above the root). */
-  pad: readonly number[];
-  /** Crystal glass-bed voicing over 60 + tonic. */
-  glass: readonly number[];
-  /** The four chord tones low to high, for figures and arps. */
-  arp: readonly number[];
-  /** Melody tones by role: [3rd (or 4th), 5th, colour (9th / 11th / 6th), root, 7th (or 6th)]. */
-  sing: readonly number[];
-}
 const AMBIENT_CHORDS: readonly AmbientChord[] = [
   // 0: i m7
   { bass: 0, pad: [-12, 0, 7, 10, 15], glass: [0, 7, 12, 15, 24], arp: [0, 3, 7, 10], sing: [3, 7, 5, 0, 10] },
@@ -7449,24 +7520,28 @@ const AMBIENT_CRYSTAL_ARPS: readonly (readonly number[])[] = [
 ];
 
 /**
- * Electro / Client_03. Chords: `bass` is the root in semitones from the bass tonic; `third` and `seventh` say
- * which third and seventh the bass may use over it (all in the natural minor); `pad` is the ghost voicing.
+ * Density thresholds per Ambient IDM base [low, high] (styledata.ts AmbientIdmData `tiers`): where the Tape Keys /
+ * Tape Haze tier 1 and 2 notes join, where the Crystal arp doubles from quarters to eighths to sixteenths.
  */
-interface ClientChord {
-  bass: number;
-  third: number;
-  seventh: number;
-  pad: readonly number[];
-}
+const AMBIENT_TIERS: Record<"classic" | "boc" | "crystal", readonly [number, number]> = {
+  classic: [0.36, 0.68],
+  boc: [0.42, 0.72],
+  crystal: [0.1, 0.5],
+};
 
-/** i, bVI, iv, v, bVII, bIII. Open, consonant voicings that share tones, so the pad drifts rather than changes. */
-const CLIENT_CHORDS: readonly ClientChord[] = [
-  { bass: 0, third: 3, seventh: 10, pad: [0, 7, 15] },
-  { bass: -4, third: 4, seventh: 11, pad: [0, 8, 15] },
-  { bass: 5, third: 3, seventh: 10, pad: [0, 8, 17] },
-  { bass: -5, third: 3, seventh: 10, pad: [2, 10, 19] },
-  { bass: -2, third: 4, seventh: 10, pad: [2, 10, 17] },
-  { bass: 3, third: 4, seventh: 11, pad: [3, 10, 19] },
+/**
+ * Electro / Client_03. Chords (styledata.ts ElectroChord): `bass` is the root in semitones from the bass tonic;
+ * `third` and `seventh` say which third and seventh the bass may use over it (all in the natural minor); `tones` is
+ * the ghost pad's voicing.
+ * i, bVI, iv, v, bVII, bIII. Open, consonant voicings that share tones, so the pad drifts rather than changes.
+ */
+const CLIENT_CHORDS: readonly ElectroChord[] = [
+  { bass: 0, third: 3, seventh: 10, tones: [0, 7, 15] },
+  { bass: -4, third: 4, seventh: 11, tones: [0, 8, 15] },
+  { bass: 5, third: 3, seventh: 10, tones: [0, 8, 17] },
+  { bass: -5, third: 3, seventh: 10, tones: [2, 10, 19] },
+  { bass: -2, third: 4, seventh: 10, tones: [2, 10, 17] },
+  { bass: 3, third: 4, seventh: 11, tones: [3, 10, 19] },
 ];
 
 /** Four-chord progressions (two bars a chord), indices into CLIENT_CHORDS. One per epoch. */
@@ -7574,14 +7649,11 @@ const CLIENT_WORDS: readonly ClientWord[] = [
   { s: 4, syl: [[300, 870, null], [270, 2290, "t"]] },
 ];
 
-/** Alien Rave chords: `bass` is the root in semitones from the bass tonic, `tones` the stab voicing from the tonic. */
-interface AlienChord {
-  bass: number;
-  tones: readonly number[];
-}
-
-/** i, bII, bVI, bVII, iv, i7. Minor with a phrygian b2 for the menace; the majors are the rave lift. */
-const ALIEN_CHORDS: readonly AlienChord[] = [
+/**
+ * Alien Rave chords (ElectroChord): `bass` is the root in semitones from the bass tonic, `tones` the stab voicing
+ * from the tonic. i, bII, bVI, bVII, iv, i7. Minor with a phrygian b2 for the menace; the majors are the rave lift.
+ */
+const ALIEN_CHORDS: readonly ElectroChord[] = [
   { bass: 0, tones: [0, 7, 12, 15] },
   { bass: 1, tones: [1, 8, 13, 17] },
   { bass: -4, tones: [-4, 3, 8, 12] },
@@ -7655,6 +7727,33 @@ const ALIEN_VOX: readonly { s: number; len: number; vowels: readonly (readonly [
   { s: 8, len: 8, vowels: [[300, 870], [650, 1700], [300, 2300]] },
 ];
 
+/** A two-bar kick figure (onsets 0..31) from bar `a` and bar `b`; `twice` plays one bar in both. */
+const bars = (a: readonly number[], b: readonly number[]) => [...a, ...b.map((s) => s + 16)];
+const twice = (bar: readonly number[]) => bars(bar, bar);
+
+/**
+ * Electro kick figures per base as two-bar figures (styledata.ts ElectroKicks). Cold 808: a sparse syncopated break,
+ * the intro on the downbeat only; Client_03 and Alien Rave: their tables above.
+ */
+const ELECTRO_KICKS: Record<"classic" | "client03" | "alienrave", ElectroKicks> = {
+  classic: {
+    half: [twice([0])],
+    lo: [twice([0, 10])],
+    mid: [twice([0, 6, 10]), twice([0, 10, 11])],
+    hi: [twice([0, 3, 6, 10]), twice([0, 6, 10, 11]), twice([0, 3, 10, 14])],
+  },
+  client03: {
+    half: CLIENT_KICK_HALF.map((f) => bars(f.a, f.b)),
+    lo: CLIENT_KICK_LO.map((f) => bars(f.a, f.b)),
+    mid: CLIENT_KICK_MID.map((f) => bars(f.a, f.b)),
+    hi: CLIENT_KICK_HI.map((f) => bars(f.a, f.b)),
+  },
+  alienrave: { half: ALIEN_KICK_HALF.map(twice), lo: ALIEN_KICK_LO.map(twice), mid: ALIEN_KICK_MID.map(twice), hi: ALIEN_KICK_HI.map(twice) },
+};
+
+/** Cold 808's bass arps: the chain's onsets cycle through the first one, two or three notes (density decides). */
+const ELECTRO_ARPS: readonly (readonly number[])[] = [[0, 12, 10], [0, 12, 7], [0, 10, 12]];
+
 /** Overtone Pulse's series: only octaves, fifths and the soft third. Group 0 holds still; 1-3 breathe in turn (3 only when busy). */
 const DRONE_PARTIALS: readonly { n: number; g: number; group: 0 | 1 | 2 | 3 }[] = [
   { n: 1, g: 0.42, group: 0 },
@@ -7693,6 +7792,9 @@ const DRONE_WALL_COLOURS: readonly number[][] = [
   [0, 7, 14, 19, 24], // add9
   [0, 7, 12, 16, 24], // major tenth
 ];
+
+/** Dark Low's cave pad, semitones over the bass tonic: tonic, fifth and octave two octaves up (a busy chain adds 43). */
+const DRONE_DARK_VOICING = [24, 31, 36];
 
 /** Equal-power crossfade envelope: rises over `attack`, holds until `hold`, falls over `release` to 0. */
 function droneEnv(s: number, attack: number, hold: number, release: number): number {
@@ -7887,10 +7989,8 @@ const WONKY_SNARES: Record<"dilla" | "dillaGhost" | "feeder" | "glitch", WonkySn
   glitch: { body: 245, to: 190, bodyDecay: 0.05, bodyLevel: 0.8, noise: 2900, q: 0.5, noiseDecay: 0.11, noiseLevel: 1.55, bits: 6 },
 };
 
-interface DubKick { center: number; rise: number; sweep: number; hold: number; decay: number; drive: number; lp: number; click: number; clickHz: number; level: number }
-
 /** A chord of the natural minor: the sub's root (semitones from the tonic) and the stab's upper voicing over the tonic. */
-interface DubChord { root: number; upper: readonly number[] }
+type DubChord = DubChordSpec;
 
 /**
  * The chords, voice-led around the tonic so a change moves one or two voices by a step. Every tone is in the
@@ -7906,29 +8006,17 @@ const DUB_CHORDS = {
 } satisfies Record<string, DubChord>;
 type DubChordName = keyof typeof DUB_CHORDS;
 
-/** One dub techno style: kick, sub figure, progression, stab, pad, bell, drums, texture and how slowly it moves. */
+/**
+ * One dub techno style: kick, sub figure, progression, stab, pad, bell, drums, texture and how slowly it moves.
+ * The voices are styledata.ts's dub specs (a station style's data is merged over these: dubStyleOf).
+ */
 interface DubStyle {
-  kick: DubKick;
+  kick: DubKickSpec;
   /** Sub notes per bar: [step, length in 16ths, level, interval over the chord root (0 / 7 / 12)]. */
-  bass: { notes: readonly (readonly [number, number, number, number?])[]; level: number; octave: number; lp: number; attack: number; release: number };
-  /** Progressions, one per epoch: each chord holds `bars` bars. */
-  progs: readonly { bars: number; seq: readonly DubChordName[] }[];
-  stab: {
-    octave: number;
-    wave: OscillatorType;
-    detune: number;
-    lp: number;
-    /** Cutoff multiplier at the attack, falling to the cutoff over `envTime`. */
-    env: number;
-    envTime: number;
-    q: number;
-    attack: number;
-    release: number;
-    gain: number;
-    pan: number;
-    /** Depth of the four-bar cutoff wobble on top of the slow sweep. */
-    move: number;
-  };
+  bass: DubSubSpec & { notes: readonly (readonly [number, number, number, number?])[] };
+  /** Progressions, one per epoch: each chord holds `bars` bars (chord names: DUB_CHORDS or the style's `chords`). */
+  progs: readonly { bars: number; seq: readonly string[] }[];
+  stab: DubStabSpec;
   /** Stab steps per bar, one figure per epoch. The last hit is the answer that density adds. */
   figures: readonly (readonly number[])[];
   /** Level of each figure hit, in order. */
@@ -7936,14 +8024,14 @@ interface DubStyle {
   /** Bars per full open-close of the stab and pad filters, and of the echo's loop filter. */
   stabPeriod: number;
   echoPeriod: number;
-  pad: { level: number; wave: OscillatorType; detune: number; octave: number; lp: number; attack: number; release: number };
+  pad: DubPadSpec;
   /** Fragments over four bars: [16th in the four bars, chord tone counted from the top, level]; one in `every` phrases. */
-  bell: { level: number; every: number; ratio: number; index: number; decay: number; frags: readonly (readonly (readonly [number, number, number])[])[] };
-  clap: { level: number; hz: number; decay: number; rim: boolean };
+  bell: DubBellSpec & { frags: readonly (readonly (readonly [number, number, number])[])[] };
+  clap: DubClapSpec;
   /** `shuffle`: shaker level per 16th of the beat (on, e, and, a). */
-  hat: { off: number; decay: number; hp: number; metal: number; shaker: number; shakerDecay: number; shuffle: readonly number[] };
+  hat: DubHatSpec;
   /** Two-bar figure: [16th in the two bars, 1 tonic / 1.5 fifth, level]. */
-  perc: { level: number; decay: number; figure: readonly (readonly [number, number, number])[] };
+  perc: DubPercSpec & { figure: readonly (readonly [number, number, number])[] };
   vinyl: number;
   field: number;
   fieldHz: number;
@@ -7955,13 +8043,13 @@ const DUB_STYLES: Record<string, DubStyle> = {
   // a bell fragment every second phrase, rain and hiss.
   classic: {
     kick: { center: 50, rise: 2, sweep: 0.075, hold: 0.14, decay: 0.6, drive: 1.7, lp: 230, click: 0.12, clickHz: 1500, level: 0.27 },
-    bass: { notes: [[2, 1.7, 1], [6, 1.7, 0.92], [10, 1.7, 1], [13, 0.8, 0.62, 12], [14, 1.6, 0.9]], level: 0.62, octave: 0.14, lp: 300, attack: 0.01, release: 0.05 },
+    bass: { notes: [[2, 1.7, 1], [6, 1.7, 0.92], [10, 1.7, 1], [13, 0.8, 0.62, 12], [14, 1.6, 0.9]], level: 0.62, octave: 0.14, lp: 300, attack: 0.01, release: 0.05, drive: 1.3 },
     progs: [
       { bars: 4, seq: ["i9", "iv7"] },
       { bars: 2, seq: ["i9", "VI9", "iv7", "i11"] },
       { bars: 4, seq: ["i9", "VII9", "VI9", "iv7"] },
     ],
-    stab: { octave: 0, wave: "sawtooth", detune: 8, lp: 1050, env: 2.2, envTime: 0.16, q: 1.8, attack: 0.005, release: 0.34, gain: 0.9, pan: 0.1, move: 0.25 },
+    stab: { wave: "sawtooth", detune: 8, lp: 1050, env: 2.2, envTime: 0.16, q: 1.8, hp: 170, attack: 0.005, release: 0.34, gain: 0.9, pan: 0.1, move: 0.25, octave: 0 },
     figures: [[3, 10, 14], [2, 7, 10], [3, 6, 11], [2, 10, 13]],
     accents: [1, 0.82, 0.7],
     stabPeriod: 32,
@@ -7979,13 +8067,13 @@ const DUB_STYLES: Record<string, DubStyle> = {
   // once or twice a bar, the pad up front, a slow bell melody every phrase, more rain and room; drums hushed but steady.
   ixtlan: {
     kick: { center: 47, rise: 1.7, sweep: 0.09, hold: 0.17, decay: 0.7, drive: 1.4, lp: 175, click: 0.04, clickHz: 900, level: 0.27 },
-    bass: { notes: [[2, 5.6, 1], [10, 3.6, 0.95], [14, 1.6, 0.8, 7]], level: 0.64, octave: 0.08, lp: 220, attack: 0.03, release: 0.12 },
+    bass: { notes: [[2, 5.6, 1], [10, 3.6, 0.95], [14, 1.6, 0.8, 7]], level: 0.64, octave: 0.08, lp: 220, attack: 0.03, release: 0.12, drive: 1.3 },
     progs: [
       { bars: 4, seq: ["i9", "VI9", "iv7", "i11"] },
       { bars: 4, seq: ["i11", "VII9", "VI9", "v7"] },
       { bars: 4, seq: ["i9", "iv7", "VI9", "VII9"] },
     ],
-    stab: { octave: 0, wave: "sawtooth", detune: 12, lp: 750, env: 1.5, envTime: 0.3, q: 1.1, attack: 0.03, release: 0.8, gain: 0.71, pan: -0.1, move: 0.15 },
+    stab: { wave: "sawtooth", detune: 12, lp: 750, env: 1.5, envTime: 0.3, q: 1.1, hp: 170, attack: 0.03, release: 0.8, gain: 0.71, pan: -0.1, move: 0.15, octave: 0 },
     figures: [[3, 11], [6, 14], [2, 10], [11, 3]],
     accents: [1, 0.72],
     stabPeriod: 32,
@@ -8003,13 +8091,13 @@ const DUB_STYLES: Record<string, DubStyle> = {
   // four-hit stab figure over two chords with the filter wobbling every four bars, drier hats, a rare single pluck.
   moment: {
     kick: { center: 52, rise: 1.9, sweep: 0.06, hold: 0.12, decay: 0.52, drive: 1.6, lp: 240, click: 0.16, clickHz: 1700, level: 0.27 },
-    bass: { notes: [[2, 1, 1], [3, 0.9, 0.7], [6, 1, 1], [7, 0.9, 0.7], [10, 1, 1], [11, 0.9, 0.7], [14, 1, 1], [15, 0.8, 0.6, 12]], level: 0.66, octave: 0.12, lp: 260, attack: 0.008, release: 0.04 },
+    bass: { notes: [[2, 1, 1], [3, 0.9, 0.7], [6, 1, 1], [7, 0.9, 0.7], [10, 1, 1], [11, 0.9, 0.7], [14, 1, 1], [15, 0.8, 0.6, 12]], level: 0.66, octave: 0.12, lp: 260, attack: 0.008, release: 0.04, drive: 1.3 },
     progs: [
       { bars: 4, seq: ["i9", "iv7"] },
       { bars: 4, seq: ["i11", "VI9"] },
       { bars: 4, seq: ["i9", "v7"] },
     ],
-    stab: { octave: 0, wave: "square", detune: 6, lp: 820, env: 1.9, envTime: 0.09, q: 3.2, attack: 0.005, release: 0.22, gain: 0.5, pan: 0.05, move: 0.7 },
+    stab: { wave: "square", detune: 6, lp: 820, env: 1.9, envTime: 0.09, q: 3.2, hp: 170, attack: 0.005, release: 0.22, gain: 0.5, pan: 0.05, move: 0.7, octave: 0 },
     figures: [[2, 5, 10, 13], [3, 6, 11, 14], [2, 7, 10, 15]],
     accents: [1, 0.75, 0.9, 0.72],
     stabPeriod: 8,
@@ -8024,6 +8112,38 @@ const DUB_STYLES: Record<string, DubStyle> = {
     fieldHz: 600,
   },
 };
+
+const dubStyles = new WeakMap<GenreStyle, DubStyle>();
+/**
+ * A station style's dub techno (styledata.ts DubTechnoData) over its base's house style `h`: every voice merged
+ * field by field, every figure list replaced. Once per style object.
+ */
+function dubStyleOf(style: GenreStyle, h: DubStyle): DubStyle {
+  const hit = dubStyles.get(style);
+  if (hit) return hit;
+  const d = style.data as DubTechnoData;
+  const kit = d.kit ?? {};
+  const merged: DubStyle = {
+    ...h,
+    kick: specOf(kit.kick, h.kick),
+    clap: specOf(kit.clap, h.clap),
+    hat: specOf(kit.hat, h.hat),
+    perc: { ...specOf(kit.perc, h.perc), figure: d.percs ?? h.perc.figure },
+    bass: { ...specOf(d.subTone, h.bass), notes: d.bassline ?? h.bass.notes },
+    progs: d.progressions ?? h.progs,
+    stab: specOf(d.stabTone, h.stab),
+    figures: d.figures ?? h.figures,
+    accents: d.accents ?? h.accents,
+    stabPeriod: d.sweep?.stab ?? h.stabPeriod,
+    echoPeriod: d.sweep?.echo ?? h.echoPeriod,
+    pad: specOf(d.padTone, h.pad),
+    bell: { ...specOf(d.bellTone, h.bell), frags: d.bells ?? h.bell.frags },
+    field: d.field?.level ?? h.field,
+    fieldHz: d.field?.hz ?? h.fieldHz,
+  };
+  dubStyles.set(style, merged);
+  return merged;
+}
 
 /**
  * Dub techno mix per style, over MIX.dubtechno. The echo is a dotted eighth (3 sixteenths); its taps are
@@ -8136,6 +8256,33 @@ const ACID_VOICES: Record<"classic" | "acidhouse" | "rubber", Acid303Voice> = {
   rubber: { wave: "square", cutoff: 95, envMod: 900, resonance: 3.0, decay: 0.22, drive: 1.05, level: 0.155, accent: 1.28, gate: 2.65, sweep: 8 },
 };
 
+/** The electro bass per base (styledata.ts ElectroBassSpec; pairs are [plain, accent]). Cold 808 reads no `osc`, `open`, `drive`, `glide`, `fm`. */
+const ELECTRO_BASS_TONES: { classic: Omit<ElectroBassSpec, "osc" | "open" | "drive" | "glide" | "fm">; client03: Omit<ElectroBassSpec, "fm">; alienrave: ElectroBassSpec } = {
+  // Cold 808: square and saw, a snappy resonant filter from 600 Hz (the tick opens it) down onto the note.
+  classic: { cutoff: 600, color: 1800, q: [7, 7], decay: [0.13, 0.13], level: [0.2, 0.2], sub: [0.45, 0.45] },
+  // Client_03: grimy saw and square into a 24 dB lowpass from 150 Hz, tanh, a clean sine an octave down.
+  client03: {
+    osc: [{ type: "sawtooth", detune: -6, level: 0.5 }, { type: "square", detune: 7, level: 0.34 }],
+    cutoff: 150, color: 260, q: [3.8, 5.5], open: [4.2, 7], decay: [0.1, 0.16], drive: 2.4, level: [0.155, 0.19], sub: [1.2, 1.45], glide: 0.05,
+  },
+  // Alien Rave: two detuned saws and an FM sine snarl, a resonant lowpass from 170 Hz, hard tanh.
+  alienrave: {
+    osc: [{ type: "sawtooth", detune: -9, level: 0.42 }, { type: "sawtooth", detune: 10, level: 0.36 }],
+    cutoff: 170, color: 420, q: [6.5, 9], open: [3.6, 6.5], decay: [0.07, 0.11], drive: 2.1, level: [0.155, 0.2], sub: [1.25, 1.5], glide: 0.045, fm: [1.3, 2.2],
+  },
+};
+/** Client_03's ghostly pad: a triangle pair a tone (plus a faint sine an octave up), a dark breathing lowpass. */
+const CLIENT_PAD: PadSpec = {
+  osc: [{ type: "triangle", detune: -9, level: 0.5 }, { type: "triangle", detune: 8, level: 0.5 }],
+  cutoff: 700, q: 1.4, attack: 0.9, release: 0.3, level: 0.11, vib: 0,
+};
+/** Client_03's speak-and-spell voice. */
+const CLIENT_VOICE: ElectroVoiceSpec = { pitch: 118, bits: 4, hp: 340, lp: 3600, level: 0.06 };
+/** Alien Rave's hoover stab. */
+const ALIEN_HOOVER: HooverSpec = { cutoff: 900, color: 2600, q: 3.2, hp: 180, bend: 2, detune: [-17, 2, 16], level: 0.22 };
+/** Alien Rave's robot call. */
+const ALIEN_VOX_TONE: VoxSpec = { ring: 1.5, level: 0.75 };
+
 // Drum voices as layers (styledata.ts DrumVoice). Offsets are written as the products the hand-written voices used,
 // so the times stay bit-identical.
 
@@ -8220,7 +8367,42 @@ const LOFIHOUSE_CRUNCH_SNARE: DrumVoice = [
   { crush: 4, filter: "bandpass", freq: 1900, q: 0.6, decay: 0.17, level: 0.5, tail: true, lp: 7500 },
 ];
 
+/** Client_03's ghost snare, a slice of a break: a short bandpassed burst (brighter with the tick) and a low tick. */
+const CLIENT_GHOST: DrumVoice = [
+  { noise: "bandpass", freq: 1900, color: 500, q: 0.9, decay: 0.06, level: 0.42 },
+  { tone: "triangle", freq: 210, to: 175, sweep: 0.02, decay: 0.03, level: 0.16 },
+];
+
 /** The kits of the opened genres per base (liquid's are LIQUID_KITS). Fields a base does not play are noted in styledata.ts. */
+const ELECTRO_KITS: Record<"classic" | "client03" | "alienrave", ElectroKit> = {
+  // Cold 808: a round 808 with a long drop, the 808 snare, a metallic hat at one level.
+  classic: {
+    kick: { start: 190, end: 46, sweep: 0.07, decay: 0.62, click: 0.1, drive: 1.4, body: 1.02 },
+    snare: "808",
+    ghost: CLIENT_GHOST,
+    hat: { hp: 7400, decay: 0.03, metal: 0.9, q: 1.5 },
+    open: { hp: 7400, decay: 0.14, metal: 0.9, q: 1.5, level: 0.5 },
+    accents: [0.5, 0.5, 0.5, 0.5],
+  },
+  // Client_03: a short-click 808 (heat and buys add drive), a crisp snare with a clap, chopped break hats.
+  client03: {
+    kick: { start: 168, end: 47, sweep: 0.042, decay: 0.44, click: 0.3, clickHp: 2600, drive: 1.8, body: 1.12 },
+    snare: "client",
+    ghost: CLIENT_GHOST,
+    hat: { hp: 7600, decay: 0.022, metal: 0.4, q: 1.1 },
+    open: { hp: 5200, decay: 0.1, metal: 0.25, q: 1.1, level: 0.62 },
+    accents: [0.44, 0.32, 0.6, 0.32],
+  },
+  // Alien Rave: a tight 909-ish kick with a hard click (pressure and heat add drive), a 909 snare, bright 16th hats.
+  alienrave: {
+    kick: { start: 172, end: 48, sweep: 0.034, decay: 0.3, click: 0.5, clickHp: 2400, drive: 2, body: 1.08 },
+    snare: "alien",
+    ghost: CLIENT_GHOST,
+    hat: { hp: 9400, decay: 0.019, metal: 0.6, q: 1.3 },
+    open: { hp: 6200, decay: 0.11, metal: 0.45, q: 0.8, level: 0.5 },
+    accents: [0.42, 0.3, 0.56, 0.3],
+  },
+};
 const ACID_KITS: Record<"classic" | "acidhouse" | "rubber", AcidKit> = {
   // Analord: a dry 808, the house clap, a metallic 16th hat.
   classic: {
@@ -8324,9 +8506,115 @@ const LOFIHOUSE_KITS: Record<"classic" | "chop" | "rave", LofiKit> = {
   },
 };
 
-/** A genre's effects as style data: its MIX, the default duck recovery and the master highpass. */
-function fxOf(genre: GenreId, duck?: { bass: number; release: number }): FxData {
-  const m = MIX[genre];
+// Ambient IDM and drone (styledata.ts AmbientIdmData, DroneData): the voices the renderers wrote inline, as tables.
+// Every value is the literal it replaced, read in the same place, so the house output is unchanged.
+
+/** The Ambient IDM kits per base (AmbientKit; AMBIENT_KIT_PARTS lists the parts each base plays). */
+const AMBIENT_KITS: {
+  classic: Pick<AmbientKit, "kick" | "snare" | "hat">;
+  boc: Pick<AmbientKit, "kick" | "thump" | "snare" | "dust" | "ghost" | "hat" | "open">;
+  crystal: Pick<AmbientKit, "click" | "rim" | "crack" | "tick" | "hat" | "open">;
+} = {
+  classic: {
+    kick: { start: 88, end: 50, sweep: 0.07, decay: 0.24, click: 0.01, body: 0.9 },
+    snare: TAPE_SNARE,
+    hat: { hp: 2600, decay: 0.045, metal: 0.12, level: 0.34 },
+  },
+  // The SP pocket: a driven round kick with a lowpassed puff, a snare body and crack with a dust layer, short ghosts.
+  boc: {
+    kick: { start: 90, end: 58, sweep: 0.08, decay: 0.2, click: 0, body: 0.78, drive: 1.05 },
+    thump: 0.04,
+    snare: [
+      { tone: "triangle", freq: 172, to: 130, sweep: 0.045, decay: 0.09, level: 0.22 },
+      { noise: "bandpass", freq: 1400, q: 0.7, decay: 0.22, level: 0.62 },
+    ],
+    dust: [{ noise: "lowpass", freq: 2200, q: 0.4, decay: 0.1, level: 0.12 }],
+    ghost: [
+      { tone: "triangle", freq: 196, to: 130, sweep: 0.045, decay: 0.04, level: 0.22 },
+      { noise: "bandpass", freq: 1600, q: 0.7, decay: 0.06, level: 0.28 },
+    ],
+    hat: { hp: 1100, decay: 0.032, metal: 0.04, level: 0.2 },
+    open: { hp: 1100, decay: 0.065, metal: 0.04, level: 0.34 },
+  },
+  // Edits, not a kit: a pitched click kick, a high rim with a crack, glassy ticks.
+  crystal: {
+    click: [
+      { tone: "sine", freq: 188, to: 74, sweep: 0.032, decay: 0.08, level: 0.3 },
+      { noise: "highpass", freq: 3400, q: 0.7, decay: 0.01, level: 0.055 },
+    ],
+    rim: { level: 0.32, pitch: 1.6 },
+    crack: { noise: "highpass", freq: 4000, q: 0.8, decay: 0.035, level: 0.14 },
+    tick: { noise: "bandpass", freq: 3000, q: 2.2, decay: 0.016, level: 0.07 },
+    hat: { hp: 4600, decay: 0.018, metal: 0.22, level: 0.3 },
+    open: { hp: 4600, decay: 0.01, metal: 0.22, level: 0.18 },
+  },
+};
+
+/** Tape Haze's warped pad: wide-detuned saws and a triangle, driven, highpassed, under a deep tape wow (vib). */
+const AMBIENT_HAZE_PAD: PadSpec = {
+  osc: [{ type: "sawtooth", detune: -18, level: 0.2 }, { type: "sawtooth", detune: 13, level: 0.18 }, { type: "triangle", detune: 3, level: 0.3 }],
+  cutoff: 1500, q: 0.65, attack: 2.4, release: 3.2, level: 0.058, vib: 14, drive: 1.35, hp: 140,
+};
+/** Tape Haze's analog bass: a detuned triangle and a quiet saw over the sine sub. */
+const AMBIENT_HAZE_BASS: AmbientBassSpec = {
+  osc: [{ type: "triangle", detune: -9, level: 0.72 }, { type: "sawtooth", detune: 12, level: 0.26 }],
+  cutoff: 200, level: 0.06, sub: 0.08,
+};
+/** Tape Haze's keyboard: two flat triangles and a faint music-box octave, scooping into each note. */
+const AMBIENT_HAZE_LEAD: AmbientLeadSpec = {
+  level: 0.11, cutoff: 900, scoop: 38, vib: 11,
+  osc: [{ type: "triangle", oct: 0, detune: -12, level: 0.62 }, { type: "triangle", oct: 0, detune: 11, level: 0.58 }, { type: "triangle", oct: 1, detune: 4, level: 0.16 }],
+};
+/** The slow high line: a sine and a triangle. Tape Keys keeps it dark, Crystal opens it. */
+const AMBIENT_LINES: Record<"classic" | "crystal", AmbientLineSpec> = {
+  classic: { level: 0.016, cutoff: 2600, osc: [{ type: "sine", detune: -4, level: 0.7 }, { type: "triangle", detune: 5, level: 0.3 }] },
+  crystal: { level: 0.013, cutoff: 4200, osc: [{ type: "sine", detune: -4, level: 0.7 }, { type: "triangle", detune: 5, level: 0.3 }] },
+};
+/** Crystal's glass bed: detuned octaves and a slightly sharp shimmer per chord tone. */
+const AMBIENT_GLASS: AmbientGlassSpec = {
+  level: 0.11, cutoff: 3400, hp: 180, attack: 2.1, release: 2.6,
+  partials: [
+    { type: "sine", ratio: 1, detune: 0, level: 0.46 },
+    { type: "triangle", ratio: 1, detune: -8, level: 0.28 },
+    { type: "sine", ratio: 2, detune: 9, level: 0.2 },
+    { type: "sine", ratio: 4.02, detune: -5, level: 0.12 },
+    { type: "sine", ratio: 6.07, detune: 4, level: 0.045 },
+  ],
+};
+const AMBIENT_BELL: AmbientBellSpec = { level: 0.04, ratio: 3.49, index: 3.1, decay: 0.9 };
+/** Crystal's arp voice: a sine, a soft octave and a faint twelfth. */
+const AMBIENT_SHIMMER: AmbientShimmerSpec = {
+  level: 0.15, decay: 0.55, short: 0.32,
+  partials: [{ ratio: 1, detune: 0, level: 0.72 }, { ratio: 2, detune: 5, level: 0.22 }, { ratio: 3, detune: -4, level: 0.07 }],
+};
+
+/** Wall's pad layers: saws on the two lowest voices, triangles above, two lowpasses breathing, a still sine core. */
+const DRONE_WALL: DronePadSpec = {
+  level: 0.05, waves: ["sawtooth", "sawtooth", "triangle"], detune: 3, spread: 1.5, cutoff: 440, glow: 380, range: 1.55, period: 19,
+  depth: 0.12, drift: 3, core: [[-12, 0.26], [-5, 0.1]],
+};
+/** Dark Low's cave pad: wide triangles under a low lowpass. */
+const DRONE_DARK_PAD: DronePadSpec = { level: 0.042, waves: ["triangle"], detune: 4, spread: 2, cutoff: 300, glow: 200, range: 1.35, period: 24 };
+/** Dark Low's bed: beating sub pairs an octave apart, a hollow fifth, octave and twelfth over them. */
+const DRONE_BED: DroneBedSpec = {
+  subLevel: 0.046, bodyLevel: 0.064,
+  subs: [[-12, -13, 0.58], [-12, 14, 0.58], [0, -7, 0.34], [0, 8, 0.34]],
+  body: [[7, -5, 0.48], [7, 6, 0.48], [12, 3, 0.22], [19, -4, 0.12]],
+  beat: 0.72, drive: 1.2, cutoff: 260,
+};
+/** Dark Low's concussion: a long fall from 42 Hz, felt more than heard. */
+const DRONE_KICK: KickSpec = { start: 42, end: 28, sweep: 0.7, decay: 1.8, click: 0, body: 1.2 };
+/** The glints per drone base: Wall's high bells, Dark Low's far bowls, Overtone Pulse's glass partials. */
+const DRONE_GLINTS: Record<"classic" | "dark" | "pulse", DroneGlintSpec> = {
+  classic: { level: 0.016, decay: 3.2, attack: 0.05, top: 2600, gap: 2 },
+  dark: { level: 0.02, decay: 4, attack: 0.22, top: 1100, gap: 2.5 },
+  pulse: { level: 0.012, decay: 2.6, attack: 0.12, top: 2200, gap: 3 },
+};
+/** Overtone Pulse: the series' level and lowpass; group 0 barely breathes, groups 1-3 deeper in turn. */
+const DRONE_OVERTONE: DroneOvertoneSpec = { level: 0.2, cutoff: 1000, glow: 900, depths: [0.12, 0.5, 0.55, 0.6] };
+
+/** A genre's effects as style data: its MIX (or `m`), the default duck recovery and the master highpass. */
+function fxOf(genre: GenreId, duck?: { bass: number; release: number }, m: Mix = MIX[genre]): FxData {
   return {
     echo: { ...m.echo },
     echoSend: { ...m.echoSend },
@@ -8372,4 +8660,45 @@ export const SOUND_DEFAULTS: { readonly [G in DataGenre]: Readonly<Record<string
     acidhouse: { kit: ACID_KITS.acidhouse, voice: ACID_VOICES.acidhouse, vinyl: 0, mix: {}, fx: fxOf("acid", { bass: 0.42, release: 0.24 }) },
     rubber: { kit: ACID_KITS.rubber, voice: ACID_VOICES.rubber, vinyl: 0, mix: {}, fx: fxOf("acid", { bass: 0.4, release: 0.3 }) },
   },
+  dubtechno: { classic: dubDefaults("classic"), ixtlan: dubDefaults("ixtlan"), moment: dubDefaults("moment") },
+  electro: {
+    classic: { kit: ELECTRO_KITS.classic, bassTone: ELECTRO_BASS_TONES.classic, vinyl: 0, mix: {}, fx: fxOf("electro") },
+    client03: {
+      kit: ELECTRO_KITS.client03, bassTone: ELECTRO_BASS_TONES.client03, pad: CLIENT_PAD, voice: CLIENT_VOICE, vinyl: 0, mix: {},
+      fx: fxOf("electro", { bass: 0.5, release: 0.16 }),
+    },
+    alienrave: { kit: ELECTRO_KITS.alienrave, bassTone: ELECTRO_BASS_TONES.alienrave, hoover: ALIEN_HOOVER, vox: ALIEN_VOX_TONE, vinyl: 0, mix: {}, fx: fxOf("electro") },
+  },
+  ambientidm: {
+    classic: { kit: AMBIENT_KITS.classic, pad: TAPE_PAD, line: AMBIENT_LINES.classic, vinyl: 0.55, mix: {}, fx: fxOf("ambientidm") },
+    boc: { kit: AMBIENT_KITS.boc, pad: AMBIENT_HAZE_PAD, bass: AMBIENT_HAZE_BASS, lead: AMBIENT_HAZE_LEAD, vinyl: 1.05, mix: {}, fx: fxOf("ambientidm") },
+    crystal: {
+      kit: AMBIENT_KITS.crystal, line: AMBIENT_LINES.crystal, glass: AMBIENT_GLASS, bell: AMBIENT_BELL, shimmer: AMBIENT_SHIMMER, vinyl: 0, mix: {}, fx: fxOf("ambientidm"),
+    },
+  },
+  drone: {
+    classic: { wall: DRONE_WALL, glint: DRONE_GLINTS.classic, breath: 0.022, swell: 0.06, vinyl: 0, mix: {}, fx: fxOf("drone") },
+    dark: { pad: DRONE_DARK_PAD, bed: DRONE_BED, kick: DRONE_KICK, glint: DRONE_GLINTS.dark, rumble: 0.042, vinyl: 0, mix: {}, fx: fxOf("drone") },
+    pulse: { overtone: DRONE_OVERTONE, glint: DRONE_GLINTS.pulse, swell: 0.06, vinyl: 0, mix: {}, fx: fxOf("drone") },
+  },
 };
+
+/** A dub techno base's sound fields: its DUB_STYLES voices and its mix (MIX.dubtechno under DUB_MIX, as the first hit builds it). */
+function dubDefaults(base: "classic" | "ixtlan" | "moment"): DubTechnoData {
+  const h = DUB_STYLES[base];
+  const { notes: _notes, ...subTone } = h.bass;
+  const { figure: _figure, ...perc } = h.perc;
+  const { frags: _frags, ...bellTone } = h.bell;
+  return {
+    kit: { clap: h.clap, kick: h.kick, hat: h.hat, perc },
+    subTone,
+    stabTone: h.stab,
+    padTone: h.pad,
+    bellTone,
+    sweep: { stab: h.stabPeriod, echo: h.echoPeriod },
+    field: { level: h.field, hz: h.fieldHz },
+    vinyl: h.vinyl,
+    mix: {},
+    fx: fxOf("dubtechno", undefined, { ...MIX.dubtechno, ...DUB_MIX[base] }),
+  };
+}

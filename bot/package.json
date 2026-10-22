@@ -19,14 +19,14 @@
     "@anthropic-ai/sdk": "^0.65.0",
     "@swarm-sequencer/core": "*",
     "@swarm-sequencer/synth": "*",
+    "@x402/core": "2.28.0",
+    "@x402/evm": "2.28.0",
     "playwright": "1.64.1",
     "tsx": "^4.19.0",
     "viem": "^2.21.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "@x402/core": "2.28.0",
-    "@x402/evm": "2.28.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   }
