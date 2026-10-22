@@ -146,6 +146,11 @@ body.stations-page { background: var(--black); }
 .ap-price b { color: var(--bone); }
 .ap-form .btn-sq { justify-self: start; cursor: pointer; }
 .ap-form .btn-sq:disabled { opacity: 0.5; cursor: wait; }
+/* The payment step: a lit box and a filled button, so it is not missed under the quote. */
+.ap-tx { border: 1px solid var(--phos-dim); background: rgba(var(--phos-rgb), 0.05); padding: 14px; }
+.ap-form .ap-step { margin: 0; font-size: 12px; font-weight: 800; letter-spacing: 0.16em; color: var(--phos); }
+.ap-form .ap-confirm { justify-self: stretch; padding: 14px 18px; font-size: 14px; font-weight: 800; letter-spacing: 0.16em; color: #050605; background: var(--phos); border-color: var(--phos); box-shadow: 0 0 18px rgba(var(--phos-rgb), 0.35); }
+.st .ap-form .ap-confirm:hover { color: #050605; background: var(--bone); border-color: var(--bone); }
 .ap-msg { margin: 0; font-family: var(--lcd); font-size: 19px; line-height: 1.15; color: var(--phos); }
 .ap-msg:empty { display: none; }
 .ap-msg.bad, .ap .bad { color: var(--sell); }

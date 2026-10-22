@@ -19,7 +19,30 @@ export class Audio {
     return !!this.player?.running;
   }
 
-  async start(state: SequencerState, clock: number | null) {
+  /**
+   * Call synchronously inside the tap/click handler, before any await. WebKit (every iOS browser) only lets a context
+   * start inside the user gesture itself: created or resumed after an await, it stays suspended and plays nothing.
+   * Also asks iOS for the "playback" audio session, so the ring/silent switch does not mute the page.
+   */
+  unlock() {
+    const session = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
+    if (session) {
+      try {
+        session.type = "playback";
+      } catch {
+        // older WebKit: no audio session control
+      }
+    }
+    const ctx = this.ensureContext();
+    void ctx.resume();
+    // A one-sample silent buffer started in the gesture: older iOS needs a source to start before it unlocks output.
+    const src = ctx.createBufferSource();
+    src.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+    src.connect(ctx.destination);
+    src.start(0);
+  }
+
+  private ensureContext(): AudioContext {
     if (!this.ctx) {
       const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       const ctx = new Ctor({ latencyHint: "interactive" });
@@ -38,7 +61,11 @@ export class Audio {
       this.freqData = new Uint8Array(analyser.frequencyBinCount);
       this.player = createLivePlayer(ctx, { program: this.program });
     }
-    await this.ctx.resume();
+    return this.ctx;
+  }
+
+  async start(state: SequencerState, clock: number | null) {
+    await this.ensureContext().resume();
     this.player!.setState(state);
     this.player!.setClock(clock);
     if (!this.player!.running) this.player!.start();

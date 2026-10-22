@@ -40,7 +40,15 @@ export async function withRetry<T>(clients: PublicClient[], fn: (c: PublicClient
   throw last;
 }
 
-function isRangeError(e: unknown): boolean {
+/** A rate limit, not a range limit: Tenderly answers "Request exceeds defined limit" with details "rate limit
+ *  exceeded". Shrinking the range would only send more requests; wait and retry the same range. */
+export function isRateLimit(e: unknown): boolean {
+  const m = String((e as Error)?.message ?? e).toLowerCase();
+  return /rate limit|ratelimit|too many requests|status: 429|\b429\b/.test(m);
+}
+
+export function isRangeError(e: unknown): boolean {
+  if (isRateLimit(e)) return false;
   const m = String((e as Error)?.message ?? e).toLowerCase();
   return /range|too many|limit|exceed|too large|10000|response size|took too long/.test(m);
 }
@@ -105,14 +113,15 @@ async function chunked<T>(clients: PublicClient[], read: (c: PublicClient, from:
 
 async function getOnce<T>(clients: PublicClient[], read: (c: PublicClient) => Promise<T[]>): Promise<T[]> {
   let last: unknown;
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 6; i++) {
     const c = clients[i % clients.length];
     try {
       return await read(c);
     } catch (e) {
       last = e;
       if (isRangeError(e)) throw e; // caller shrinks the range
-      await sleep(500 * 2 ** i);
+      // Rate limited: back off longer (up to ~16 s) before the next client / try.
+      await sleep(isRateLimit(e) ? Math.min(16_000, 1000 * 2 ** i) : 500 * 2 ** Math.min(i, 3));
     }
   }
   throw last;

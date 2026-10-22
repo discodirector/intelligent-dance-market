@@ -52,7 +52,8 @@ export function playerMode(s: Entry, runtimeStatus: string | undefined): PlayerM
   if (s.house) return "live";
   const status = runtimeStatus ?? s.status;
   if (status === "expired") return "off-air";
-  if (status === "preview") return "preview";
+  // The pipeline marks the runtime entry first; status.json follows on the bot's next tick (up to 5 min later).
+  if (status === "preview" || s.status === "preview") return "preview";
   return "live";
 }
 

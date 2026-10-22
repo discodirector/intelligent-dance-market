@@ -89,7 +89,7 @@
       "quoteSymbol": "ETH",
       "kind": "v4",
       "calibration": { "supplyTickOffset": 0, "quotePerEth": "438.734" },
-      "theme": { "phos": "#d6c3ff", "phosDim": "#8561d1", "ghost": "#251548", "lcd": "#0b0517" },
+      "theme": { "phos": "#b8ceff", "phosDim": "#4e74cc", "ghost": "#12203f", "lcd": "#050a17" },
       "program": "infer",
       "status": "live",
       "paidUntil": "2026-11-22"

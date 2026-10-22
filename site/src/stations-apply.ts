@@ -234,9 +234,10 @@ function build(root: HTMLElement, cfg: Config, renewable: Station[], status: Sta
         <p class="tt-note">Send the exact amount (every digit), from any wallet, before the quote expires. Exchanges that round amounts or batch withdrawals may not work. Then paste the transaction hash below.</p>
       </div>
       <form class="ap-form ap-tx" novalidate>
+        <p class="ap-step">STEP 2 · AFTER YOU PAY, CONFIRM HERE</p>
         <label>PAID ON<select name="chainId">${payChains.map((id) => `<option value="${id}">${esc(chainName(id))}</option>`).join("")}</select></label>
         <label>TRANSACTION HASH<input name="txHash" placeholder="0x… 64 hex digits" autocomplete="off" spellcheck="false" /></label>
-        <button type="submit" class="btn-sq">CONFIRM PAYMENT ▸</button>
+        <button type="submit" class="btn-sq ap-confirm">CONFIRM PAYMENT ▸</button>
         <p class="ap-msg ap-state" aria-live="polite"></p>
       </form>
       <p class="ap-id">Application <code>${esc(app.applicationId)}</code>${copyButton(app.applicationId)} · keep it to ask about this payment.</p>`;

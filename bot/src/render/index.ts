@@ -43,6 +43,8 @@ export interface RenderOpts {
   title?: string;
   subtitle?: string;
   page?: string; // path or URL of a page implementing __setup/__frame/__audio; default site bot.html, else teaser
+  /** A station clip (station.ts label): the module shows its name in the station's blue theme, as its releases do. */
+  station?: string;
 }
 
 export interface RenderResult {
@@ -89,7 +91,7 @@ export async function render(opts: RenderOpts): Promise<RenderResult> {
       await pg.waitForFunction(() => typeof (window as any).__setup === "function");
       const info = await pg.evaluate(
         (o) => (window as any).__setup(o),
-        { timeline: opts.timeline, width, height, fps, seconds, title: opts.title, subtitle: opts.subtitle },
+        { timeline: opts.timeline, width, height, fps, seconds, title: opts.title, subtitle: opts.subtitle, station: opts.station },
       );
       log(`${width}x${height}: ${info.frames} frames, ${info.steps} steps, ${info.swaps} swaps`);
 

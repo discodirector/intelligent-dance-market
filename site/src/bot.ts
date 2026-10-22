@@ -50,6 +50,8 @@ interface SetupOptions {
   subtitle?: string;
   /** Hook rules of the timeline. Default: "v2" when any entry says so, else "v1". */
   rules?: "v1" | "v2";
+  /** A station clip: its name on the module and the blue LCD theme, as a station release (ReleaseSetup.station). */
+  station?: string;
 }
 
 const SR = 44100;
@@ -65,7 +67,7 @@ let audio: AudioBuffer | null = null;
 /** Channel 0 of the audio the frames show (teaser: the rendered buffer; release: the release WAV). */
 let samples: Float32Array | null = null;
 let rel: BuiltRelease | null = null;
-let opts: Required<Omit<SetupOptions, "timeline" | "rules">>;
+let opts: Required<Omit<SetupOptions, "timeline" | "rules" | "station">>;
 let v2 = false;
 const HEAT_MAX = DEFAULT_DROP_RULES.heatMax;
 let grid: Surface, scope: Surface, spectrum: Surface;
@@ -301,6 +303,11 @@ window.__setup = async (o) => {
   entries = raw.slice().sort((a, b) => (a.ts ?? a.timestamp ?? 0) - (b.ts ?? b.timestamp ?? 0));
   v2 = (o.rules ?? (entries.some((e) => e.rules === "v2") ? "v2" : "v1")) === "v2";
   document.body.classList.toggle("rules-v2", v2);
+  document.documentElement.classList.toggle("station-alt", !!o.station);
+  if (o.station) {
+    $("model-sub").textContent = o.station;
+    $("foot-left").textContent = `EVERY TRADE IS A NOTE · ${o.station.toUpperCase()}`;
+  }
   points = spread(entries, opts.seconds);
   if (v2) points = withHeat(points, entries);
   hits = planSteps(points, opts.seconds, null, BOT_BAR_OFFSET);

@@ -27,6 +27,13 @@ document.body.classList.toggle("rules-v2", v2);
 const station = stationFor(net);
 if (station && source.kind === "live") applyTheme(station.theme);
 /**
+ * A calibrated quote (not ETH: CHOG/MON, INFER/IMD): swaps reach the player valued in ETH (core swaps.ts), but the feed
+ * shows them in the pool's own quote, named by the pool label.
+ */
+const perEth = source.kind === "live" && station?.calibration && Number(station.calibration.quotePerEth) !== 1 ? Number(station.calibration.quotePerEth) : 0;
+const quoteName = perEth ? (station!.label.split("/")[1] ?? station!.quoteSymbol) : null;
+const shownQuote = (e: SwapEvent) => (perEth ? e.quote * perEth : e.quote);
+/**
  * What this station's page may do (runtime.ts playerMode, from the bot's status.json, stations.ts loadStatus):
  * "off-air" = the subscription ran out: the page still shows the state but never plays (PLAY waits for this answer,
  * at most the status read's 2.5 s, and refuses); "preview" = a pipeline station not listed yet, plays, labelled
@@ -87,11 +94,11 @@ function swapLine(e: SwapEvent) {
   li.className = (e.whale ? "whale" : e.isBuy ? "buy" : "sell") + (e.pulse ? " pulse" : "");
   li.title = new Date(e.ts * 1000).toISOString();
   const side = e.isBuy ? "BUY " : "SELL";
-  const amt = formatQuote(e.quote).padStart(8, " ");
+  const amt = formatQuote(shownQuote(e)).padStart(8, " ");
   const tag = (e.whale ? ` <span class="tag">${e.isBuy ? "FILL" : "DROP"}</span>` : "") + pulseTag(e);
   const tx = e.tx ? `<a href="${explorer}/tx/${e.tx}" target="_blank" rel="noopener">${short(e.tx)}</a>` : "";
   li.innerHTML =
-    `<span class="p">&gt;</span> <span class="t">${hhmm(e.ts)}</span>  <span class="sd">${side}</span> ${amt} ${e.quoteSymbol}  ` +
+    `<span class="p">&gt;</span> <span class="t">${hhmm(e.ts)}</span>  <span class="sd">${side}</span> ${amt} ${quoteName ?? e.quoteSymbol}  ` +
     `<span class="trk">${TRACKS[e.track].padEnd(6, " ")}</span> s${String(e.step + 1).padStart(2, "0")} <span class="pm">${e.on ? "+" : "−"}</span>${tag}  ${tx}  ` +
     `<a class="blk" href="${explorer}/block/${e.block}" target="_blank" rel="noopener">blk ${e.block}</a>`;
   pushLine(li);
@@ -113,7 +120,7 @@ function tapeSwap(e: SwapEvent) {
   const tag = (e.whale ? ` <span class="tag">${e.isBuy ? "FILL" : "DROP"}</span>` : "") + pulseTag(e);
   const tx = e.tx ? ` <a href="${explorer}/tx/${e.tx}" target="_blank" rel="noopener">${short(e.tx)}</a>` : "";
   tapeLine(
-    `<span class="t">${hhmm(e.ts)}</span> <span class="sd">${side}</span> ${formatQuote(e.quote).padStart(8, " ")} ${e.quoteSymbol} ` +
+    `<span class="t">${hhmm(e.ts)}</span> <span class="sd">${side}</span> ${formatQuote(shownQuote(e)).padStart(8, " ")} ${quoteName ?? e.quoteSymbol} ` +
       `<span class="trk">${TRACKS[e.track].padEnd(7, " ")}</span>s${String(e.step + 1).padStart(2, "0")} <span class="pm">${e.on ? "+" : "−"}</span>${tag}${tx}`,
     e.whale ? "whale" : e.isBuy ? "buy" : "sell",
   );
@@ -258,7 +265,10 @@ async function setPlaying(on: boolean) {
   playBtn.querySelector(".play-label")!.textContent = on ? "STOP" : "PLAY";
   document.body.classList.toggle("playing", on);
 }
-playBtn.addEventListener("click", () => void setPlaying(!audio.running));
+playBtn.addEventListener("click", () => {
+  if (!audio.running) audio.unlock(); // in the gesture, before setPlaying's awaits (iOS)
+  void setPlaying(!audio.running);
+});
 
 const knob = $("knob");
 function setKnob(v: number) {
@@ -327,6 +337,7 @@ rackStyles(0);
 rack.addEventListener("click", async (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".audition");
   if (!btn) return;
+  if (!audio.running) audio.unlock(); // in the gesture (iOS)
   eraOverride = eraOverride === btn.dataset.id ? null : btn.dataset.id!;
   if (!audio.running) await setPlaying(true);
   audio.player!.setEraOverride(eraOverride);
@@ -357,7 +368,7 @@ $("oc-grid").innerHTML = [
   ocRow(`TOKEN $${net.virtual?.tokenSymbol ?? "IDM"}`, net.token ?? "pending launch", [...addr(net.token, "token"), ...src(net.token)]),
   net.quote === NATIVE_ETH
     ? ocRow("PAIRED WITH", "native ETH")
-    : ocRow(`PAIRED WITH $${net.quoteSymbol}`, net.quote ?? "—", addr(net.quote, "token")),
+    : ocRow(`PAIRED WITH $${quoteName ?? net.quoteSymbol}`, net.quote ?? "—", addr(net.quote, "token")),
   ...(net.virtual && net.virtual.source.kind !== "v4"
     ? [ocRow("POOL", `${net.virtual.source.kind} · ${net.virtual.source.address}`, addr(net.virtual.source.address))]
     : [ocRow("POOL ID", net.poolId ?? "pending launch"), ocRow("POOL MANAGER", net.poolManager ?? "—", addr(net.poolManager))]),
