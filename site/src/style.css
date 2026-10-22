@@ -210,6 +210,9 @@ h1 em { font-style: normal; font-weight: 400; font-size: 0.5em; letter-spacing: 
 .station-tag .silk { color: var(--phos-dim); font-family: inherit; font-size: 14px; letter-spacing: 0.12em; }
 .station-tag b { font-weight: 400; font-size: 30px; line-height: 0.9; text-shadow: 0 0 12px rgba(var(--phos-rgb), 0.6); }
 .station-tag .chain { font-size: 16px; color: var(--phos-dim); letter-spacing: 0.08em; }
+/* A station whose subscription ran out (main.ts, the bot's status.json): off air, a link to renew. */
+.station-tag .off { font-size: 16px; color: var(--amber); letter-spacing: 0.08em; text-decoration: none; white-space: nowrap; }
+.station-tag .off:hover { text-decoration: underline; }
 .panel-meta { display: flex; align-items: center; gap: 7px; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-align: right; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #2fd06a; box-shadow: 0 0 0 2px rgba(47, 208, 106, 0.2); flex: none; }
 .dot.bad { background: var(--sell); box-shadow: 0 0 0 2px rgba(255, 95, 82, 0.2); }
@@ -273,6 +276,9 @@ h1 em { font-style: normal; font-weight: 400; font-size: 0.5em; letter-spacing: 
 .play:hover .play-glyph { border-left-color: var(--phos); }
 .play:active, .play[aria-pressed="true"] { transform: translateY(4px); box-shadow: 0 0 0 1px #000, 0 1px 0 #000, inset 0 1px 0 #4b4a41; }
 .play[aria-pressed="true"] { color: var(--phos); }
+/* Off air (main.ts offAir): the button stays visible, dimmed, and does nothing. */
+.play:disabled { cursor: not-allowed; opacity: 0.45; transform: none; }
+.play:disabled .play-glyph { border-left-color: var(--muted); }
 .play-glyph { width: 0; height: 0; border-left: 22px solid var(--bone); border-top: 14px solid transparent; border-bottom: 14px solid transparent; margin-left: 6px; }
 .play[aria-pressed="true"] .play-glyph { border: 0; width: 22px; height: 22px; margin: 0; background: var(--phos); box-shadow: 0 0 12px rgba(var(--phos-rgb), 0.7); }
 .play:focus-visible, .knob:focus-visible, .btn-sq:focus-visible { outline: 2px solid var(--phos-dim); outline-offset: 3px; }

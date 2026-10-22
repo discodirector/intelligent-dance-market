@@ -18,7 +18,9 @@ site/screenshots
 site/scripts
 bot/test
 bot/scripts
+!bot/scripts/station-apps.ts
 web/scripts
+!web/scripts/station-gate-windows.json
 web/public/stress
 
 # contracts/: only contracts/deployments is copied (site stage)
@@ -30,3 +32,5 @@ contracts/lib
 contracts/test
 contracts/script
 **/pulse.env
+**/api.env
+**/stations.env

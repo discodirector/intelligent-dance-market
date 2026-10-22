@@ -90,8 +90,10 @@ function sellRule(m: Measured<SellSim>, maxTax: number): RuleResult {
   const s = m.value;
   if (s === null) return unmeasured("sell", m, threshold);
   const tax = s.sellTaxPct === null ? "" : `, tax ${s.sellTaxPct}%`;
+  // GoPlus's verdict is a static scan, not a simulated sell: labelled as such.
+  const static_ = m.source.startsWith("GoPlus");
   if (!s.ok) {
-    return { rule: "sell", status: "fail", measured: `sell reverts${tax}`, threshold, source: m.source, reason: `simulated sell fails${m.note ? ` (${m.note})` : ""}`, manualReviewAllowed: false };
+    return { rule: "sell", status: "fail", measured: `${static_ ? "sells blocked (GoPlus)" : "sell reverts"}${tax}`, threshold, source: m.source, reason: `${static_ ? "GoPlus flags block sells" : "simulated sell fails"}${m.note ? ` (${m.note})` : ""}`, manualReviewAllowed: false };
   }
   if (!s.full) {
     return {
@@ -100,9 +102,9 @@ function sellRule(m: Measured<SellSim>, maxTax: number): RuleResult {
     };
   }
   if (s.sellTaxPct !== null && s.sellTaxPct > maxTax) {
-    return { rule: "sell", status: "fail", measured: `sell succeeds${tax}`, threshold, source: m.source, reason: `sell tax ${s.sellTaxPct}% is above ${maxTax}%`, manualReviewAllowed: false };
+    return { rule: "sell", status: "fail", measured: `${static_ ? "sells not blocked (GoPlus)" : "sell succeeds"}${tax}`, threshold, source: m.source, reason: `sell tax ${s.sellTaxPct}% is above ${maxTax}%`, manualReviewAllowed: false };
   }
-  return { rule: "sell", status: "pass", measured: `sell succeeds${tax || ", tax unknown"}`, threshold, source: m.source, reason: null, manualReviewAllowed: false };
+  return { rule: "sell", status: "pass", measured: `${static_ ? "sells not blocked (GoPlus)" : "sell succeeds"}${tax || ", tax unknown"}`, threshold, source: m.source, reason: null, manualReviewAllowed: false };
 }
 
 /** The verdict: any measured failure = "fail"; else any unmeasured rule = "unavailable"; else "pass". */
@@ -227,6 +229,35 @@ export function parseGoPlus(j: any, token: string): { holders: number | null; fl
   if (!r) return { holders: null, flags: null };
   const f = (k: string) => (r[k] === undefined || r[k] === "" ? "?" : String(r[k]));
   return { holders: num(r.holder_count), flags: `is_honeypot ${f("is_honeypot")}, cannot_sell_all ${f("cannot_sell_all")}, sell_tax ${f("sell_tax")}` };
+}
+
+/**
+ * GoPlus flags that refuse a sell on their own: each lets the token's owner (or its code) stop or drain a holder's
+ * sell. Flags that legitimate large tokens carry (PEPE: transfer_pausable, is_blacklisted; proxies; mintable,
+ * modifiable slippage) are shown in the note but never refuse.
+ */
+export const GOPLUS_BLOCKERS = ["is_honeypot", "cannot_sell_all", "hidden_owner", "selfdestruct", "owner_change_balance", "can_take_back_ownership", "honeypot_with_same_creator"] as const;
+const GOPLUS_NOTED = ["transfer_pausable", "is_blacklisted", "slippage_modifiable", "is_proxy", "is_mintable", "trading_cooldown", "external_call"] as const;
+
+/**
+ * The automatic sell verdict where no sell is simulated (no simulator on the chain, or honeypot.is has no pair):
+ * GoPlus token_security. A full pass needs is_honeypot "0" and a numeric sell_tax <= maxTaxPct (GoPlus gives a
+ * fraction: "0.05" = 5%) and none of GOPLUS_BLOCKERS set to "1" (absent fields do not refuse). null = GoPlus has no
+ * usable data for this token (the caller refuses: sells could not be verified automatically).
+ */
+export function goplusSell(j: any, token: string, maxTaxPct: number): { sim: SellSim; note: string } | null {
+  const r = j?.result?.[token.toLowerCase()];
+  if (!r || (r.is_honeypot !== "0" && r.is_honeypot !== "1")) return null;
+  // "" (GoPlus could not measure it) is no figure, not 0%.
+  const tax = typeof r.sell_tax === "string" && r.sell_tax.trim() !== "" ? num(r.sell_tax) : null;
+  const pct = tax === null ? null : Math.round(tax * 10_000) / 100;
+  const set = GOPLUS_BLOCKERS.filter((k) => r[k] === "1");
+  const noted = GOPLUS_NOTED.filter((k) => r[k] === "1");
+  const extra = noted.length ? `; noted, not refusing: ${noted.join(", ")}` : "";
+  if (set.length) return { sim: { ok: false, full: true, sellTaxPct: pct }, note: `GoPlus: ${set.join(", ")}${extra}` };
+  if (pct === null) return null;
+  if (pct > maxTaxPct) return { sim: { ok: true, full: true, sellTaxPct: pct }, note: `GoPlus: sell_tax ${pct}%${extra}` };
+  return { sim: { ok: true, full: true, sellTaxPct: pct }, note: `GoPlus: no honeypot or owner sell blocks${extra}` };
 }
 
 export interface Transfer { from: string; to: string; value: bigint }

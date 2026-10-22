@@ -38,19 +38,25 @@ One image (`bot/Dockerfile`, context = repo root, ignore file `bot/Dockerfile.do
 vite as in `npm run build -w web`), and the bot stage copies both dists in (`RENDER_SITE_DIR=/app/site/dist`,
 `RENDER_WEB_DIR=/app/web/dist`) next to `bot/src`, `packages/core/src`, `bot/data` and `web/src/trackSelect.ts`
 (imported by `bot/src/lib/release.ts`, so the scheduler needs it). Chromium headless shell + ffmpeg are in the image.
-Two compose services (`bot/docker-compose.yml`) run the same image:
+Four compose services (`bot/docker-compose.yml`) run the same image:
 - `bot` — `npx tsx src/scheduler.ts`, env `../.env`, volume `../out:/app/out`, always on;
-- `pulse` — `npx tsx src/pulse.ts`, env `../pulse.env` only, profile `pulse` (not started by a plain `up`).
+- `pulse` — `npx tsx src/pulse.ts`, env `../pulse.env` only, profile `pulse` (not started by a plain `up`);
+- `api` — `npx tsx src/api/index.ts`, the stations API (docs/STATIONS.md "Applications and payment"), env
+  `../api.env` only, volume `../out:/app/out`, port 127.0.0.1:8787, profile `api`;
+- `stations` — `npx tsx src/stations/worker.ts`, the automatic station pipeline (docs/STATIONS.md "Automatic
+  pipeline"), env `../stations.env` only (the only file with SWARM_KEY), volume `../out:/app/out`, profile `stations`.
 ```
 /opt/swarm-sequencer/
   .env                 # bot secrets (chmod 600), from bot/.env.example — DRY_RUN=true
   pulse.env            # keeper only (chmod 600), from bot/pulse.env.example — PULSE_SEND=false, PULSE_KEY
-  packages/core/ packages/synth/ bot/ site/ web/ contracts/deployments/  # rsync of the repo dirs
+  api.env              # stations API (chmod 600), from bot/api.env.example — STATION_PAY_TO, STATIONS_OPEN
+  stations.env         # stations worker (chmod 600), from bot/stations.env.example — SWARM_KEY, TELEGRAM_*
+  packages/core/ packages/synth/ bot/ site/ web/ stations/ contracts/deployments/  # rsync of the repo dirs
   out/                 # queue + scheduler state (volume)
 ```
 ```sh
-rsync -azR --delete --exclude node_modules --exclude out --exclude dist --exclude screenshots --exclude .env --exclude pulse.env \
-  ./packages/core ./packages/synth ./bot ./site ./web ./contracts/deployments root@138.201.92.157:/opt/swarm-sequencer/
+rsync -azR --delete --exclude node_modules --exclude out --exclude dist --exclude screenshots --exclude .env --exclude pulse.env --exclude api.env --exclude stations.env \
+  ./packages/core ./packages/synth ./bot ./site ./web ./stations ./contracts/deployments root@138.201.92.157:/opt/swarm-sequencer/
 ssh root@138.201.92.157 'cd /opt/swarm-sequencer/bot && docker compose up -d --build'          # bot only
 ssh root@138.201.92.157 'docker logs -f swarm-sequencer-bot'
 ```
@@ -65,7 +71,9 @@ another build). Never put `PULSE_KEY` here.
 **Env (`pulse.env`, keeper).** `PULSE_TREASURY`, `LIVE_RPC_URL`, `LIVE_CHAIN_ID`, `PULSE_TICK_SEC`, `PULSE_SEND`
 (false), `PULSE_KEY` (only read when `PULSE_SEND=true`); fee harvest: `FEE_FACTORY`, `LAUNCH_NUMBER`, `HARVEST_HOURS`,
 `FEE_SPLITTER` (split() after each harvest), `BURN_HOURS`. The keeper needs nothing else: no X / Anthropic keys, no
-volume. Both env files live outside the image (`.dockerignore` drops `.env*` and `pulse.env`).
+volume. **Env (`api.env`, stations API).** `STATION_PAY_TO`, `STATIONS_OPEN`, `STATION_PRICE_TIER`, `API_ORIGINS`,
+`API_TRUST_PROXY` (bot/api.env.example). All env files live outside the image (`.dockerignore` drops `.env*`,
+`pulse.env`, `api.env` and `stations.env`).
 
 **Release CLI in the container** (uses the built web; output in the `out/` volume):
 ```sh

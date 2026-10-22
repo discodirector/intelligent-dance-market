@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { earliest, evaluate, exitCode, holderBalances, parseBlockscoutCounters, parseDexPair, parseGoPlus, parseHoneypot, pickToken, RULES, type Measurements } from "../src/stations/eligibility.ts";
+import { earliest, evaluate, exitCode, GOPLUS_BLOCKERS, goplusSell, holderBalances, parseBlockscoutCounters, parseDexPair, parseGoPlus, parseHoneypot, pickToken, RULES, type Measurements } from "../src/stations/eligibility.ts";
 
 const NOW = 1_800_000_000;
 const DAY = 86_400;
@@ -131,6 +131,30 @@ describe("parsers", () => {
     const j = { code: 1, message: "OK", result: { "0x350035555e10d9afaf1566aaebfced5ba6c27777": { holder_count: "33830", is_honeypot: "0", sell_tax: "0", token_symbol: "CHOG" } } };
     expect(parseGoPlus(j, "0x350035555E10d9AfAF1566AaebfCeD5BA6C27777")).toEqual({ holders: 33830, flags: "is_honeypot 0, cannot_sell_all ?, sell_tax 0" });
     expect(parseGoPlus({ code: 1, result: {} }, "0x01")).toEqual({ holders: null, flags: null });
+  });
+
+  it("GoPlus sell verdict: automatic pass, blockers, tax, no data", () => {
+    const T = "0x53d0ea0a685220718dc6a0a6e4617194c6f37921";
+    // INFER on Ethereum, 2026-10-22 (trimmed): clean; cannot_sell_all absent.
+    const infer = { is_honeypot: "0", sell_tax: "0", buy_tax: "0", hidden_owner: "0", selfdestruct: "0", owner_change_balance: "0", can_take_back_ownership: "0", transfer_pausable: "0", honeypot_with_same_creator: "0" };
+    const j = (r: object) => ({ code: 1, result: { [T]: r } });
+    const pass = goplusSell(j(infer), T.toUpperCase().replace("0X", "0x"), 10)!;
+    expect(pass.sim).toEqual({ ok: true, full: true, sellTaxPct: 0 });
+    const m: Measurements = { ...good(), sell: { value: pass.sim, source: "GoPlus" } };
+    expect(evaluate(m, NOW).verdict).toBe("pass");
+    // PEPE's pausable / blacklist flags are noted, never refusing.
+    expect(goplusSell(j({ ...infer, transfer_pausable: "1", is_blacklisted: "1" }), T, 10)).toMatchObject({ sim: { ok: true }, note: expect.stringContaining("transfer_pausable, is_blacklisted") });
+    for (const k of GOPLUS_BLOCKERS) expect(goplusSell(j({ ...infer, [k]: "1" }), T, 10)!.sim.ok, k).toBe(false);
+    const taxed = goplusSell(j({ ...infer, sell_tax: "0.12" }), T, 10)!;
+    expect(taxed.sim.sellTaxPct).toBe(12);
+    expect(evaluate({ ...good(), sell: { value: taxed.sim, source: "GoPlus" } }, NOW).verdict).toBe("fail");
+    expect(goplusSell(j({ ...infer, sell_tax: "0.1" }), T, 10)!.sim.ok).toBe(true);
+    // No data: no record, no is_honeypot, or no sell_tax -> null (the caller refuses).
+    expect(goplusSell({ code: 1, result: {} }, T, 10)).toBeNull();
+    expect(goplusSell(j({ ...infer, is_honeypot: "" }), T, 10)).toBeNull();
+    expect(goplusSell(j({ ...infer, sell_tax: "" }), T, 10)).toBeNull();
+    // A honeypot is refused even without a tax figure.
+    expect(goplusSell(j({ ...infer, is_honeypot: "1", sell_tax: "" }), T, 10)!.sim.ok).toBe(false);
   });
 
   it("holders from a Transfer history skip zero, dead and emptied balances", () => {

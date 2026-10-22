@@ -73,7 +73,17 @@ export interface RegistryEntry {
   genesisBlock: number;
   token: `0x${string}`;
   house?: boolean;
-  status: "live" | "paused";
+  /** What it plays: "idm" (house schedules) or a pack key (baked, or a runtime pack). */
+  program: string;
+  quoteSymbol?: string;
+  theme?: { phos: string; phosDim: string; ghost: string; lcd: string };
+  /**
+   * "pending": added, not on air; "preview": its pack is in, playable at ?net=<key>, not listed; "live": on air (the
+   * only status replayed for checkpoints); "paused": off.
+   */
+  status: "live" | "paused" | "pending" | "preview";
+  /** Subscription end (YYYY-MM-DD or ISO timestamp, UTC): past it a live station is "expired" (subscription.ts). */
+  paidUntil?: string;
 }
 
 export interface Registry {
@@ -223,14 +233,17 @@ export async function updateStation(path: string, st: BotStation = IMD_STATION, 
 const KEEP_ENTRIES = 2_000;
 
 /**
- * Every live played registry station (or only `keys`): cache extended, checkpoint published to `checkpointDir`.
+ * Every live played registry station (or only `keys`; none in `expired`): cache extended, checkpoint published to
+ * `checkpointDir`.
  * One station failing (RPC down) does not stop the others; its error is returned in its place.
  */
-export async function updateStations(outDir: string, checkpointDir: string, opts: { keys?: string[]; reg?: Registry } = {}) {
+export async function updateStations(outDir: string, checkpointDir: string, opts: { keys?: string[]; reg?: Registry; expired?: Set<string> } = {}) {
   const reg = opts.reg ?? loadRegistry();
   const out = new Map<string, Awaited<ReturnType<typeof updateStation>> | Error>();
   for (const e of reg.stations) {
     if (e.kind === "hook" || e.status !== "live" || (opts.keys && !opts.keys.includes(e.key))) continue;
+    // A lapsed subscription (stations/subscription.ts) is off air: its cache and last checkpoint stay as they are.
+    if (opts.expired?.has(e.key)) continue;
     // The IMD/ETH station keeps its own RPC list and chunk (the bot's Ethereum RPCs), as before the registry.
     const st = e.key === IMD_STATION.key ? IMD_STATION : stationFromEntry(e, reg);
     try {

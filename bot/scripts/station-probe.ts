@@ -13,7 +13,6 @@
 // and prints the `calibration` block to paste into the registry. Without it a pool must pair ETH or WETH.
 // --supply-offset N / --quote-per-eth X [--quote-decimals D] replay a given calibration instead (no price lookups).
 import { writeFileSync } from "node:fs";
-import { createPublicClient, http, parseAbi, type PublicClient } from "viem";
 import {
   calibrationShift, decodeSwapLogs, fdvWeiAtTick, POOL_KINDS, swapLogFilter, whaleWeiAtTick,
   type Calibration, type PoolKind, type SwapSource,
@@ -21,7 +20,9 @@ import {
 import { buildTimeline, type RawSwap } from "../src/lib/timeline.ts";
 import { getRawLogsChunked, makeClients, withRetry } from "../src/replay/rpc.ts";
 import { loadRegistry } from "../src/station.ts";
-import { CHAINS, fetchJson } from "../src/stations/sources.ts";
+import { fmtDecimal, supplyTickOffset } from "../src/stations/onboard.ts";
+import { dexQuote, ethUsd, NATIVE, pairSide, readToken } from "../src/stations/pool.ts";
+import { CHAINS } from "../src/stations/sources.ts";
 
 const arg = (name: string) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -31,9 +32,6 @@ function die(msg: string): never {
   console.error(msg);
   process.exit(2);
 }
-
-const NATIVE = "0x0000000000000000000000000000000000000000";
-const WETH_ETHEREUM = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
 
 const reg = loadRegistry();
 const chainId = Number(arg("chain"));
@@ -49,9 +47,6 @@ if (!pool || !/^0x([0-9a-f]{40}|[0-9a-f]{64})$/.test(pool) || !token || !/^0x[0-
 }
 
 const clients = makeClients(chain.rpcUrls);
-const client: PublicClient = createPublicClient({ transport: http(chain.rpcUrls[0]) }) as PublicClient;
-const erc20 = parseAbi(["function symbol() view returns (string)", "function decimals() view returns (uint8)", "function totalSupply() view returns (uint256)"]);
-const pair = parseAbi(["function token0() view returns (address)", "function token1() view returns (address)"]);
 const nativeSymbol = chain.nativeSymbol ?? "ETH";
 const given: Calibration | undefined = arg("supply-offset") || arg("quote-per-eth")
   ? {
@@ -70,56 +65,28 @@ if (kind === "v4") {
   quote = ethSide === 0 ? NATIVE : chain.weth;
   source = { kind, address: chain.poolManager!, poolId: pool, ethSide };
 } else {
-  const [t0, t1] = (await Promise.all([
-    client.readContract({ address: pool, abi: pair, functionName: "token0" }),
-    client.readContract({ address: pool, abi: pair, functionName: "token1" }),
-  ])).map((a) => a.toLowerCase() as `0x${string}`);
-  if (token !== t0 && token !== t1) die(`token ${token} is not in pool ${pool} (token0 ${t0}, token1 ${t1})`);
-  quote = token === t0 ? t1 : t0;
-  source = { kind, address: pool, ethSide: quote === t0 ? 0 : 1 };
+  const side = await pairSide(clients, pool, token).catch((e) => die(String(e?.message ?? e)));
+  quote = side.quote;
+  source = { kind, address: pool, ethSide: side.ethSide };
 }
 const isEth = quote.toLowerCase() === chain.weth.toLowerCase() || (quote === NATIVE && nativeSymbol === "ETH");
 if (!isEth && !calibrate && !given?.quotePerEth) die(`pool ${pool} pairs ${token} with ${quote}, not ETH or ${chain.name} WETH: add --calibrate (quote converted at its ETH rate)`);
-const read = <T>(address: `0x${string}`, functionName: "symbol" | "decimals" | "totalSupply", fallback: T) =>
-  withRetry(clients, (c) => c.readContract({ address, abi: erc20, functionName }), 3).catch(() => fallback) as Promise<T>;
-const [symbol, decimals, supply] = await Promise.all([read(token, "symbol", "?"), read(token, "decimals", 18), read<bigint>(token, "totalSupply", 0n)]);
-const [quoteSymbol, quoteDecimals] = quote === NATIVE ? [nativeSymbol, 18] : await Promise.all([read(quote, "symbol", "?"), read(quote, "decimals", 18)]);
+const { symbol, decimals, totalSupply: supply } = await readToken(clients, token);
+const { symbol: quoteSymbol, decimals: quoteDecimals } = quote === NATIVE ? { symbol: nativeSymbol, decimals: 18 } : await readToken(clients, quote);
 
 // ---------------------------------------------------------------- calibration
-const fmt = (x: number, sig = 6) => {
-  // A plain decimal string (no exponent), `sig` significant digits: what the registry stores.
-  const digits = Math.max(0, sig - 1 - Math.floor(Math.log10(x)));
-  const s = x.toFixed(Math.min(digits, 18));
-  return s.includes(".") ? s.replace(/\.?0+$/, "") : s;
-};
 let calibration: Calibration | undefined = given;
 let dex: { fdvUsd: number | null; ethUsd: number; quoteUsd: number } | null = null;
 if (calibrate) {
   if (supply <= 0n) die(`${token}: totalSupply() unreadable`);
-  const supplyTickOffset = Math.round(Math.log(1e27 / Number(supply)) / Math.log(1.0001));
   const slug = CHAINS[chainId]?.dex ?? die(`chain ${chainId}: no DexScreener slug in bot/src/stations/sources.ts`);
-  // ETH in USD: the deepest Ethereum pair that prices WETH.
-  const wethPairs = ((await fetchJson(`https://api.dexscreener.com/token-pairs/v1/ethereum/${WETH_ETHEREUM}`)) as any[])
-    .filter((p) => p?.baseToken?.address?.toLowerCase() === WETH_ETHEREUM && Number(p.priceUsd) > 0)
-    .sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
-  const ethUsd = Number(wethPairs[0]?.priceUsd) || die("DexScreener: no WETH price");
-  const j = await fetchJson(`https://api.dexscreener.com/latest/dex/pairs/${slug}/${pool}`);
-  const p = (j?.pairs ?? [])[0];
-  if (!p) die(`DexScreener has no pair ${pool} on ${slug}`);
-  // priceNative = base token price in the pair's quote token, priceUsd = base token price in USD.
-  const base = String(p.baseToken.address).toLowerCase();
-  const pQuote = String(p.quoteToken.address).toLowerCase();
-  const wrappedQuote = quote === NATIVE ? null : quote.toLowerCase();
-  let quoteUsd: number;
-  if (isEth) quoteUsd = ethUsd;
-  else if (wrappedQuote === pQuote || (quote === NATIVE && base === token)) quoteUsd = Number(p.priceUsd) / Number(p.priceNative);
-  else if (wrappedQuote === base) quoteUsd = Number(p.priceUsd);
-  else quoteUsd = die(`DexScreener pair ${pool}: cannot price ${quoteSymbol} (base ${p.baseToken.symbol}, quote ${p.quoteToken.symbol})`);
-  dex = { fdvUsd: Number(p.fdv) || null, ethUsd, quoteUsd };
-  calibration = { supplyTickOffset };
+  const ethPrice = await ethUsd();
+  const q = await dexQuote(slug, pool, token, quote, isEth, ethPrice).catch((e) => die(String(e?.message ?? e)));
+  dex = { fdvUsd: q.fdvUsd, ethUsd: ethPrice, quoteUsd: q.quoteUsd };
+  calibration = { supplyTickOffset: supplyTickOffset(supply) };
   if (!isEth) {
-    calibration.quotePerEth = fmt(ethUsd / quoteUsd);
-    if (quoteDecimals !== 18) calibration.quoteDecimals = Number(quoteDecimals);
+    calibration.quotePerEth = fmtDecimal(ethPrice / q.quoteUsd);
+    if (quoteDecimals !== 18) calibration.quoteDecimals = quoteDecimals;
   }
 }
 

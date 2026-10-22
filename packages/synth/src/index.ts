@@ -53,6 +53,8 @@ export type { GenreStyle, StyleChoice, StyleList, StyleScheduleEntry, StyleSourc
 
 export { HOUSE_PROGRAM } from "./program.ts";
 export { assertPack, programFromPack, validatePack } from "./pack.ts";
+export { PACKS, packFor, programFor, registerPack } from "./stations/index.ts";
+export { PackSyntaxError, parsePackSource } from "./packLiteral.ts";
 export type { PackBases, PackLeadPatch, StationPack, StationStyle } from "./pack.ts";
 export { BUS_NAMES, DATA_FIELDS, DATA_GENRES } from "./styledata.ts";
 export { SOUND_DEFAULTS } from "./engine.ts";

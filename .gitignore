@@ -17,6 +17,13 @@ sim/stations/
 
 # Pulse keeper secrets (bot/pulse.env.example)
 pulse.env
+# Stations API settings (bot/api.env.example)
+api.env
 bot/.imd-launch.json
 # Swarm style-pack orders per station (bot/scripts/swarm-style.ts): request tokens and job ids
 bot/.swarm-style/
+
+# Agent worktrees (Claude Code)
+.claude/
+# Stations pipeline worker secrets (bot/stations.env.example)
+stations.env

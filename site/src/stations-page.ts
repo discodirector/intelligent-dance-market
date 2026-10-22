@@ -5,18 +5,21 @@ import "./style.css";
 import "./stations.css";
 import { createPublicClient, defineChain, fallback, http, parseAbi, type PublicClient } from "viem";
 import type { State } from "@swarm-sequencer/core";
-import { epochOf, eraOf, isOn, styleOf } from "@swarm-sequencer/synth";
+import { epochOf, eraOf, isOn, programFor, styleOf, type Program } from "@swarm-sequencer/synth";
 import { NETWORKS } from "./config";
 import { startVirtual } from "./data/virtual";
 import { decodeSlots, RULES, toSynth } from "./rules";
 import { WaveSky, type SkyAudio } from "./sky";
-import { applyTheme, chainOf, onAir, playerHref, rpcUrlsOf, type Station } from "./stations";
+import { APPLY_OPEN, applyTheme, chainOf, loadStatus, onAir, playerHref, rpcUrlsOf, STATIONS, type Station } from "./stations";
+import { mountApply } from "./stations-apply";
 
 const HOOK_POLL_MS = 15_000;
 const raw = parseAbi(["function raw() view returns (uint256 slot0, uint256 slot1)"]);
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
 interface Card {
+  /** What this station plays (its registry program): names the genre · style on the card. */
+  program: Program;
   el: HTMLElement;
   now: HTMLElement;
   meta: HTMLElement;
@@ -46,14 +49,14 @@ function card(s: Station, i: number): Card {
     </dl>
     <div class="st-foot"><span class="st-air"><span class="dot" aria-hidden="true"></span>ON AIR</span><a class="btn-sq" href="${playerHref(s)}">LISTEN ▸</a></div>`;
   const q = (sel: string) => el.querySelector<HTMLElement>(sel)!;
-  return { el, now: q(".st-now"), meta: q(".st-meta"), cells: [...el.querySelectorAll<HTMLElement>(".st-cells i")], dot: q(".dot") };
+  return { el, program: programFor(s.program), now: q(".st-now"), meta: q(".st-meta"), cells: [...el.querySelectorAll<HTMLElement>(".st-cells i")], dot: q(".dot") };
 }
 
-/** Genre · style the player picks for this state (house program), the track in progress and the pattern. */
+/** Genre · style the player picks for this state (the station's program), the track in progress and the pattern. */
 function show(c: Card, s: State) {
   const epoch = epochOf(s);
-  const era = eraOf(epoch);
-  c.now.textContent = `${era.name} · ${styleOf(era, epoch).style.name}`.toUpperCase();
+  const era = eraOf(epoch, c.program);
+  c.now.textContent = `${era.name} · ${styleOf(era, epoch, c.program).style.name}`.toUpperCase();
   c.meta.textContent = `TRACK #${(s.trackNo ?? 0) + 1} · ${s.swapCount} SWAPS`;
   // 4 x 16 cells, track by track (kick, snare, hat, glitch): the raw pattern bits (the player grid's dots, not its
   // arranged bar), so no bar clock is needed here.
@@ -123,9 +126,13 @@ function tuneVirtual(c: Card, s: Station) {
   });
 }
 
-const stations = onAir();
+// On air = the registry's live stations minus the expired subscriptions in the bot's status.json (registry alone when
+// the file is missing or slow), so the list waits for that one small read before it renders.
+const status = await loadStatus();
+const stations = onAir(status);
 const grid = document.getElementById("st-grid")!;
 document.getElementById("st-count")!.textContent = `${stations.length} station${stations.length === 1 ? "" : "s"} · house first`;
+if (APPLY_OPEN) mountApply(document.getElementById("st-apply-form")!, STATIONS.filter((s) => !s.house && s.kind !== "hook"), status);
 const seen = new IntersectionObserver((entries) => {
   for (const e of entries) {
     if (!e.isIntersecting) continue;

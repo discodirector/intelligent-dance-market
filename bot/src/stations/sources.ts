@@ -5,11 +5,12 @@
 //   holders                Blockscout /api/v2/tokens/<addr>/counters, else honeypot.is totalHolders,
 //                          else GoPlus token_security holder_count (chains with `goplus`: Monad),
 //                          else (chains with fullScan) a replay of every Transfer log over the public RPC
-//   sell                   honeypot.is buy+sell simulation (Ethereum, Base, BNB); elsewhere an eth_call of a recent
-//                          holder's transfer into the pool: a revert fails, a success is only partial (manual review)
+//   sell                   honeypot.is buy+sell simulation (Ethereum, Base, BNB); where it has none, automatic: an
+//                          eth_call of a recent holder's transfer into the pool (a revert fails), then GoPlus
+//                          token_security (honeypot, sell tax, owner sell blocks; no data = refused)
 // Any source that fails leaves its metric null with a note; eligibility.ts turns null into "could not measure".
 import { createPublicClient, defineChain, encodeFunctionData, erc20Abi, http, parseAbiItem, type PublicClient } from "viem";
-import { earliest, holderBalances, parseBlockscoutCounters, parseDexPair, parseGoPlus, parseHoneypot, pickToken, type DexPair, type HoneypotResult, type Measured, type Measurements, type SellSim, type Transfer } from "./eligibility.ts";
+import { earliest, goplusSell, holderBalances, parseBlockscoutCounters, parseDexPair, parseGoPlus, parseHoneypot, pickToken, RULES, type DexPair, type HoneypotResult, type Measured, type Measurements, type SellSim, type Transfer } from "./eligibility.ts";
 
 export interface ChainInfo {
   name: string;
@@ -27,6 +28,8 @@ export interface ChainInfo {
   fullScanWindow: bigint | null;
   /** GoPlus token_security (keyless) serves this chain: holders where no Blockscout or honeypot.is does. */
   goplus?: boolean;
+  /** Wrapped native token when the native currency is not ETH (Monad: WMON): a quote station-add.ts accepts. */
+  wrappedNative?: `0x${string}`;
 }
 
 export const CHAINS: Record<number, ChainInfo> = {
@@ -55,18 +58,19 @@ export const CHAINS: Record<number, ChainInfo> = {
     name: "Arbitrum", dex: "arbitrum",
     rpcUrls: ["https://arbitrum.gateway.tenderly.co", "https://arb1.arbitrum.io/rpc"],
     // arbitrum.blockscout.com sits behind the same Cloudflare challenge; honeypot.is answers "Invalid chain", so the
-    // sell is left to manual review (no full Transfer replay on a chain this size).
+    // sell is decided by GoPlus (no full Transfer replay on a chain this size).
     blockscout: "https://arbitrum.blockscout.com", honeypot: false,
     poolManager: "0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32", fullScanWindow: null,
   },
   // Monad (checked 2026-10-21): PoolManager 0x188d…9ea8e (24,009 bytes); most liquidity in nad.fun graduated pools
   // (Uniswap v3 and v2 events) quoted in WMON. No Blockscout; honeypot.is answers "Invalid chain"; GoPlus counts
-  // holders. The sell is left to manual review. Tenderly serves 1k-block eth_getLogs, rpc.monad.xyz 100.
+  // holders and decides the sell. Tenderly serves 1k-block eth_getLogs, rpc.monad.xyz 100.
   143: {
     name: "Monad", dex: "monad",
     rpcUrls: ["https://monad.gateway.tenderly.co", "https://rpc.monad.xyz"],
     blockscout: null, honeypot: false,
     poolManager: "0x188d586ddcf52439676ca21a244753fa19f9ea8e", fullScanWindow: null, goplus: true,
+    wrappedNative: "0x3bd359c1119da7da1d913d1c4d2b7c461115433a",
   },
   56: { name: "BNB Chain", dex: "bsc", rpcUrls: ["https://bsc-dataseed.bnbchain.org"], blockscout: null, honeypot: true, poolManager: null, fullScanWindow: null },
 };
@@ -203,10 +207,14 @@ export async function measure(chainId: number, pool: string, tokenArg?: string):
   let holders: Measured<number> = { value: null, source: "none" };
   if (bsHolders !== null) holders = { value: bsHolders, source: `Blockscout ${c.blockscout}` };
   else if (hp?.holders != null) holders = { value: hp.holders, source: "honeypot.is totalHolders" };
-  let goplus: ReturnType<typeof parseGoPlus> | null = null;
+  // GoPlus token_security, read at most once: holders (chains with `goplus`) and the automatic sell verdict.
+  let goplusJson: Promise<any | null> | null = null;
+  const goplus = (key: string) =>
+    (goplusJson ??= attempt(key, "GoPlus token_security", () => fetchJson(`https://api.gopluslabs.io/api/v1/token_security/${chainId}?contract_addresses=${token}`)));
   if (holders.value === null && c.goplus) {
-    goplus = await attempt("holders", "GoPlus token_security", async () => parseGoPlus(await fetchJson(`https://api.gopluslabs.io/api/v1/token_security/${chainId}?contract_addresses=${token}`), token));
-    if (goplus?.holders != null) holders = { value: goplus.holders, source: "GoPlus token_security holder_count" };
+    const g = await goplus("holders");
+    const h = g ? parseGoPlus(g, token).holders : null;
+    if (h != null) holders = { value: h, source: "GoPlus token_security holder_count" };
   }
   const client = c.fullScanWindow ? clientFor(chainId, c) : null;
   let replay: Replay | null = null;
@@ -224,20 +232,28 @@ export async function measure(chainId: number, pool: string, tokenArg?: string):
   ]);
   if (createdAt.value === null) createdAt.note = notes.age.join("; ") || createdAt.note;
 
-  // Sell: honeypot.is when it ran; else the partial transfer simulation (needs the replay's holders).
+  // Sell: honeypot.is's buy+sell simulation when it ran. Otherwise (no simulator on this chain, honeypot.is has no
+  // such pair, or it failed) decided automatically, no owner step: a holder's transfer into the pool that reverts
+  // fails at once (chains with the replay); else GoPlus token_security's static verdict (eligibility.ts goplusSell);
+  // no GoPlus data -> unmeasured, refused ("could not verify sells automatically").
   let sell: Measured<SellSim> = { value: null, source: "none" };
   if (hp?.sell) sell = { value: hp.sell, source: "honeypot.is simulation", note: hp.note ?? undefined };
-  else if (client && replay) {
-    const sink = (pair.labels.includes("v4") ? c.poolManager : pair.pairAddress) as `0x${string}` | null;
-    const r = sink ? await attempt("sell", "transfer simulation", () => transferIntoPool(client, token, sink, replay!, [sink, pair.pairAddress, token])) : null;
-    if (r) sell = { value: r.sim, source: "eth_call transfer into the pool", note: r.note, manualReviewAllowed: r.sim.ok };
-  }
-  if (sell.value === null) {
-    // GoPlus's flags are a static scan, not a simulated sell: shown to the reviewer, never a pass.
-    const flags = goplus?.flags ? `; GoPlus: ${goplus.flags}` : "";
-    const why = c.honeypot ? hp?.note ?? notes.sell.join("; ") : `no sell simulator for ${c.name}${notes.sell.length ? "; " + notes.sell.join("; ") : ""}${flags}`;
-    // Structural gap (no simulator here) -> the owner may review; a broken simulator elsewhere -> retry later.
-    sell = { value: null, source: c.honeypot ? "honeypot.is" : "none", note: why || "no simulation", manualReviewAllowed: !c.honeypot };
+  else {
+    const why = c.honeypot ? `honeypot.is: ${hp?.note ?? (notes.sell.join("; ") || "no simulation")}` : `no sell simulator for ${c.name}`;
+    let partial: { sim: SellSim; note: string } | null = null;
+    if (client && replay) {
+      const sink = (pair.labels.includes("v4") ? c.poolManager : pair.pairAddress) as `0x${string}` | null;
+      partial = sink ? await attempt("sell", "transfer simulation", () => transferIntoPool(client, token, sink, replay!, [sink, pair.pairAddress, token])) : null;
+    }
+    if (partial && !partial.sim.ok) sell = { value: partial.sim, source: "eth_call transfer into the pool", note: partial.note };
+    else {
+      const g = await goplus("sell");
+      const verdict = g ? goplusSell(g, token, RULES.maxSellTaxPct) : null;
+      const extra = partial ? `; ${partial.note}` : "";
+      sell = verdict
+        ? { value: verdict.sim, source: `GoPlus token_security${partial ? " + eth_call transfer into the pool" : ""}`, note: `${verdict.note} (${why})${extra}` }
+        : { value: null, source: "GoPlus token_security", note: `could not verify sells automatically: ${why}; GoPlus has no usable data for this token${extra}` };
+    }
   }
 
   return {

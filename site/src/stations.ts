@@ -3,6 +3,7 @@
 import registry from "@stations/registry.json";
 import { stationFingerprint, type Calibration, type PoolKind, type SwapSource } from "@swarm-sequencer/core";
 import type { Network } from "./config";
+import { withRuntime } from "./runtime";
 
 export interface StationTheme {
   /** Lit LCD pixels / text. */
@@ -48,7 +49,13 @@ export interface Station {
   theme: StationTheme;
   /** Style program key; "idm" = the house schedules. */
   program: string;
-  status: "live" | "paused";
+  /**
+   * Only "live" is on air (/stations); "pending" = added, waiting for its sound; "preview" = its pack is in, playable at
+   * ?net=<key> (labelled PREVIEW), not listed until it goes live.
+   */
+  status: "live" | "paused" | "pending" | "preview";
+  /** Subscription end (ISO date), informational: status stays the switch. */
+  paidUntil?: string;
 }
 
 export interface Chain {
@@ -67,13 +74,63 @@ export interface Chain {
 }
 
 const CHAINS = registry.chains as Record<string, Chain>;
-export const STATIONS = registry.stations as Station[];
+/**
+ * The baked registry plus the stations the pipeline added at runtime (runtime.ts: /stations-data/stations.json and
+ * their packs, validated like check-stations; baked wins; 2.5 s at most, then the baked registry alone). Every page
+ * that imports this module (and config.ts, built from it) waits for that one read.
+ */
+const merged = await withRuntime({ chains: CHAINS, stations: registry.stations as Station[] });
+if (merged.skipped.length) console.warn("runtime stations skipped:", merged.skipped);
+if (Object.keys(merged.packErrors).length) console.warn("runtime packs refused:", merged.packErrors);
+export const STATIONS: Station[] = merged.registry.stations;
 
 export const chainOf = (s: Station): Chain => CHAINS[String(s.chainId)];
+/** Registry chains by id: [id, chain], registry order. */
+export const CHAIN_LIST: [number, Chain][] = Object.entries(CHAINS).map(([id, c]) => [Number(id), c]);
 export const rpcUrlsOf = (s: Station): string[] => s.rpcUrls ?? chainOf(s).rpcUrls;
 
-/** Stations on air, house stations first, registry order otherwise. */
-export const onAir = (): Station[] => STATIONS.filter((s) => s.status === "live").sort((a, b) => Number(!!b.house) - Number(!!a.house));
+/**
+ * The bot's runtime status (OUT_DIR/stations-data/status.json, bot stations/subscription.ts): the registry's status
+ * with paid renewals merged in; a live station whose subscription ran out is "expired" (off air, keeps its sound).
+ */
+export type RuntimeStatus = Station["status"] | "expired";
+export type StatusMap = Record<string, { status: RuntimeStatus; paidUntil?: string }>;
+export const STATUS_URL = "/stations-data/status.json";
+
+/**
+ * Fetches status.json; null when missing, unreadable (an SPA fallback page included), malformed or slow: the caller
+ * falls back to the registry, as before subscriptions.
+ */
+export async function loadStatus(timeoutMs = 2500): Promise<StatusMap | null> {
+  try {
+    const res = await fetch(STATUS_URL, { cache: "no-cache", signal: AbortSignal.timeout(timeoutMs) });
+    if (!res.ok || !/json/.test(res.headers.get("content-type") ?? "")) return null;
+    const j = (await res.json()) as unknown;
+    if (!j || typeof j !== "object" || Array.isArray(j)) return null;
+    const ok = ["live", "paused", "pending", "preview", "expired"];
+    const out: StatusMap = {};
+    for (const [k, v] of Object.entries(j as Record<string, { status?: unknown; paidUntil?: unknown }>)) {
+      if (v && typeof v.status === "string" && ok.includes(v.status)) out[k] = { status: v.status as RuntimeStatus, ...(typeof v.paidUntil === "string" ? { paidUntil: v.paidUntil } : {}) };
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+/** A station's status now: the runtime file's when it names the station, else the registry's. */
+export const statusOf = (s: Station, status: StatusMap | null): RuntimeStatus => status?.[s.key]?.status ?? s.status;
+
+/** Stations on air, house stations first, registry order otherwise; an expired subscription is off air. */
+export const onAir = (status: StatusMap | null = null): Station[] =>
+  STATIONS.filter((s) => s.status === "live" && statusOf(s, status) === "live").sort((a, b) => Number(!!b.house) - Number(!!a.house));
+
+/**
+ * Applications on /stations (stations-apply.ts): off until the owner builds with VITE_STATIONS_APPLY=1; until then
+ * the page says "Applications open soon". The API is same-origin (Caddy proxies /api/* to the bot's API service).
+ */
+export const APPLY_OPEN = import.meta.env.VITE_STATIONS_APPLY === "1";
+export const API_BASE = (import.meta.env.VITE_STATIONS_API ?? "") + "/api/stations";
 
 /** The registry entry for a network (a played station by key, else chain + pool id), or undefined (testnets, replays). */
 export function stationFor(net: Network): Station | undefined {

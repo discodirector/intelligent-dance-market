@@ -1,6 +1,6 @@
 import "./style.css";
 import { initialState, type State } from "@swarm-sequencer/core";
-import { ERAS, epochOf, eraOf, FORM_BARS, genreKey, HOUSE_PROGRAM, idleStage, NOTE_NAMES, sectionAt, stepDuration, styleOf, stylesAt, type Era, type Program, type SequencerState } from "@swarm-sequencer/synth";
+import { ERAS, epochOf, eraOf, FORM_BARS, genreKey, idleStage, programFor, NOTE_NAMES, sectionAt, stepDuration, styleOf, stylesAt, type Era, type Program, type SequencerState } from "@swarm-sequencer/synth";
 import { LINKS, NATIVE_ETH, readSource } from "./config";
 import { RULES, toSynth } from "./rules";
 import { Audio } from "./audio";
@@ -10,7 +10,8 @@ import { WaveSky } from "./sky";
 import { drawGrid, drawScope, drawSpectrum, Surface, type Flash } from "./visuals";
 import { startLive } from "./data/live";
 import { startVirtual } from "./data/virtual";
-import { applyTheme, chainOf, stationFor } from "./stations";
+import { applyTheme, chainOf, loadStatus, stationFor } from "./stations";
+import { playerMode, type PlayerMode } from "./runtime";
 import { EPOCH_PLAY, startReplay } from "./data/replay";
 import { formatQuote, type Feed, type SwapEvent } from "./data/types";
 
@@ -25,6 +26,16 @@ document.body.classList.toggle("rules-v2", v2);
 /** Registry entry for this pool (stations/registry.json); live, its theme recolours every LCD before the first frame. */
 const station = stationFor(net);
 if (station && source.kind === "live") applyTheme(station.theme);
+/**
+ * What this station's page may do (runtime.ts playerMode, from the bot's status.json, stations.ts loadStatus):
+ * "off-air" = the subscription ran out: the page still shows the state but never plays (PLAY waits for this answer,
+ * at most the status read's 2.5 s, and refuses); "preview" = a pipeline station not listed yet, plays, labelled
+ * PREVIEW. House stations always play; no status file = the registry, as before.
+ */
+const mode: Promise<PlayerMode> = station && !station.house && source.kind === "live"
+  ? loadStatus().then((st) => playerMode(station, st?.[station.key]?.status))
+  : Promise.resolve("live");
+const offAir: Promise<boolean> = mode.then((m) => m === "off-air");
 
 // ---------------------------------------------------------------- state
 let state: State = initialState();
@@ -36,10 +47,13 @@ const flashes: Flash[] = [];
 const counts = { buys: 0, sells: 0, whales: 0 };
 /**
  * What this page plays (synth program.ts): genre order and style lists for the player, the epoch lines, the rack and
- * the genre count. Both house stations ($IDM, IMD/ETH) play the house program; stations wiring picks a station's
- * program from `net` here (docs/STATIONS.md), and everything below follows it.
+ * the genre count. The house stations ($IDM, IMD/ETH) play the house program; a station from the registry plays its
+ * pack's (synth stations/index.ts), and everything below follows it.
  */
-const program: Program = HOUSE_PROGRAM;
+const program: Program = programFor(station?.program ?? "idm");
+/** The genres this program ever plays: the rack shows only these. */
+const programGenres = new Set(program.eras.flatMap((e) => e.ids));
+const RACK = ERAS.filter((era) => programGenres.has(era.id));
 const audio = new Audio(program);
 let eraOverride: string | null = null;
 /** Testnets and replays let a listener audition genres; the mainnet live view plays only what the chain picks. */
@@ -235,6 +249,7 @@ function updateReadouts(bpm: number, era: Era) {
 // ---------------------------------------------------------------- controls
 const playBtn = $<HTMLButtonElement>("play");
 async function setPlaying(on: boolean) {
+  if (on && (await offAir)) return;
   if (on) {
     await audio.start(asSynth(state), clock);
     audio.player!.setEraOverride(eraOverride);
@@ -279,7 +294,7 @@ showGenreCount(0);
 
 // ---------------------------------------------------------------- eras rack
 const rack = $("rack");
-rack.innerHTML = ERAS.map(
+rack.innerHTML = RACK.map(
   (era) => `
   <article class="era" data-id="${era.id}">
     <div class="era-top"><span class="led"></span><span class="era-no">${String(era.index + 1).padStart(2, "0")}</span></div>
@@ -295,15 +310,15 @@ rack.innerHTML = ERAS.map(
 ).join("");
 /**
  * The rack lists each genre's styles in force at the chain epoch (the program's style lists); redrawn when a list
- * changes. The rack itself still shows every genre (ERAS): a station program naming fewer must filter it first.
+ * changes. A station program naming fewer genres shows only those (RACK).
  */
 let rackStylesKey = "";
 function rackStyles(epoch: number) {
-  const lists = ERAS.map((era) => stylesAt(era.id, epoch, program));
+  const lists = RACK.map((era) => stylesAt(era.id, epoch, program));
   const key = lists.map((l) => l.map((st) => st.id).join(",")).join("|");
   if (key === rackStylesKey) return;
   rackStylesKey = key;
-  ERAS.forEach((era, i) => {
+  RACK.forEach((era, i) => {
     const dd = rack.querySelector<HTMLElement>(`.styles[data-genre="${era.id}"]`);
     if (dd) dd.innerHTML = lists[i].map((st) => `<span data-style="${st.id}">${st.name}</span>`).join(" · ");
   });
@@ -361,6 +376,18 @@ if (source.kind === "live") {
   $("station-tag").hidden = false;
   $("station-name").textContent = station ? `$${station.ticker}` : net.label;
   $("station-chain").textContent = (station ? chainOf(station).name : net.label).toUpperCase();
+  // Preview: labelled. Off air (offAir above): marked, the way back linked, PLAY disabled; the panel keeps following
+  // the pool.
+  void mode.then((m) => {
+    if (m === "preview") $("station-tag").querySelector(".silk")!.textContent = "PREVIEW";
+    if (m !== "off-air" || !station) return;
+    $("station-tag").querySelector(".silk")!.textContent = "OFF AIR";
+    $("station-tag").insertAdjacentHTML("beforeend", `<a class="off" href="/stations?renew=${encodeURIComponent(station.key)}#apply" title="Off air: the subscription ran out">RENEW ▸</a>`);
+    playBtn.disabled = true;
+    playBtn.title = "Off air: the subscription ran out";
+    playBtn.querySelector(".play-label")!.textContent = "OFF AIR";
+    document.body.classList.add("off-air");
+  });
 }
 if (source.kind === "replay") {
   switchLink.hidden = false;

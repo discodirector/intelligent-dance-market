@@ -2,13 +2,17 @@
 //  - pre-launch (no HOOK_ADDRESS/LIVE_RPC_URL): teaser from the Ethereum IMD/ETH pool replay (ETH side) every 6h
 //  - live: snapshot every 6h, every track-complete (v2 hook, HOOK_RULES=v2) as soon as rendered, Movement/whale max 1/2h (own clock), daily cap 24
 //  - STATION_CHECKPOINTS=1: every live registry station replayed and its checkpoint published each tick (station.ts)
+//  - every tick: stations-data/status.json (registry status + paid renewals, expired = off air); once a day the
+//    stations expiring within 3 days are logged and written to applications/reminders.json (stations/subscription.ts)
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { decide, prune, readyTracks, type PostKind, type SchedState } from "./rules.ts";
 import { producePost, produceRelease, teaser } from "./pipeline.ts";
 import { fetchMutated, liveClient, liveConfigFromEnv } from "./live.ts";
 import { isDryRun } from "./post/index.ts";
-import { IMD_STATION, updateStations } from "./station.ts";
+import { IMD_STATION, updateStations, type Registry } from "./station.ts";
+import { loadMergedRegistry } from "./stations/runtime.ts";
+import { expiring, publishStatus, writeJsonAtomic, type StatusFile } from "./stations/subscription.ts";
 import type { TimelineEntry } from "./lib/timeline.ts";
 import { movementWindow, trackSubtitle, trackWindow } from "./lib/track.ts";
 import { withTrackStart } from "./lib/release.ts";
@@ -33,6 +37,34 @@ const CHECKPOINTS = process.env.STATION_CHECKPOINTS === "1";
 /** Where the checkpoints go; the web server serves this directory as /stations-data/ (docs/STATIONS.md). */
 const STATIONS_DATA = process.env.STATIONS_DATA_DIR ?? join(OUT, "stations-data");
 
+const REMINDERS = join(OUT, "applications", "reminders.json");
+/** Days ahead a subscription's end is reminded. */
+const REMIND_DAYS = 3;
+
+/**
+ * The runtime station status for the site (every tick: an expiry takes the station off air within one tick) and,
+ * once a UTC day, the stations whose subscription ends within REMIND_DAYS: logged and written for the owner (posts and
+ * DMs later). A failure here never stops the tick: the site falls back to the registry.
+ */
+function subscriptions(reg: Registry): StatusFile {
+  try {
+    const status = publishStatus(reg, OUT, STATIONS_DATA);
+    const today = new Date().toISOString().slice(0, 10);
+    let last: string | undefined;
+    try { last = JSON.parse(readFileSync(REMINDERS, "utf8")).checkedOn; } catch { /* first run */ }
+    if (last !== today) {
+      const soon = expiring(reg, status, Date.now(), REMIND_DAYS);
+      for (const r of soon) log(`subscription: ${r.key} ${r.status === "expired" ? "EXPIRED" : `ends in ${r.daysLeft} d`} (paidUntil ${r.paidUntil})`);
+      if (!soon.length) log(`subscription: none ending within ${REMIND_DAYS} days`);
+      writeJsonAtomic(REMINDERS, { checkedOn: today, checkedAt: new Date().toISOString(), days: REMIND_DAYS, stations: soon });
+    }
+    return status;
+  } catch (e) {
+    log("subscription status failed:", (e as Error).message);
+    return {};
+  }
+}
+
 function load(): SchedState {
   try { return JSON.parse(readFileSync(STATE, "utf8")); } catch { return { posts: [] }; }
 }
@@ -50,9 +82,14 @@ async function tick() {
   let stationEntries: TimelineEntry[] = [];
   let head = 0n;
   const client = live ? liveClient(live) : null;
+  let reg: Registry | undefined;
+  // Baked + the pipeline's runtime stations (stations/runtime.ts): a runtime station gets checkpoints and expiry too.
+  try { reg = loadMergedRegistry(STATIONS_DATA); } catch (e) { log("station registry unreadable:", (e as Error).message); }
+  const status = reg ? subscriptions(reg) : {};
+  const expired = new Set(Object.entries(status).flatMap(([k, v]) => (v.status === "expired" ? [k] : [])));
   // Stations: all of them for the checkpoints, or only IMD/ETH for its track posts (live only, as before).
   const stations = CHECKPOINTS || (STATION && live)
-    ? await updateStations(OUT, STATIONS_DATA, { keys: CHECKPOINTS ? undefined : [IMD_STATION.key] })
+    ? await updateStations(OUT, STATIONS_DATA, { keys: CHECKPOINTS ? undefined : [IMD_STATION.key], reg, expired })
     : new Map<string, never>();
   for (const [key, r] of stations) if (r instanceof Error) log(`${key} station update failed:`, r.message);
   if (live && client) {

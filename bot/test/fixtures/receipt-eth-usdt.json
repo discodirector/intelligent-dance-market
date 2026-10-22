@@ -1,0 +1,27 @@
+{
+  "chainId": 1,
+  "recordedFrom": "https://mainnet.gateway.tenderly.co",
+  "blockTime": 1792605611,
+  "receipt": {
+    "transactionHash": "0x891aff5c19e7f6508f1cc901529099ac205b766fe7088bcedd118708f3cf742e",
+    "blockNumber": "0x1906e47",
+    "blockHash": "0x1028611a2597ccd79e03f80d8bff483aeb2c68b5a71310a8ffd287de08075444",
+    "status": "0x1",
+    "from": "0x9696f59e4d72e237be84ffd425dcad154bf96976",
+    "to": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+    "logs": [
+      {
+        "address": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "topics": [
+          "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+          "0x0000000000000000000000009696f59e4d72e237be84ffd425dcad154bf96976",
+          "0x000000000000000000000000467b35b891e7a2497795e377bd66904f9cc10c64"
+        ],
+        "data": "0x00000000000000000000000000000000000000000000000000000000151fb700",
+        "logIndex": "0x38",
+        "transactionHash": "0x891aff5c19e7f6508f1cc901529099ac205b766fe7088bcedd118708f3cf742e",
+        "blockNumber": "0x1906e47"
+      }
+    ]
+  }
+}

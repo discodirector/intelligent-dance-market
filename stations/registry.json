@@ -74,6 +74,25 @@
       "theme": { "phos": "#6fd8ff", "phosDim": "#2a7f9c", "ghost": "#0b2530", "lcd": "#041218" },
       "program": "idm",
       "status": "live"
+    },
+    {
+      "key": "infer",
+      "label": "INFER/IMD",
+      "ticker": "INFER",
+      "chainId": 1,
+      "poolManager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+      "poolId": "0x1f03dd2c202cf17b58305b73ae2f8b3143e9c056ed9c9e8dbd4924b350431e95",
+      "genesisBlock": 26192031,
+      "token": "0x53d0ea0a685220718dc6a0a6e4617194c6f37921",
+      "quote": "0xd34a99bc0f67ae1bbd63c660e6d0b0dd03e263b7",
+      "ethSide": 1,
+      "quoteSymbol": "ETH",
+      "kind": "v4",
+      "calibration": { "supplyTickOffset": 0, "quotePerEth": "438.734" },
+      "theme": { "phos": "#d6c3ff", "phosDim": "#8561d1", "ghost": "#251548", "lcd": "#0b0517" },
+      "program": "infer",
+      "status": "live",
+      "paidUntil": "2026-11-22"
     }
   ]
 }

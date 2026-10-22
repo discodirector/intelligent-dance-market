@@ -74,6 +74,8 @@ export default defineConfig({
       input: {
         main: fileURLToPath(new URL("./index.html", import.meta.url)),
         render: fileURLToPath(new URL("./render.html", import.meta.url)),
+        // The style pack gate for the pipeline (src/gatePage.ts, bot/src/stations/gate.ts).
+        gate: fileURLToPath(new URL("./gate.html", import.meta.url)),
       },
     },
   },

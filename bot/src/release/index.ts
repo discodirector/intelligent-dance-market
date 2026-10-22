@@ -63,11 +63,11 @@ const MIME: Record<string, string> = {
 };
 
 /** Extra files served next to a page (the tape, the release WAV). */
-type Routes = Record<string, () => string | Buffer>;
+export type Routes = Record<string, () => string | Buffer>;
 const WAV_PATH = "/__release/audio.wav";
 
 /** A built web/ or site/ (vite build) on loopback, plus the routes. */
-async function serveStatic(dir: string, routes: Routes): Promise<{ base: string; close: () => Promise<void> }> {
+export async function serveStatic(dir: string, routes: Routes): Promise<{ base: string; close: () => Promise<void> }> {
   const server: Server = createServer((req, res) => {
     const path = normalize(decodeURIComponent((req.url ?? "/").split("?")[0])).replace(/^(\.\.[/\\])+/, "");
     const route = routes[path];
@@ -87,7 +87,7 @@ async function serveStatic(dir: string, routes: Routes): Promise<{ base: string;
 }
 
 /** Checkout fallback: web/ or site/ through its Vite dev server (same as web/scripts/*.mjs). */
-async function serveDev(app: "web" | "site", routes: Routes): Promise<{ base: string; close: () => Promise<void> }> {
+export async function serveDev(app: "web" | "site", routes: Routes): Promise<{ base: string; close: () => Promise<void> }> {
   const vite = await import("vite");
   const allow = [REPO];
   const nm = join(REPO, "node_modules");

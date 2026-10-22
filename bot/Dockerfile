@@ -1,6 +1,7 @@
 # Build context: repository root. Ignore file: bot/Dockerfile.dockerignore.
 # Stages: site (bot.html, the clip render page), web (render.html, the release page), then the bot image.
-# One image runs both services in bot/docker-compose.yml: the scheduler (default CMD) and the pulse keeper.
+# One image runs every service in bot/docker-compose.yml: the scheduler (default CMD), the pulse keeper, the stations
+# API and the stations pipeline worker (its gate renders in the same Chromium headless shell as the releases).
 
 # Stage 1: the site build, whose bot.html is the render page (IDM-16 module, synth with eras and arrangement).
 FROM node:22-bookworm-slim AS site
@@ -15,7 +16,10 @@ COPY packages/synth/src packages/synth/src
 # bot.ts also plans releases (web/src/release.ts, the same plan web/render.html renders the WAV from).
 COPY web/src/timeline.ts web/src/release.ts web/src/trackSelect.ts web/src/build.d.ts web/src/
 COPY contracts/deployments contracts/deployments
-COPY site/index.html site/docs.html site/bot.html site/vite.config.ts site/tsconfig.json site/
+# The station registry (site alias @stations), its rules (validate.mjs: runtime stations, site/src/runtime.ts) and
+# stations.html: vite.config.ts builds every page.
+COPY stations/registry.json stations/validate.mjs stations/validate.d.mts stations/
+COPY site/index.html site/docs.html site/stations.html site/bot.html site/vite.config.ts site/tsconfig.json site/
 COPY site/src site/src
 COPY site/public site/public
 RUN cd site && npx vite build
@@ -33,7 +37,10 @@ COPY web/package.json web/
 RUN npm install --no-audit --no-fund
 COPY packages/core/src packages/core/src
 COPY packages/synth/src packages/synth/src
-COPY web/index.html web/render.html web/vite.config.ts web/tsconfig.json web/
+# gate.html: the style pack gate the stations pipeline runs (src/gatePage.ts, bot/src/stations/gate.ts), with the
+# gate's fixed tape windows baked in.
+COPY web/index.html web/render.html web/gate.html web/vite.config.ts web/tsconfig.json web/
+COPY web/scripts/station-gate-windows.json web/scripts/station-gate-windows.json
 COPY web/src web/src
 COPY web/public web/public
 RUN cd web && npm run build
@@ -65,6 +72,13 @@ COPY packages/synth/src packages/synth/src
 COPY packages/core/src packages/core/src
 COPY bot/src bot/src
 COPY bot/data bot/data
+# The station registry (bot/src/station.ts loadRegistry: ../../stations/registry.json) and its rules (validate.mjs,
+# merging the pipeline's runtime stations): checkpoints, subscription status, the API and the stations worker read
+# them. A baked registry edit needs an image rebuild; runtime stations (OUT_DIR/stations-data) do not.
+COPY stations/registry.json stations/validate.mjs stations/validate.d.mts stations/
+# The owner's application tool (docs/STATIONS.md "Applications and payment"): `docker compose exec api npx tsx
+# scripts/station-apps.ts list` reads OUT_DIR/applications where the API writes it.
+COPY bot/scripts/station-apps.ts bot/scripts/station-apps.ts
 # bot/src/lib/release.ts imports web/src/trackSelect.ts (import-free) at runtime; the scheduler loads it too.
 COPY web/src/trackSelect.ts web/src/trackSelect.ts
 # Default tape of the release CLI and `pipeline.ts release` (synthetic, three completed v2 tracks).

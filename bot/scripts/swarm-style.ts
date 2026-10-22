@@ -215,8 +215,8 @@ async function fetchPack() {
   const commit = String(delivery.commit);
   if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error(`delivered commit ${commit} is not a sha`);
 
-  // The working tree: clean but for the pack, on station/<key> (never main).
-  const dirty = git("status", "--porcelain").split("\n").filter(Boolean).filter((l) => l.slice(3) !== file);
+  // The working tree: no tracked changes but the pack (untracked dev files are fine), on station/<key> (never main).
+  const dirty = git("status", "--porcelain", "--untracked-files=no").split("\n").filter(Boolean).filter((l) => l.slice(3) !== file);
   if (dirty.length) throw new Error(`the working tree has other changes; commit or move them first:\n${dirty.slice(0, 10).join("\n")}`);
   const branch = `station/${key}`;
   if (git("rev-parse", "--abbrev-ref", "HEAD") !== branch) {

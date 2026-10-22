@@ -119,6 +119,54 @@ body.stations-page { background: var(--black); }
 .st-note.big { margin-top: 14px; font-size: 16px; color: var(--bone); }
 .st-apply-text p { font-size: 15px; }
 
+/* The application form (stations-apply.ts, VITE_STATIONS_APPLY=1): terminal fields on the page's black, the quote and
+   the eligibility report as terminal tables. */
+.st-apply-form { margin-top: 8px; }
+.st-apply-form[hidden], .ap [hidden] { display: none !important; }
+.ap { display: grid; gap: 16px; }
+.ap-tabs { display: flex; gap: 6px; }
+.ap-tabs button { font: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.14em; padding: 8px 12px; background: transparent; color: var(--muted); border: 1px solid var(--line); cursor: pointer; }
+.ap-tabs button[aria-selected="true"] { color: var(--phos); border-color: var(--phos-dim); background: rgba(var(--phos-rgb), 0.06); }
+.ap-form { display: grid; gap: 14px; min-width: 0; }
+.ap-form label, .ap-form legend { display: grid; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.16em; color: var(--bone); }
+.ap-form label span, .ap-form legend span { font-weight: 400; letter-spacing: 0.02em; color: var(--muted); }
+.ap-form input:not([type="checkbox"]):not([type="radio"]), .ap-form select, .ap-form textarea {
+  font: 400 14px/1.4 "JetBrains Mono", ui-monospace, monospace; letter-spacing: 0; color: var(--phos); background: #0b0d0b;
+  border: 1px solid var(--line); border-radius: 0; padding: 10px 12px; width: 100%; min-width: 0; box-sizing: border-box;
+}
+.ap-form input:focus, .ap-form select:focus, .ap-form textarea:focus { outline: none; border-color: var(--phos-dim); box-shadow: 0 0 0 1px rgba(var(--phos-rgb), 0.25); }
+.ap-form textarea { resize: vertical; }
+.ap-row { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 6px; }
+.ap-form fieldset { border: 1px solid var(--line); margin: 0; padding: 10px 12px 12px; display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.ap-form fieldset legend { padding: 0 6px; }
+.ap-form fieldset label { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 400; letter-spacing: 0.02em; color: #b4bbb5; }
+.ap-form input[type="checkbox"], .ap-form input[type="radio"] { accent-color: var(--phos); }
+.ap-count { justify-self: end; }
+.ap-price { margin: 0; color: #b4bbb5; font-size: 13px; }
+.ap-price b { color: var(--bone); }
+.ap-form .btn-sq { justify-self: start; cursor: pointer; }
+.ap-form .btn-sq:disabled { opacity: 0.5; cursor: wait; }
+.ap-msg { margin: 0; font-family: var(--lcd); font-size: 19px; line-height: 1.15; color: var(--phos); }
+.ap-msg:empty { display: none; }
+.ap-msg.bad, .ap .bad { color: var(--sell); }
+.ap .ok { color: var(--phos); }
+.ap .na { color: var(--amber); }
+.ap .table-term { min-width: 0; }
+.ap .table-term td:first-child { white-space: nowrap; }
+.ap .table-term td { overflow-wrap: anywhere; }
+.ap-addr { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 12px; }
+.ap code { font-size: 13px; color: var(--bone); overflow-wrap: anywhere; }
+.ap-copy { font: 700 10px/1 inherit; letter-spacing: 0.14em; padding: 5px 7px; margin-left: 6px; color: var(--phos); background: transparent; border: 1px solid var(--phos-dim); cursor: pointer; vertical-align: middle; }
+.ap-copy:hover { background: rgba(var(--phos-rgb), 0.1); }
+.ap-id { margin: 0; color: var(--muted); font-size: 12px; }
+.ap-done .tt-head .ok { font-weight: 800; }
+.ap-done a { color: var(--phos); }
+
+@media (max-width: 560px) {
+  .ap-row { grid-template-columns: 1fr; }
+  .ap .table-term td:first-child { white-space: normal; }
+}
+
 @media (max-width: 980px) {
   .st-steps, .st-thirds { grid-template-columns: 1fr; }
   .st-list6 { grid-template-columns: 1fr; }
