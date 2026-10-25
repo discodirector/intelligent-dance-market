@@ -1,5 +1,6 @@
 import {
   advanceIdle,
+  CueQueue,
   freshIdleMemory,
   genreStep,
   planSteps,
@@ -7,11 +8,13 @@ import {
   viewAt,
   type DropCue,
   type IdleMemory,
+  type LockCue,
+  type SaleCue,
   type StepHit,
   type TimelinePoint,
   type TransportView,
 } from "./clock.ts";
-import { ceilingCurve, MASTER_CEILING, MixChain, OfflineReaper, setOfflineReaper, VoiceEngine } from "./engine.ts";
+import { ceilingCurve, MASTER_CEILING, MixChain, OfflineReaper, setOfflineReaper, VoiceEngine, type OrnamentPlay } from "./engine.ts";
 import { FORM_BARS } from "./arrange.ts";
 import { crossfadeSeconds, epochOf, eraById, eraOf, type Era } from "./eras.ts";
 import { HOUSE_PROGRAM, type Program } from "./program.ts";
@@ -49,11 +52,19 @@ export interface LivePlayer {
   setClock(nowSec: number | null): void;
   /** Whale drop. A buy waits for the next downbeat; a sell starts on the next step. */
   noteDrop(drop: DropCue | null): void;
+  /** NFT stations: a rated Credit sale (lands on the next 8th) or a BALANCE withdraw (the next downbeat). */
+  noteSale(cue: SaleCue): void;
+  noteLock(cue: LockCue): void;
   /**
    * Heat -> drop prototype: the latest swap finished the track. Until the next downbeat the voices keep
    * playing `held` (the finished track; omit to hold the state before the drop), then that bar lands as the drop.
    */
   noteTrackDrop(held?: SequencerState | null): void;
+  /**
+   * Attention layer (prototype): one mention of the token now. The genre plays it as a quiet ornament in its own voice
+   * on the next unscheduled step that suits it (RenderOptions.ornaments). `smart`: the clearer version.
+   */
+  noteMention(smart?: boolean): void;
   start(): void;
   stop(): void;
   readonly running: boolean;
@@ -69,6 +80,72 @@ export interface RenderOptions {
   program?: Program;
   /** First bar of the 32-bar song form (SPEC §4.4). Short clips start in the build. */
   barOffset?: number;
+  /**
+   * Attention layer (prototype, docs/STATIONS.md): mentions of the token, each played as one quiet ornament in the
+   * playing genre's own voice on the next step that suits it (OrnamentCue). Omitted or empty: the render is exactly
+   * what it was without the layer.
+   */
+  ornaments?: readonly OrnamentCue[];
+}
+
+/**
+ * Attention layer: one mention, requested at `time` (render seconds, or the live context's clock). The engine plays it
+ * on the first step at or after `time` that is one of the playing base's ornament slots (engine.ts ORNAMENT_PLAN), at
+ * least an 8th after the previous ornament; a request still waiting a bar later is let go. `smart`: the clearer version.
+ */
+export interface OrnamentCue {
+  time: number;
+  smart?: boolean;
+}
+
+/** A waiting mention gives up after this many 16ths (one bar): a player who missed the moment lets it go. */
+const ORNAMENT_PATIENCE_STEPS = 16;
+/** Two ornaments are at least this many 16ths apart (an 8th), on the grid. */
+const ORNAMENT_GAP_STEPS = 2;
+
+/**
+ * Attention layer: the mentions waiting to be played (oldest first) and the rules for when one may be. The rig offers
+ * `due(hit)` to the primary engine each step and calls `played(hit)` when the engine took it. Deterministic.
+ */
+export class OrnamentQueue {
+  private readonly cues: OrnamentCue[] = [];
+  /** Grid time of the last ornament played, and how many were played. */
+  private lastGrid = -Infinity;
+  private count = 0;
+
+  /** Queue one mention, in time order (equal times keep their arrival order). Non-finite times are ignored. */
+  request(cue: OrnamentCue) {
+    if (!Number.isFinite(cue.time)) return;
+    let i = this.cues.length;
+    while (i > 0 && this.cues[i - 1].time > cue.time) i--;
+    this.cues.splice(i, 0, { time: cue.time, smart: cue.smart === true });
+  }
+
+  /** Mentions still waiting. */
+  get pending(): number {
+    return this.cues.length;
+  }
+
+  /**
+   * The oldest waiting mention, if this step may play one: it is due (requested at or before the step's time) and the
+   * last ornament is an 8th back on the grid. Mentions a bar older than the step are let go first.
+   */
+  due(hit: Pick<StepHit, "gridTime" | "time" | "duration">): OrnamentPlay | null {
+    if (this.cues.length === 0) return null;
+    const patience = ORNAMENT_PATIENCE_STEPS * hit.duration;
+    while (this.cues.length > 0 && this.cues[0].time < hit.gridTime - patience) this.cues.shift();
+    const head = this.cues[0];
+    if (!head || head.time > hit.time) return null;
+    if (hit.gridTime - this.lastGrid < ORNAMENT_GAP_STEPS * hit.duration - 1e-6) return null;
+    return { smart: head.smart === true, index: this.count };
+  }
+
+  /** The mention `due` offered was played on this step. */
+  played(hit: Pick<StepHit, "gridTime">) {
+    this.cues.shift();
+    this.lastGrid = hit.gridTime;
+    this.count += 1;
+  }
 }
 
 interface Scheduled {
@@ -115,6 +192,8 @@ class EraRig {
   private readonly mix: MixChain;
   private outLastSet = -1;
   private outRamp = { t0: 0, t1: 0, from: 1, to: 1 };
+  /** Attention layer: mentions not played yet. */
+  private readonly ornaments = new OrnamentQueue();
 
   constructor(
     private readonly ctx: BaseAudioContext,
@@ -166,10 +245,16 @@ class EraRig {
     return { epoch: epochOf(state), id: era.id, name: era.name, fading };
   }
 
+  /** Attention layer: queue one mention for the primary engine (OrnamentQueue). */
+  requestOrnament(cue: OrnamentCue) {
+    this.ornaments.request(cue);
+  }
+
   play(hit: StepHit) {
     const era = this.eraFor(hit.state);
     const slot = this.ensure(era, hit.time, hit.tempo);
-    slot.engine.trigger(hit, true);
+    const due = this.ornaments.due(hit);
+    if (slot.engine.trigger(hit, true, due) && due) this.ornaments.played(hit);
     for (const other of this.slots) {
       if (other === slot) continue;
       if (this.levelAt(other, hit.time) > 0.04) other.engine.trigger(hit, false);
@@ -308,6 +393,7 @@ export function createLivePlayer(ctx: AudioContext, options?: LivePlayerOptions)
   let stepIndex = 0;
   let clockSec: number | null = null;
   let pendingDrop: DropCue | null = null;
+  const cues = new CueQueue();
   let trackHold: SequencerState | null = null;
   let formShift = 0;
   let idleMem: IdleMemory = freshIdleMemory();
@@ -359,6 +445,7 @@ export function createLivePlayer(ctx: AudioContext, options?: LivePlayerOptions)
       recover: idleStep.recover || undefined,
       drop,
       ...(trackDrop ? { trackDrop } : {}),
+      ...cues.take(step),
       ...character,
     };
     rig.play(hit);
@@ -393,8 +480,17 @@ export function createLivePlayer(ctx: AudioContext, options?: LivePlayerOptions)
     noteDrop(drop) {
       if (drop) pendingDrop = drop;
     },
+    noteSale(cue) {
+      if (running) cues.pushSale(cue);
+    },
+    noteLock(cue) {
+      if (running) cues.pushLock(cue);
+    },
     noteTrackDrop(held) {
       trackHold = held ?? committed ?? initialState();
+    },
+    noteMention(smart) {
+      if (running) rig.requestOrnament({ time: ctx.currentTime, smart });
     },
     start() {
       if (running) return;
@@ -485,6 +581,7 @@ export async function renderTimelineToBuffer(
   const program = options?.program ?? HOUSE_PROGRAM;
   const rig = new EraRig(ctx, eraId, false, null, program);
   rig.connect(ctx.destination);
+  for (const cue of options?.ornaments ?? []) rig.requestOrnament(cue);
   const hits = planSteps(points, seconds, eraId, options?.barOffset ?? 0, program);
   for (const hit of hits) {
     if (hit.time < seconds) rig.play(hit);

@@ -235,6 +235,41 @@ h1 em { font-style: normal; font-weight: 400; font-size: 0.5em; letter-spacing: 
 .screen-grid { align-items: start; }
 .side-col { align-self: stretch; }
 
+/* NFT stations (nftscreen.ts): the item traded now, its on-chain art on the glass, beside SCOPE and SPECTRUM. */
+.nft-screen[hidden] { display: none !important; }
+body.has-nft-screen .side-col { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); grid-template-rows: 1fr 1fr; }
+body.has-nft-screen .side-col .nft-screen { grid-row: 1 / 3; }
+.nft-screen { gap: 6px; }
+.nft-glass {
+  position: relative; aspect-ratio: 1; width: 100%; display: grid; place-items: center; overflow: hidden;
+  background: var(--lcd-bg); box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.8);
+}
+.nft-glass img { width: 100%; height: 100%; display: block; object-fit: contain; }
+.nft-glass img[hidden], .nft-text[hidden] { display: none; }
+.nft-text { font-family: var(--lcd); font-size: 22px; line-height: 1.05; color: var(--phos); text-align: center; white-space: pre; text-shadow: 0 0 8px rgba(var(--phos-rgb), 0.5); }
+.nft-cap { font-family: var(--lcd); font-size: 17px; line-height: 1.05; color: var(--phos-dim); white-space: pre; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0.04em; min-height: 2.1em; }
+.nft-screen.buy .nft-cap { color: var(--phos); }
+.nft-screen.sell .nft-cap { color: var(--sell); }
+.nft-screen.whale .nft-cap, .nft-screen.whale .nft-text { color: var(--amber); }
+.nft-screen.whale .nft-glass { box-shadow: inset 0 0 0 2px var(--amber), inset 0 0 18px rgba(0, 0, 0, 0.8); }
+/* Credits: a rated sale's "RATING 132 · CK", a withdraw's WITHDRAWN / ink, as a small label on the glass. */
+.nft-tag {
+  position: absolute; left: 6px; bottom: 6px; padding: 2px 5px; font-family: var(--lcd); font-size: 13px; line-height: 1;
+  letter-spacing: 0.05em; color: #f2f1ec; background: rgba(17, 17, 17, 0.82); white-space: nowrap; pointer-events: none;
+}
+.nft-tag[hidden] { display: none; }
+.nft-screen.lock .nft-cap { color: var(--phos); }
+.nft-screen.lock .nft-glass { box-shadow: inset 0 0 0 2px var(--phos-dim), inset 0 0 18px rgba(0, 0, 0, 0.8); }
+
+/* The Credits skin (registry theme panel / sell / whale, stations.ts applySkin): a print-shop faceplate, black ink
+   type, the collection's CMYK on the accents. */
+body.skin-credits .module, body.skin-credits .tile { border-color: #1a1a18; }
+body.skin-credits .panel-head, body.skin-credits .panel-foot { border-color: #111; }
+body.skin-credits h1 { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: -0.035em; }
+body.skin-credits h1 em { font-family: var(--mono); }
+body.skin-credits .controls { border-top-style: solid; border-top-color: #111; }
+body.skin-credits .screws i { background: radial-gradient(circle at 35% 35%, #ffffff, #b9b8b2 70%); border-color: #6d6c67; }
+
 .readouts { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
 .ro { display: grid; gap: 4px; }
 .seg {

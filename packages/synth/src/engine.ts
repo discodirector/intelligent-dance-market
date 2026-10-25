@@ -15,10 +15,15 @@ import type {
   DubBellSpec,
   DubChordSpec,
   DubClapSpec,
+  DubEchoToneSpec,
   DubHatSpec,
   DubKickSpec,
+  DubMelodySpec,
   DubPadSpec,
   DubPercSpec,
+  DubRumbleSpec,
+  DubStabFmSpec,
+  DubStabPluckSpec,
   DubStabSpec,
   DubSubSpec,
   DubTechnoData,
@@ -26,12 +31,15 @@ import type {
   ElectroChord,
   ElectroData,
   ElectroKicks,
+  RobotWordSpec,
   ElectroKit,
   ElectroVoiceSpec,
   FxData,
   GarageChord,
   GarageData,
+  GarageFoleyKind,
   GarageKit,
+  GarageOrnamentSpec,
   GenreDataMap,
   HatSpec,
   HooverSpec,
@@ -39,6 +47,8 @@ import type {
   KickSpec,
   LiquidData,
   LiquidKit,
+  LiquidNatureKind,
+  LiquidOrnamentSpec,
   LofiHouseData,
   LofiKit,
   MixTrims,
@@ -551,9 +561,147 @@ const specOf = <T extends object>(over: Partial<T> | undefined, base: T): T => (
 const kickTier = (figs: KickFigures, k: number) => (k <= 2 ? figs.lo : k <= 4 ? figs.mid : figs.hi);
 
 /**
+ * Attention layer (prototype, docs/STATIONS.md "Attention layer"): one mention the rig offers a step. `index` counts
+ * the ornaments already played in this render, so successive mentions walk the voice's material (a word's syllables,
+ * the chord's tones, the vowels); `smart` asks for the clearer version.
+ */
+export interface OrnamentPlay {
+  smart: boolean;
+  index: number;
+}
+
+/** Ornament bar slots (16th steps): where a player would put the gesture. */
+const SLOTS_OFFBEAT = [2, 6, 10, 14] as const;
+const SLOTS_BEAT = [0, 4, 8, 12] as const;
+const SLOTS_EIGHTHS = [0, 2, 4, 6, 8, 10, 12, 14] as const;
+const SLOTS_AFTER_SNARE = [5, 7, 13, 15] as const;
+const SLOTS_SHUFFLE = [3, 7, 11, 15] as const;
+/** The off-8ths and their 16ths; the base takes out the steps its own figure plays (dub stabs, the 303 line). */
+const SLOTS_GAPS = [2, 3, 6, 7, 10, 11, 14, 15] as const;
+
+/**
+ * Attention layer: per genre and house base, the engine voice a mention plays (a method the base itself plays) and the
+ * bar slots it may land on. A station style plays its base's entry, through its own tables. Read by the engine, the
+ * docs and the tests.
+ */
+/**
+ * The electro robot word per base: formant pairs per syllable (Hz), oscillator, crush steps (fewer = rougher), octave
+ * offset (semitones from MIDI 48 + tonic), syllable length in 16ths, ring-modulation ratio (0 = none), lowpass (0 = open),
+ * an echo every mention or null (then only a smart mention is echoed), peak level.
+ */
+const ROBOT_WORDS: Record<string, RobotWordSpec> = {
+  // Cold 808: a dark "oh-oo", coarse crush, an octave down, dry.
+  classic: { vowels: [[450, 800], [330, 650]], wave: "square", steps: 3, octave: -12, syllable: 2, ring: 0, lowpass: 2200, echo: null, level: 0.07, slots: SLOTS_OFFBEAT },
+  // Client_03: the announcement's "ah-ee".
+  client03: { vowels: [[700, 1200], [400, 2200]], wave: "square", steps: 6, octave: 0, syllable: 2, ring: 0, lowpass: 0, echo: null, level: 0.06, slots: SLOTS_OFFBEAT },
+  // Alien Rave: a fast three-syllable "eh-ah-oh", ring-modulated saw, an octave up, always echoed.
+  alienrave: { vowels: [[550, 1750], [700, 1200], [450, 800]], wave: "sawtooth", steps: 8, octave: 12, syllable: 1, ring: 1.5, lowpass: 0, echo: { steps: 3, feedback: 0.35 }, level: 0.055, slots: SLOTS_OFFBEAT },
+};
+
+/**
+ * The future garage mention per base (owner-approved by ear): every mention plays all of `voices`, a smart one all of
+ * `smart` (garageMention). One slot set per base, where its voices sit together.
+ */
+const GARAGE_ORNAMENTS: Record<string, GarageOrnamentSpec> = {
+  // Vocal Chops: the same "yeah" on the off-8th before beats 1 and 3 (the prototype's slots); smart adds the ghost
+  // snare roll, which from 6 / 14 rises straight into the kick on 8 / 0.
+  classic: { voices: ["yeah"], smart: ["yeah", "groove"], foley: ["lighter"], level: 1, slots: [6, 14] },
+  // Dark Sub: a ghost rim + shuffled hat and a lighter / vinyl object on the shuffled 16th before beats 2 and 4 (3, 11,
+  // half the prototype's shuffle slots: the two that leave the reverse room); smart breathes in from there for 5 16ths
+  // into the kick on 8 / 0, with the lighter and its flame.
+  dark: { voices: ["groove", "foley"], smart: ["reverse", "foley"], foley: ["lighter", "vinyl"], level: 1, slots: [3, 11] },
+  // Rain Atmos: a water drop among the rain on the shuffled 16ths 3 / 11; smart: the reverse breath into 8 / 0.
+  atmos: { voices: ["foley"], smart: ["reverse"], foley: ["drop"], level: 1, slots: [3, 11] },
+};
+
+/**
+ * The liquid mention per base (owner-approved by ear): every mention plays all of `voices`, a smart one all of
+ * `smart` (liquidMention). One slot set per base, where its voices sit.
+ */
+const LIQUID_ORNAMENTS: Record<string, LiquidOrnamentSpec> = {
+  // Keys: nature far away (a bird, a gust, a drop in turn) on the off-8th after beats 1 and 3 (the prototype's
+  // slots); smart: two birds answering, a beat apart.
+  classic: { voices: ["nature"], smart: ["nature"], nature: ["bird", "gust", "drop"], level: 1, slots: [2, 10] },
+  // Soulful: an amen ghost snare on the shuffled 16ths; smart: a quick rising four-hit roll and the two birds.
+  soulful: { voices: ["amen"], smart: ["amen", "nature"], nature: ["bird", "gust", "drop"], level: 1, slots: [3, 7, 11, 15] },
+  // Atmospheric: one note of the style's keys on the chord's top (fast attack, on the step) on the offbeats; smart: a dyad.
+  atmos: { voices: ["keys"], smart: ["keys"], nature: ["bird", "gust", "drop"], level: 1, slots: SLOTS_OFFBEAT },
+};
+/** The liquid mention's key note attack cap (s): it speaks on its step whatever the patch's own attack. */
+const LIQUID_KEYS_ATTACK = 0.008;
+
+export const ORNAMENT_PLAN: Record<GenreId, Record<string, { voice: string; slots: readonly number[] }>> = {
+  // The robot word on the offbeats, every base (the announcement's voice, chosen by the owner).
+  electro: {
+    classic: { voice: "robotWord", slots: SLOTS_OFFBEAT },
+    client03: { voice: "robotWord", slots: SLOTS_OFFBEAT },
+    alienrave: { voice: "robotWord", slots: SLOTS_OFFBEAT },
+  },
+  // A 303 chirp an octave over the line, in the line's own gaps.
+  acid: {
+    classic: { voice: "acid303Voice", slots: SLOTS_GAPS },
+    acidhouse: { voice: "acid303Voice", slots: SLOTS_GAPS },
+    rubber: { voice: "acid303Voice", slots: SLOTS_GAPS },
+  },
+  // Tape Keys: a warm-keys note over the ostinato; Tape Haze: the tape-slip blip; Crystal: a glass bell into the echo.
+  ambientidm: {
+    classic: { voice: "motifNote", slots: SLOTS_BEAT },
+    boc: { voice: "ambientHazeBlip", slots: SLOTS_OFFBEAT },
+    crystal: { voice: "ambientBell", slots: SLOTS_BEAT },
+  },
+  // The base's own glint (Wall: a soft bell, Dark Low: a distant bowl, Overtone Pulse: a glass partial of the series).
+  drone: {
+    classic: { voice: "droneGlint", slots: SLOTS_EIGHTHS },
+    dark: { voice: "droneGlint", slots: SLOTS_EIGHTHS },
+    pulse: { voice: "droneGlint", slots: SLOTS_EIGHTHS },
+  },
+  // A chord stab thrown into the echo, in the gaps of the epoch's stab figure.
+  dubtechno: {
+    classic: { voice: "dubStab", slots: SLOTS_GAPS },
+    ixtlan: { voice: "dubStab", slots: SLOTS_GAPS },
+    moment: { voice: "dubStab", slots: SLOTS_GAPS },
+  },
+  // The owner's mention voices (LIQUID_ORNAMENTS): Keys nature far away, Soulful amen ghosts, Atmospheric a key note.
+  liquid: {
+    classic: { voice: "liquidMention", slots: LIQUID_ORNAMENTS.classic.slots },
+    soulful: { voice: "liquidMention", slots: LIQUID_ORNAMENTS.soulful.slots },
+    atmos: { voice: "liquidMention", slots: LIQUID_ORNAMENTS.atmos.slots },
+  },
+  // The owner's mention voices (GARAGE_ORNAMENTS): Vocal Chops a "yeah", Dark Sub ghost groove + foley, Rain Atmos a drop.
+  futuregarage: {
+    classic: { voice: "garageMention", slots: GARAGE_ORNAMENTS.classic.slots },
+    dark: { voice: "garageMention", slots: GARAGE_ORNAMENTS.dark.slots },
+    atmos: { voice: "garageMention", slots: GARAGE_ORNAMENTS.atmos.slots },
+  },
+  // The scratch answers the snare.
+  triphop: {
+    classic: { voice: "tripHopScratch", slots: SLOTS_AFTER_SNARE },
+    bristol: { voice: "tripHopScratch", slots: SLOTS_AFTER_SNARE },
+    cinematic: { voice: "tripHopScratch", slots: SLOTS_AFTER_SNARE },
+  },
+  // Dusty Keys: a house-keys stab; Sample Chop: a slice of the sample; Raw Rave: the crushed rave hit.
+  lofihouse: {
+    classic: { voice: "motifNote", slots: SLOTS_OFFBEAT },
+    chop: { voice: "lofiChopVoice", slots: SLOTS_OFFBEAT },
+    rave: { voice: "lofiRaveHit", slots: SLOTS_SHUFFLE },
+  },
+  // Dilla: a soul chop of the chord's top; Brainfeeder: a glass glint; Glitch-hop: a pitched vocal chop.
+  wonky: {
+    classic: { voice: "wonkySoul", slots: SLOTS_OFFBEAT },
+    brainfeeder: { voice: "wonkyGlint", slots: SLOTS_OFFBEAT },
+    glitch: { voice: "wonkyVox", slots: SLOTS_SHUFFLE },
+  },
+};
+
+/**
  * Persistent voice graph. Pattern changes only affect what gets scheduled;
  * the buses stay connected, so a setState at a step boundary does not click.
  */
+/** Credits: the melody voice of a top-5% sale when the style has none of its own (creditSale). */
+const CREDIT_MELODY: DubMelodySpec = { level: 0.8, wave: "triangle", detune: 6, octave: 12, every: 1, count: 1, chance: 0, attack: 0.04, hold: 4, release: 2.2, lp: 2600, echo: 0.35, space: 0.3 };
+/** Credits: the median withdraw, in points (BALANCE released, ~40.9k over the first 73; creditLock scales from it). */
+const CREDIT_LOCK_MEDIAN = 40_000;
+
 export class VoiceEngine {
   readonly ctx: BaseAudioContext;
   readonly era: Era;
@@ -599,6 +747,13 @@ export class VoiceEngine {
   private echoLp: BiquadFilterNode[] = [];
   private dubEchoHz = 0;
   private dubEchoBar = -1;
+  /** Dub techno: the rumble room's sidechain gain, when the style has a rumble (buildRumble). */
+  private rumbleDuck: GainNode | null = null;
+  /** Dub techno: a station style's echo shape (echoTone), read when the echo is built; null for house styles. */
+  private dubEcho: DubEchoToneSpec | null = null;
+  /** Dub techno: the echo's repeat gains after the first (their level is `fx.echo.fb`), for the `sweep.fb` breath. */
+  private echoFb: GainNode[] = [];
+  private dubFbNow = -1;
   private drumLp!: BiquadFilterNode;
   private sends!: { echoSum: MixChain; spaceSum: MixChain; spaceIn: GainNode };
   private lastLeadFreq = 0;
@@ -848,7 +1003,11 @@ export class VoiceEngine {
     gain.linearRampToValueAtTime(Math.max(0.0001, to), time + seconds);
   }
 
-  trigger(hit: StepHit, primary = true) {
+  /**
+   * Schedules one step. `ornament` (attention layer, primary engine only): a pending mention the rig offers this
+   * step; returns true when the genre played it here, false when the step is not one of its ornament slots.
+   */
+  trigger(hit: StepHit, primary = true, ornament: OrnamentPlay | null = null): boolean {
     // SPEC §4.3: voices play the arrangement of the on-chain grid, never the raw bits.
     const arr = arrange(hit.state, hit.bar);
     const state = hit.state;
@@ -867,6 +1026,12 @@ export class VoiceEngine {
         this.wireSends();
       }
       if (first.data) this.applySound(first.data as SoundData);
+      // A station style's rumble room (house styles have none: nothing is built).
+      if (this.era.id === "dubtechno" && first.data) {
+        const dub = dubStyleOf(first, DUB_STYLES[first.base ?? first.id] ?? DUB_STYLES.classic);
+        if (dub.rumble.level > 0) this.buildRumble(dub.rumble);
+        this.dubEcho = dub.echoTone;
+      }
     }
     const epoch = this.instance;
     const { index: styleIndex, style } = styleOf(this.era, epoch, this.program);
@@ -927,6 +1092,9 @@ export class VoiceEngine {
         this.wonky(c);
         break;
     }
+    const played = ornament != null && primary && this.ornament(c, ornament);
+    // NFT station cues (clock.ts SaleCue / LockCue): no other station has them, so nothing more is scheduled there.
+    if (primary && (hit.sale || hit.lock)) this.creditCues(c);
     if (c.step === 0) {
       const bed = hit.idle?.drone ?? 0;
       if (bed > 0.01) this.droneTone(c, bed);
@@ -939,6 +1107,7 @@ export class VoiceEngine {
         if (heat > 0 && this.era.id !== "drone") this.riser(c, heatFade);
       }
     }
+    return played;
   }
 
   // ------------------------------------------------------------------ genres
@@ -967,20 +1136,35 @@ export class VoiceEngine {
     if (this.fourFloor(c)) {
       this.dubKick(c, c.vel * (step === 0 ? 1 : 0.93), d.kick);
       this.duck(t);
+      // The rumble pumps: down at the kick, back up by the next beat.
+      if (this.rumbleDuck && d.rumble.duck > 0) {
+        const g = this.rumbleDuck.gain;
+        g.cancelScheduledValues(t);
+        g.setValueAtTime(1 - d.rumble.duck, t);
+        g.linearRampToValueAtTime(1, t + c.dur * 3.5);
+      }
     }
     // Sub: the style's rolling figure on the chord root; the fifth and the octave only as passing tones.
     const note = d.bass.notes.find(([s]) => s === step);
     if (note && c.arr.bass !== 0n) {
       this.dubSub(c, this.dubBassRoot(c, chord) + (note[3] ?? 0), note[1] * c.dur, note[2] * d.bass.level, d.bass);
     }
+    // A station style's two-bar figures (`claps`, `hats`) place the clap and the hat; none = the house placement.
+    const pos2 = (((bar % 2) + 2) % 2) * 16 + step;
     // Soft clap (or rim) on 2 and 4, mostly heard in the echo.
-    if (sec.snare > 0 && rowMax(v[1]) > 0 && (step === 4 || step === 12)) {
+    if (d.claps) {
+      const k = sec.snare > 0 && rowMax(v[1]) > 0 ? d.claps.find(([s]) => s === pos2) : undefined;
+      if (k) this.dubClap(c, c.vel * d.clap.level * sec.snare * k[1], d.clap);
+    } else if (sec.snare > 0 && rowMax(v[1]) > 0 && (step === 4 || step === 12)) {
       this.dubClap(c, c.vel * d.clap.level * sec.snare * (step === 12 ? 1 : 0.88), d.clap);
     }
     // Hats: an open hat on every offbeat and a swung 16th shaker; low density keeps only the shaker's offbeat 16ths.
     if (sec.hat > 0 && rowMax(v[2]) > 0) {
       const h = d.hat;
-      if (step % 4 === 2 && h.off > 0) this.hat(t, c.vel * h.off * sec.hat, { hp: h.hp, decay: h.decay, metal: h.metal, pan: 0.12 });
+      if (d.hats) {
+        const x = h.off > 0 ? d.hats.find(([s]) => s === pos2) : undefined;
+        if (x) this.hat(t, c.vel * h.off * x[1] * sec.hat, { hp: h.hp, decay: x[2] ?? h.decay, metal: h.metal, pan: 0.12 });
+      } else if (step % 4 === 2 && h.off > 0) this.hat(t, c.vel * h.off * sec.hat, { hp: h.hp, decay: h.decay, metal: h.metal, pan: 0.12 });
       const accent = h.shuffle[step % 4];
       const dense = c.arr.energy > 0.35 || v[2][step] > 0 || c.heat > 0.4;
       if (accent > 0 && (step % 2 === 1 || dense)) {
@@ -997,10 +1181,14 @@ export class VoiceEngine {
     const busy = rowCount(v[1]) >= 2 || c.arr.energy > 0.55 || c.heat > 0.5;
     const hits = busy ? fig : fig.slice(0, Math.max(1, fig.length - 1));
     const idx = hits.indexOf(step);
-    if (idx >= 0 && (sec.name !== "intro" || (sec.bar >= 4 && idx === 0))) {
+    // A style's bar mask (`stabBars`) rests the figure in some bars and scales it in others; none = every bar at 1.
+    const mask = d.stabBars;
+    const barLevel = mask ? mask[((bar % mask.length) + mask.length) % mask.length] : 1;
+    if (idx >= 0 && barLevel > 0 && (sec.name !== "intro" || (sec.bar >= 4 && idx === 0))) {
       // Heat throws: the last hit of every fourth bar goes hard into the echo instead.
       const throwIt = c.heat > 0.35 && idx === hits.length - 1 && ((bar % 4) + 4) % 4 === 3;
-      this.dubStab(c, d.accents[idx % d.accents.length], throwIt ? "fx" : "harm");
+      const level = d.accents[idx % d.accents.length] * barLevel;
+      this.dubStab(c, level, throwIt ? "fx" : "harm", level);
     }
     // Bell fragments: a few long chord tones every `every` four-bar phrases, when the song form lets the lead in.
     if (sec.lead > 0 && d.bell.level > 0) {
@@ -1015,6 +1203,83 @@ export class VoiceEngine {
         }
       }
     }
+    // A style's sparse melody: rare single notes, in from the intro's fifth bar.
+    if (d.melody.level > 0 && (sec.name !== "intro" || sec.bar >= 4)) this.dubMelodyStep(c, d, chord);
+  }
+
+  /**
+   * The sparse melody's schedule: bars are grouped in cells of `every`; a cell plays with probability `chance` (heat
+   * raises it), `count` notes on 8th onsets inside it. Epoch and cell pick the onsets and the pitches (the pool, or
+   * the bar's chord tones), so the line is fixed for an epoch and new in the next.
+   */
+  private dubMelodyStep(c: Ctx, d: DubStyle, chord: DubChord) {
+    const m = d.melody;
+    const bar = c.hit.bar;
+    const cell = Math.floor(bar / m.every);
+    const chance = Math.min(1, m.chance + 0.25 * c.heat);
+    if ((hash32(c.epoch, cell, 0x3e1d) % 1000) / 1000 >= chance) return;
+    const pos = (((bar % m.every) + m.every) % m.every) * 16 + c.step;
+    const slots = m.every * 8;
+    for (let k = 0; k < m.count; k++) {
+      if ((hash32(c.epoch, cell, k, 0x3e1e) % slots) * 2 !== pos) continue;
+      const pool = m.notes ?? chord.upper;
+      const semi = pool[hash32(c.epoch, cell, k, 0x3e1f) % pool.length];
+      const lead = Math.max(c.sec.lead, 0.6);
+      this.dubMelody(c, this.dubBase(c) + m.octave + semi, c.vel * lead * (k === 0 ? 1 : 0.8), m, hash32(c.epoch, cell, k, 0x3e20) % 2 === 0 ? -0.35 : 0.35);
+      return;
+    }
+  }
+
+  /**
+   * One melody note: two detuned oscillators under a lowpass, a slow swell, held, a long release; on the lead bus
+   * (left or right) and sent straight into the echo and the room by the style's `echo` / `space`.
+   */
+  private dubMelody(c: Ctx, midi: number, level: number, m: DubMelodySpec, pan: number) {
+    const t = c.t;
+    const hold = m.hold * c.dur;
+    const end = t + m.attack + hold + m.release;
+    const f = this.ctx.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = m.lp * (1 + 0.3 * c.heat) * (c.press < 0 ? 1 + 0.4 * c.press : 1);
+    f.Q.value = 0.6;
+    const amp = this.ctx.createGain();
+    const peak = 0.07 * m.level * level;
+    amp.gain.setValueAtTime(0, t);
+    amp.gain.linearRampToValueAtTime(peak, t + m.attack);
+    amp.gain.setValueAtTime(peak, t + m.attack + hold);
+    amp.gain.exponentialRampToValueAtTime(Math.max(1e-4, peak * 0.001), end);
+    amp.gain.setValueAtTime(0, end);
+    f.connect(amp);
+    const out = this.panNode(pan, this.busIn.lead);
+    out.add(amp);
+    const rest: AudioNode[] = [f, amp, out.dest];
+    const idle = c.hit.idle?.lead ?? 1;
+    for (const [amount, sum] of [[m.echo, this.sends.echoSum], [m.space, this.sends.spaceSum]] as const) {
+      if (amount <= 0) continue;
+      const g = this.ctx.createGain();
+      g.gain.value = amount * idle;
+      stereo(g);
+      amp.connect(g);
+      sum.add(g);
+      rest.push(g);
+    }
+    const oscs: OscillatorNode[] = [];
+    let chain: AudioNode | null = null;
+    for (const cents of [-m.detune, m.detune]) {
+      const osc = this.ctx.createOscillator();
+      osc.type = m.wave;
+      osc.frequency.setValueAtTime(midiToFreq(midi), t);
+      osc.detune.setValueAtTime(cents, t);
+      const g = this.ctx.createGain();
+      g.gain.value = 0.5;
+      osc.connect(g);
+      rest.push(g);
+      chain = this.pairSum(chain, g, rest);
+      oscs.push(osc);
+    }
+    chain!.connect(f);
+    for (const osc of oscs) osc.start(t);
+    oscs.forEach((osc, i) => this.end(osc, i === 0 ? rest : [], end + 0.02));
   }
 
   /** The style's tables: the house style's, with a station style's data merged over its base's (dubStyleOf). */
@@ -1063,14 +1328,27 @@ export class VoiceEngine {
       f.frequency.linearRampToValueAtTime(target, c.t + c.dur * 16);
     }
     this.dubEchoHz = target;
+    // The breathing repeats (a station style's sweep.fb): each repeat's level glides between fb and fb * (1 - depth).
+    const b = d.breath;
+    if (b && b.fb > 0 && this.echoFb.length > 0) {
+      const fb = this.mix.echo.fb * (1 - b.fb * this.dubSlow(c, b.period, 0xd0e7));
+      const was = this.dubFbNow >= 0 ? this.dubFbNow : fb;
+      for (const g of this.echoFb) {
+        g.gain.setValueAtTime(was, c.t);
+        g.gain.linearRampToValueAtTime(fb, c.t + c.dur * 16);
+      }
+      this.dubFbNow = fb;
+    }
   }
 
   /**
    * The chord stab: the bar's chord (upper voicing, the sub plays the root) on detuned oscillators through a
    * lowpass whose envelope closes fast; the echo and the room make the bloom. The cutoff follows the style's slow
-   * sweep, a faster `move` wobble over four bars, the pool tick, heat and pressure.
+   * sweep, a faster `move` wobble over four bars, the pool tick, heat and pressure; a figure hit's `accent` darkens or
+   * opens it by the style's `velLp`. A style's `mix2` adds a second oscillator per chord tone (`wave2`, `octave2`).
+   * A style's `engine` swaps the detuned pair for an FM voice (dubStabFm) or a struck resonator bank (dubStabPluck).
    */
-  private dubStab(c: Ctx, level: number, bus: "harm" | "fx") {
+  private dubStab(c: Ctx, level: number, bus: "harm" | "fx", accent = 1) {
     const d = this.dubStyle(c);
     const s = d.stab;
     const t = c.t;
@@ -1079,7 +1357,8 @@ export class VoiceEngine {
     const slow = this.dubSlow(c, d.stabPeriod, 0xd0e2);
     const wobble = 1 + s.move * (0.5 - 0.5 * Math.cos((2 * Math.PI * (((c.n % 64) + 64) % 64)) / 64) - 0.5);
     const dark = c.press < 0 ? 1 + 0.4 * c.press : 1 + 0.12 * c.press;
-    const cutoff = s.lp * (0.55 + 0.9 * slow) * wobble * (0.85 + 0.3 * c.color) * (1 + 0.6 * c.heat) * dark * (bus === "fx" ? 1.25 : 1);
+    let cutoff = s.lp * (0.55 + 0.9 * slow) * wobble * (0.85 + 0.3 * c.color) * (1 + 0.6 * c.heat) * dark * (bus === "fx" ? 1.25 : 1);
+    if (s.velLp && s.velLp > 0) cutoff *= clamp(accent, 0.2, 1.5) ** (1.5 * s.velLp);
     const hp = this.ctx.createBiquadFilter();
     hp.type = "highpass";
     hp.frequency.value = s.hp;
@@ -1097,10 +1376,16 @@ export class VoiceEngine {
     const pan = this.panNode(bus === "fx" ? c.pan * 1.2 : s.pan, this.busIn[bus]);
     pan.add(amp);
     let chain: AudioNode | null = null;
-    const oscs: OscillatorNode[] = [];
+    const oscs: StabSource[] = [];
     const rest: AudioNode[] = [];
+    // The new voices (stabTone.engine): FM or a struck resonator bank, under the same filters, amp and sends.
+    const voice = s.engine === "fm" || s.engine === "pluck" ? s.engine : "osc";
+    if (voice !== "osc") {
+      const tones = voicing.map((semi) => midiToFreq(base + semi));
+      chain = voice === "fm" ? this.dubStabFm(t, tones, s, accent, oscs, rest) : this.dubStabPluck(t, tones, s, accent, oscs, rest);
+    }
     for (const semi of voicing) {
-      for (const cents of [-s.detune, s.detune]) {
+      for (const cents of voice === "osc" ? [-s.detune, s.detune] : []) {
         const osc = this.ctx.createOscillator();
         osc.type = s.wave;
         osc.frequency.setValueAtTime(midiToFreq(base + semi), t);
@@ -1112,10 +1397,140 @@ export class VoiceEngine {
         chain = this.pairSum(chain, g, rest);
         oscs.push(osc);
       }
+      // The layer: one more oscillator on the tone, its own wave and register.
+      if (s.mix2 && s.mix2 > 0) {
+        const osc = this.ctx.createOscillator();
+        if (s.wave2 === "pulse") osc.setPeriodicWave(this.pulseWave(s.width ?? 0.3));
+        else osc.type = s.wave2 ?? s.wave;
+        osc.frequency.setValueAtTime(midiToFreq(base + semi + (s.octave2 ?? 0)), t);
+        const g = this.ctx.createGain();
+        g.gain.value = 0.3 * s.mix2;
+        osc.connect(g);
+        rest.push(g);
+        chain = this.pairSum(chain, g, rest);
+        oscs.push(osc);
+      }
     }
     chain!.connect(hp);
     for (const osc of oscs) osc.start(t);
     oscs.forEach((osc, i) => this.end(osc, i === 0 ? [...rest, hp, f, amp, pan.dest] : [], end + 0.02));
+  }
+
+  /**
+   * The FM stab's tones (stabTone.engine "fm", DubStabFmSpec): per chord tone a sine modulator at `ratio` times the
+   * tone into the frequency of two sine carriers detuned by the stab's `detune`; its index jumps to `index` at the
+   * hit and falls to `floor` x index over `decay` s. An optional second modulator (`index2` > 0) adds a ping that
+   * dies in `decay2` s (whole ratios keep both in the key). The figure hit's level scales both indices (`vel`). Returns the carriers' sum.
+   * Nodes per tone: 2 carriers, 2 gains, 1 modulator and its depth (2 more with the second modulator), 2 sums.
+   */
+  private dubStabFm(t: number, tones: number[], s: DubStabSpec, accent: number, srcs: StabSource[], rest: AudioNode[]): AudioNode {
+    const fm = { ...DUB_STAB_FM, ...s.fm };
+    const velo = clamp(accent, 0.2, 1.5) ** (1.5 * fm.vel);
+    let chain: AudioNode | null = null;
+    for (const hz of tones) {
+      const carriers: OscillatorNode[] = [];
+      for (const cents of [-s.detune, s.detune]) {
+        const osc = this.ctx.createOscillator();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(hz, t);
+        osc.detune.setValueAtTime(cents, t);
+        const g = this.ctx.createGain();
+        g.gain.value = 0.3 * DUB_FM_LEVEL;
+        osc.connect(g);
+        rest.push(g);
+        chain = this.pairSum(chain, g, rest);
+        srcs.push(osc);
+        carriers.push(osc);
+      }
+      const mods: [number, number, number, number][] = [[fm.ratio, fm.index, fm.decay, fm.floor]];
+      if (fm.index2 > 0) mods.push([fm.ratio2, fm.index2, fm.decay2, 0]);
+      // The modulators are summed pairwise first: each carrier's frequency takes one input (bit-exact offline).
+      let modSum: AudioNode | null = null;
+      for (const [ratio, index, decay, floor] of mods) {
+        const peak = index * velo * hz * ratio;
+        if (peak <= 0) continue;
+        const mod = this.ctx.createOscillator();
+        mod.type = "sine";
+        mod.frequency.setValueAtTime(hz * ratio, t);
+        const depth = this.ctx.createGain();
+        depth.gain.setValueAtTime(peak, t);
+        if (floor > 0) depth.gain.exponentialRampToValueAtTime(peak * floor, t + decay);
+        else {
+          depth.gain.exponentialRampToValueAtTime(peak * 0.001, t + decay);
+          depth.gain.setValueAtTime(0, t + decay);
+        }
+        mod.connect(depth);
+        rest.push(depth);
+        modSum = this.pairSum(modSum, depth, rest);
+        srcs.push(mod);
+      }
+      if (modSum) for (const car of carriers) modSum.connect(car.frequency);
+    }
+    return chain!;
+  }
+
+  /**
+   * The struck resonator stab's tones (stabTone.engine "pluck", DubStabPluckSpec): one mallet click (a half sine
+   * `burst` s wide, through a lowpass at `tone` Hz that the figure hit's level opens by `vel`) strikes a bandpass
+   * resonator per chord tone and mode ratio; each rings `decay` x (1 / ratio)^`damp` s to -60 dB (its Q is
+   * pi x f x the time constant), scaled so every mode starts near the same level whatever its ring. Deterministic:
+   * the click is a cached buffer, no noise. Nodes: the click, its lowpass, then per tone and mode a resonator and its
+   * gain, and the sums.
+   */
+  private dubStabPluck(t: number, tones: number[], s: DubStabSpec, accent: number, srcs: StabSource[], rest: AudioNode[]): AudioNode {
+    const p = { ...DUB_STAB_PLUCK, ...s.pluck };
+    const sr = this.ctx.sampleRate;
+    const click = this.ctx.createBufferSource();
+    const buffer = this.malletBuffer(p.burst);
+    click.buffer = buffer;
+    // The click plays once, then the source idles on its silent tail until the voice ends (it holds the voice).
+    click.loop = true;
+    click.loopStart = buffer.duration - 0.02;
+    click.loopEnd = buffer.duration;
+    const mallet = this.ctx.createBiquadFilter();
+    mallet.type = "lowpass";
+    mallet.frequency.value = Math.min(sr * 0.45, p.tone * clamp(accent, 0.2, 1.5) ** (1.5 * p.vel));
+    mallet.Q.value = 0.7;
+    click.connect(mallet);
+    rest.push(mallet);
+    srcs.push(click);
+    // A half sine of width w has area 2w / pi; a bandpass of time constant tau answers an impulse of area a with
+    // about 2a / tau, so a gain of tau / (2a) x 0.3 starts every mode near 0.3.
+    const area = (2 * p.burst) / Math.PI;
+    let chain: AudioNode | null = null;
+    for (const hz of tones) {
+      for (const ratio of p.modes) {
+        const f0 = hz * ratio;
+        if (f0 >= sr * 0.45) continue;
+        const tau = (p.decay * (1 / ratio) ** p.damp) / 6.91;
+        const bp = this.ctx.createBiquadFilter();
+        bp.type = "bandpass";
+        bp.frequency.value = f0;
+        bp.Q.value = Math.max(0.5, Math.PI * f0 * tau);
+        const g = this.ctx.createGain();
+        g.gain.value = ((0.3 * tau) / (2 * area)) * DUB_PLUCK_LEVEL;
+        mallet.connect(bp);
+        bp.connect(g);
+        rest.push(bp, g);
+        chain = this.pairSum(chain, g, rest);
+      }
+    }
+    return chain!;
+  }
+
+  /** The pluck's mallet: a half sine `width` s wide, then 20 ms of silence the source loops on (cached). */
+  private malletBuffer(width: number): AudioBuffer {
+    const sr = this.ctx.sampleRate;
+    const k = `mallet:${width}:${sr}`;
+    let buffer = this.bufCache.get(k);
+    if (!buffer) {
+      const n = Math.max(2, Math.round(width * sr));
+      buffer = this.ctx.createBuffer(1, n + Math.round(0.02 * sr), sr);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < n; i++) data[i] = Math.sin((Math.PI * (i + 0.5)) / n);
+      this.cache(k, buffer);
+    }
+    return buffer;
   }
 
   /**
@@ -1144,6 +1559,16 @@ export class VoiceEngine {
     f.type = "lowpass";
     f.Q.value = 0.7;
     f.frequency.setValueAtTime(lo, t);
+    // A style's pad highpass (padTone.hp) keeps the drone out of the kick and the sub.
+    let input: AudioNode = f;
+    if (p.hp && p.hp > 0) {
+      input = this.ctx.createBiquadFilter();
+      const hp = input as BiquadFilterNode;
+      hp.type = "highpass";
+      hp.frequency.value = p.hp;
+      hp.Q.value = 0.5;
+      hp.connect(f);
+    }
     f.frequency.linearRampToValueAtTime(hi, t + hold * 0.55);
     f.frequency.linearRampToValueAtTime(lo, end);
     const amp = this.ctx.createGain();
@@ -1172,9 +1597,9 @@ export class VoiceEngine {
         oscs.push(osc);
       }
     });
-    chain!.connect(f);
+    chain!.connect(input);
     for (const osc of oscs) osc.start(t);
-    oscs.forEach((osc, i) => this.end(osc, i === 0 ? [...rest, f, amp, pan.dest] : [], end + 0.02));
+    oscs.forEach((osc, i) => this.end(osc, i === 0 ? [...rest, ...(input === f ? [] : [input]), f, amp, pan.dest] : [], end + 0.02));
   }
 
   /** Bell / soft pluck: a sine with a harmonic FM partial that fades faster than the note, on the lead bus into the echo. */
@@ -2788,8 +3213,8 @@ export class VoiceEngine {
     oscs.forEach((osc, i) => this.end(osc, i === 0 ? rest : [], end + 0.05));
   }
 
-  /** One scale-tone skate, the glitch row heard as a tape slip rather than a digital click. */
-  private ambientHazeBlip(c: Ctx) {
+  /** One scale-tone skate, the glitch row heard as a tape slip rather than a digital click. `gain`: attention ornaments. */
+  private ambientHazeBlip(c: Ctx, gain = 1) {
     const notes = dataOf<AmbientIdmData>(c).notes ?? this.era.notes;
     const h = hash32(c.epoch, c.n, 0xb10c);
     const from = notes[h % notes.length];
@@ -2797,7 +3222,7 @@ export class VoiceEngine {
     const base = 72 + c.tonic;
     const freq = midiToFreq(base + from);
     const dest = midiToFreq(base + (to === from ? from + 12 : to));
-    this.toneHit(c.t, 0.06 * (0.7 + 0.3 * c.heat), {
+    this.toneHit(c.t, 0.06 * (0.7 + 0.3 * c.heat) * gain, {
       type: "triangle", freq, to: dest, sweep: 0.11, decay: 0.13, pan: c.pan, bus: this.busIn.perc,
     });
   }
@@ -6527,8 +6952,11 @@ export class VoiceEngine {
     this.end(src, [hp, g], c.t + bar + 0.15);
   }
 
-  /** The genre's lead patch on one note (melody genres only). */
-  private motifNote(c: Ctx, midi: number, length: number, level: number) {
+  /**
+   * The genre's lead patch on one note (melody genres only). `attack` (s) caps the patch's amp attack, so a slow patch
+   * still speaks on its step (the liquid mention's key note); left out, the patch plays as it is.
+   */
+  private motifNote(c: Ctx, midi: number, length: number, level: number, attack?: number) {
     const patch: LeadPatch = leadPatch(this.era.id, c.epoch, c.style.leads, c.style.patches);
     const time = c.t;
     const freq = midiToFreq(midi);
@@ -6645,7 +7073,8 @@ export class VoiceEngine {
     }
     const amp = this.ctx.createGain();
     const peak = 0.11 * patch.gain * level;
-    const { a, d, s: sus, r } = patch.amp;
+    const { d, s: sus, r } = patch.amp;
+    const a = attack === undefined ? patch.amp.a : Math.min(patch.amp.a, attack);
     amp.gain.setValueAtTime(0.0001, time);
     amp.gain.linearRampToValueAtTime(peak, time + a);
     amp.gain.exponentialRampToValueAtTime(Math.max(0.0001, peak * sus), time + a + d);
@@ -6773,7 +7202,12 @@ export class VoiceEngine {
     }
     const drive = this.mix.drive * (1 + this.mix.pressDrive * Math.max(0, c.press)) * (1 + 0.3 * c.heat);
     const space = 1 + 0.7 * Math.max(0, -c.press) + (this.era.id === "ambientidm" || this.era.id === "drone" ? 0.6 * c.heat : 0);
-    const echoAmt = 1 + (this.era.id === "dubtechno" ? 0.6 * c.heat + 0.3 * Math.max(0, -c.press) : 0.2 * c.heat);
+    let echoAmt = 1 + (this.era.id === "dubtechno" ? 0.6 * c.heat + 0.3 * Math.max(0, -c.press) : 0.2 * c.heat);
+    // Dub techno's breathing send (a station style's sweep.send): the level into the echo dips and comes back.
+    if (this.era.id === "dubtechno" && c.style.data) {
+      const b = this.dubStyle(c).breath;
+      if (b && b.send > 0) echoAmt *= 1 - b.send * this.dubSlow(c, b.period, 0xd0e6);
+    }
     if (!this.macro.primed) {
       this.drive.gain.setValueAtTime(drive, 0);
       this.spaceLevel.gain.setValueAtTime(space, 0);
@@ -6802,10 +7236,26 @@ export class VoiceEngine {
   private buildEcho(tempo: number) {
     const e = this.mix.echo;
     const time = Math.min(2.4, (60 / tempo / 4) * e.steps);
+    // Dub techno's echo shape (a station style's echoTone): stereo width, a ping-pong second time on the odd repeats,
+    // a tape wobble (one slow sine on every repeat's time: an oscillator, not automation, so renders stay bit-exact).
+    const shape = this.dubEcho;
+    const width = shape ? shape.width : 0.55;
+    const other = shape && shape.alt > 0 ? Math.min(2.4, (60 / tempo / 4) * shape.alt) : time;
+    let wobble: GainNode | null = null;
+    if (shape && shape.wobble > 0) {
+      const lfo = this.ctx.createOscillator();
+      lfo.type = "sine";
+      lfo.frequency.value = shape.rate;
+      wobble = this.ctx.createGain();
+      wobble.gain.value = 0.003 * shape.wobble;
+      lfo.connect(wobble);
+      lfo.start(0);
+    }
     let prev: AudioNode = this.echoLevel;
     for (let i = 0; i < e.taps; i++) {
       const delay = this.ctx.createDelay(2.5);
-      delay.delayTime.value = time;
+      delay.delayTime.value = i % 2 === 1 ? other : time;
+      if (wobble) wobble.connect(delay.delayTime);
       const lp = this.ctx.createBiquadFilter();
       lp.type = "lowpass";
       lp.frequency.value = e.lp;
@@ -6816,11 +7266,12 @@ export class VoiceEngine {
       hp.frequency.value = e.hp;
       const g = this.ctx.createGain();
       g.gain.value = i === 0 ? 0.55 : e.fb;
+      if (this.era.id === "dubtechno" && i > 0) this.echoFb.push(g);
       prev.connect(delay);
       delay.connect(lp);
       lp.connect(hp);
       hp.connect(g);
-      const out = this.panNode(i % 2 === 0 ? 0.55 : -0.55, this.mains);
+      const out = this.panNode(i % 2 === 0 ? width : -width, this.mains);
       out.add(g);
       prev = g;
     }
@@ -6864,6 +7315,74 @@ export class VoiceEngine {
       prev = g;
       this.room.push({ delay: d, sec, lp, g: i === 0 ? undefined : g });
     });
+  }
+
+  /**
+   * Dub techno's rumble (a station style's `rumble`): the kick bus, lowpassed, through two feed-forward chains of seven
+   * delay taps (left and right, ~30 dB down over `decay`), lowpassed again, through a gain the kick ducks (rumbleDuck)
+   * and a 30 Hz highpass into the mains, past the master stage like the room. Built once, on the first hit.
+   */
+  private buildRumble(r: DubRumbleSpec) {
+    const ctx = this.ctx;
+    const gain = (value = 1) => {
+      const g = ctx.createGain();
+      g.gain.value = value;
+      stereo(g);
+      return g;
+    };
+    const lowpass = (hz: number) => {
+      const f = ctx.createBiquadFilter();
+      f.type = "lowpass";
+      f.frequency.value = hz;
+      f.Q.value = 0.5;
+      return f;
+    };
+    const send = gain(r.level);
+    this.bus.kick.connect(send);
+    const pre = lowpass(r.lp);
+    if (this.live) {
+      send.connect(pre);
+    } else {
+      // Offline: a -120 dB constant keeps the chain from going silent (see the sends); the final highpass removes it.
+      const keep = ctx.createConstantSource();
+      keep.offset.value = 1e-6;
+      keep.start(0);
+      const sum = gain();
+      send.connect(sum);
+      keep.connect(sum);
+      sum.connect(pre);
+    }
+    const duck = gain();
+    this.rumbleDuck = duck;
+    const hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 30;
+    hp.Q.value = 0.6;
+    duck.connect(hp);
+    this.mains.add(hp);
+    const out = new MixChain(ctx, duck, this.live);
+    const fb = 0.0316 ** (1 / 6);
+    const lines: [number, readonly number[]][] = [
+      [-0.5, [0.09, 0.13, 0.17, 0.11, 0.19, 0.14, 0.17]],
+      [0.5, [0.07, 0.15, 0.12, 0.18, 0.13, 0.19, 0.16]],
+    ];
+    for (const [side, spacing] of lines) {
+      const lineSum = gain();
+      const taps = new MixChain(ctx, lineSum, this.live);
+      let prev: AudioNode = pre;
+      spacing.forEach((f, i) => {
+        const d = ctx.createDelay(1);
+        d.delayTime.value = r.decay * f;
+        const g = gain(i === 0 ? 1 : fb);
+        prev.connect(d);
+        d.connect(g);
+        taps.add(g);
+        prev = g;
+      });
+      const post = lowpass(r.lp);
+      lineSum.connect(post);
+      this.panNode(side, out).add(post);
+    }
   }
 
   private noise(): AudioBuffer {
@@ -7041,13 +7560,906 @@ export class VoiceEngine {
     }
     const soft = this.era.id === "ambientidm";
     if (drop.fill) {
-      if (this.era.id === "dubtechno") this.dubStab(c, 0.8, "fx");
+      if (this.era.id === "dubtechno") {
+        this.dubStab(c, 0.8, "fx");
+        // A style's melody answers a whale buy with its pool's top note.
+        const d = this.dubStyle(c);
+        if (d.melody.level > 0) {
+          const pool = d.melody.notes ?? this.dubChordAt(c, d).upper;
+          this.dubMelody(c, this.dubBase(c) + d.melody.octave + Math.max(...pool), c.vel, d.melody, 0.3);
+        }
+      }
       this.toneHit(c.t, soft ? 0.2 : this.era.id === "dubtechno" ? 0.26 : 0.42, { type: "sine", freq: 150, to: 42, sweep: 0.16, decay: soft ? 0.5 : 0.18, pan: 0, bus: this.busIn.fx });
       if (!soft) this.noiseHit(c.t, 0.16, { type: "highpass", freq: 1500, q: 0.7, decay: 0.03, pan: 0, bus: this.busIn.fx });
     } else {
       const dur = Math.min(0.7, Math.max(0.22, c.dur * 4));
       this.noiseHit(c.t, soft ? 0.08 : 0.18, { type: "lowpass", freq: 2400, to: 90, q: 6, decay: dur, pan: 0, bus: this.busIn.fx });
     }
+  }
+
+  // ------------------------------------------------------------------ NFT station cues (Credits)
+
+  /**
+   * An NFT station's cues (clock.ts SaleCue / LockCue, core nft.ts tags): only a collection station with a rating
+   * table or BALANCE emits them, so on every other station (and the house) nothing here runs. Dub techno only (the
+   * Credits program); other genres leave them out.
+   */
+  private creditCues(c: Ctx) {
+    if (this.era.id !== "dubtechno") return;
+    if (c.hit.lock) this.creditLock(c, c.hit.lock);
+    if (c.hit.sale) this.creditSale(c, c.hit.sale);
+  }
+
+  /**
+   * A rated Credit sale as a plate stab on the bar's chord. The rating (percentile) sets the velocity and the cutoff;
+   * the plates set the voice: as many chord tones as plates (from the top of the voicing), C pans left, M right, Y
+   * lifts it an octave, K adds a soft sub under it. The top ~5% (pct >= 243) also sing one note of the sparse melody.
+   */
+  private creditSale(c: Ctx, cue: { pct: number; mask: number }) {
+    const d = this.dubStyle(c);
+    const s = d.stab;
+    const u = clamp(cue.pct / 255, 0, 1);
+    const has = (bit: number) => (cue.mask >> bit) & 1;
+    const plates = has(0) + has(1) + has(2) + has(3);
+    if (plates === 0) return;
+    const chord = this.dubChordAt(c, d);
+    const voicing = chord.upper.slice(-Math.min(plates, chord.upper.length));
+    const base = this.dubBase(c) + s.octave + (has(2) ? 12 : 0);
+    const pan = 0.55 * (has(1) - has(0));
+    const top = cue.pct >= 243;
+    const t = c.t;
+    // A figure stab's level at the middle of the edition, louder at the top.
+    const level = (0.45 + 0.75 * u) * c.vel;
+    const cutoff = clamp(s.lp * (0.4 + 1.5 * u) * (1 + 0.4 * c.heat), 180, 9000);
+    const f = this.ctx.createBiquadFilter();
+    f.type = "lowpass";
+    f.Q.value = s.q;
+    f.frequency.setValueAtTime(cutoff * s.env, t);
+    f.frequency.exponentialRampToValueAtTime(cutoff, t + s.envTime);
+    const amp = this.ctx.createGain();
+    const release = s.release * (0.6 + 0.7 * u);
+    pulse(amp.gain, t, s.attack, s.gain * level, release);
+    f.connect(amp);
+    // The top of the edition goes into the echo; the rest sits with the stabs.
+    const out = this.panNode(pan, this.busIn[top ? "fx" : "harm"]);
+    out.add(amp);
+    const rest: AudioNode[] = [f, amp, out.dest];
+    let chain: AudioNode | null = null;
+    const oscs: OscillatorNode[] = [];
+    for (const semi of voicing) {
+      for (const cents of [-s.detune, s.detune]) {
+        const osc = this.ctx.createOscillator();
+        osc.type = s.wave;
+        osc.frequency.setValueAtTime(midiToFreq(base + semi), t);
+        osc.detune.setValueAtTime(cents, t);
+        const g = this.ctx.createGain();
+        g.gain.value = 0.3;
+        osc.connect(g);
+        rest.push(g);
+        chain = this.pairSum(chain, g, rest);
+        oscs.push(osc);
+      }
+    }
+    chain!.connect(f);
+    for (const osc of oscs) osc.start(t);
+    oscs.forEach((osc, i) => this.end(osc, i === 0 ? rest : [], t + s.attack + release + 0.02));
+    // K: the black plate goes under the floor, a soft sub on the chord root.
+    if (has(3)) this.toneHit(t, (0.1 + 0.12 * u) * c.vel, { type: "sine", freq: midiToFreq(this.dubBassRoot(c, chord)), decay: c.dur * 6, attack: 0.012, pan: 0, bus: this.busIn.bass });
+    if (top) {
+      const m = d.melody.level > 0 ? d.melody : CREDIT_MELODY;
+      const pool = m.notes ?? chord.upper;
+      this.dubMelody(c, this.dubBase(c) + m.octave + Math.max(...pool), c.vel * (0.7 + 0.3 * u), m, pan === 0 ? 0.2 : pan);
+    }
+  }
+
+  /**
+   * A BALANCE withdraw (a Statement locked): the torn tag. A paper rip into the echo, a sub falling under it, a rumble
+   * swelling up from the floor and the bar's chord thrown long into the echo. Points against the median (~40k) set how
+   * deep and how long (0.4x .. 2x); the release's ink tints what goes into the echo: yellow opens it, black darkens it,
+   * cyan pulls it left and magenta right.
+   */
+  private creditLock(c: Ctx, cue: { points: number; ink?: readonly [number, number, number, number] }) {
+    const d = this.dubStyle(c);
+    const t = c.t;
+    const bar = c.dur * 16;
+    const k = clamp(1 + Math.log2(Math.max(1, cue.points) / CREDIT_LOCK_MEDIAN) / 2, 0.4, 2);
+    const [cy, mg, ye, bk] = (cue.ink ?? [25, 25, 25, 25]).map((x) => clamp(x / 100, 0, 1));
+    // The tear: two short rips falling through a band, straight into the echo.
+    for (const [at, peak, from] of [[0, 0.32, 3600], [0.045, 0.22, 2600]] as const) {
+      this.noiseHit(t + at, peak * Math.sqrt(k), { type: "bandpass", freq: from, to: 700, q: 1.4, decay: 0.16, pan: 0.3 * (mg - cy), bus: this.busIn.fx });
+    }
+    // The sub drop: an octave over the floor falling to it, held by the size of the page.
+    const floor = midiToFreq(c.low);
+    this.toneHit(t, 0.85 * Math.min(1.4, Math.sqrt(k)), { type: "sine", freq: floor * 2, to: floor, sweep: bar * 0.5 * k, decay: bar * (0.6 + 0.5 * k), attack: 0.01, pan: 0, bus: this.busIn.bass });
+    // The rumble: low noise swelling over a bar or two, then gone.
+    this.noiseHit(t, 0.55 * Math.min(1.6, k), { type: "lowpass", freq: 90, to: 260, q: 0.8, attack: bar * 0.7 * k, decay: bar * (0.8 + 0.6 * k), pan: 0, bus: this.busIn.fx });
+    // The throw: the bar's whole chord, long, through the ink's filter into the echo only.
+    const s = d.stab;
+    const voicing = this.dubChordAt(c, d).upper;
+    const base = this.dubBase(c) + s.octave;
+    const tint = this.ctx.createBiquadFilter();
+    tint.type = "lowpass";
+    tint.Q.value = 0.9;
+    const hz = clamp(1500 * (1 + 1.6 * ye + 0.5 * cy - 0.75 * bk), 350, 7000);
+    tint.frequency.setValueAtTime(hz * 1.8, t);
+    tint.frequency.exponentialRampToValueAtTime(hz, t + 0.3);
+    const amp = this.ctx.createGain();
+    const release = clamp(bar * 0.4 * k, 0.6, 4);
+    pulse(amp.gain, t, 0.006, s.gain * 1.6 * Math.min(1.4, k) * c.vel, release);
+    tint.connect(amp);
+    // Dry on the fx bus (its own echo send) and straight into the echo, both where the ink pans it.
+    const where = clamp(0.9 * (mg - cy), -0.7, 0.7);
+    const dry = this.panNode(where, this.busIn.fx);
+    dry.add(amp);
+    const send = this.ctx.createGain();
+    send.gain.value = 0.9;
+    const pan = this.panNode(where, this.sends.echoSum);
+    amp.connect(send);
+    pan.add(send);
+    const rest: AudioNode[] = [tint, amp, send, dry.dest, pan.dest];
+    let chain: AudioNode | null = null;
+    const oscs: OscillatorNode[] = [];
+    for (const semi of voicing) {
+      for (const cents of [-s.detune, s.detune]) {
+        const osc = this.ctx.createOscillator();
+        osc.type = s.wave;
+        osc.frequency.setValueAtTime(midiToFreq(base + semi), t);
+        osc.detune.setValueAtTime(cents, t);
+        const g = this.ctx.createGain();
+        g.gain.value = 0.3;
+        osc.connect(g);
+        rest.push(g);
+        chain = this.pairSum(chain, g, rest);
+        oscs.push(osc);
+      }
+    }
+    chain!.connect(tint);
+    for (const osc of oscs) osc.start(t);
+    oscs.forEach((osc, i) => this.end(osc, i === 0 ? rest : [], t + release + 0.05));
+  }
+
+  // ------------------------------------------------------------------ attention layer (prototype)
+
+  /**
+   * One mention of the token as a quiet ornament through the playing base's own voice (ORNAMENT_PLAN), pitched from
+   * the bar's chord or the instance key, at the step's own time (swing and micro included); a station style's tables
+   * restyle it like the rest of the style. Plays only on one of the base's slots and returns whether it did, so the rig
+   * keeps the request for a later step. Smart: the clearer version, a little louder and in the voice's own terms (the
+   * whole word, a longer call, a second tone, an octave, a retrigger). The lead glide is restored afterwards, so the
+   * track's own next note is untouched.
+   */
+  private ornament(c: Ctx, o: OrnamentPlay): boolean {
+    if (!this.ornamentSlots(c).includes(c.step)) return false;
+    const glide = this.lastLeadFreq;
+    switch (this.era.id) {
+      case "electro":
+        this.electroOrnament(c, o);
+        break;
+      case "acid":
+        this.acidOrnament(c, o);
+        break;
+      case "ambientidm":
+        this.ambientOrnament(c, o);
+        break;
+      case "drone":
+        this.droneOrnament(c, o);
+        break;
+      case "dubtechno":
+        this.dubOrnament(c, o);
+        break;
+      case "liquid":
+        this.liquidOrnament(c, o);
+        break;
+      case "futuregarage":
+        this.garageOrnament(c, o);
+        break;
+      case "triphop":
+        // The scratch is noise through a narrow band: heard at all only ~20 dB over the glitch row's own (0.18).
+        this.tripHopScratch(c, (c.sid === "bristol" ? 1.6 : 1.2) * (o.smart ? 1.4 : 1));
+        break;
+      case "lofihouse":
+        this.lofiOrnament(c, o);
+        break;
+      case "wonky":
+        this.wonkyOrnament(c, o);
+        break;
+    }
+    this.lastLeadFreq = glide;
+    return true;
+  }
+
+  /** The base's ornament slots this bar; gap slots leave out the steps the base's own figure plays. */
+  private ornamentSlots(c: Ctx): readonly number[] {
+    const plan = ORNAMENT_PLAN[this.era.id];
+    // Electro: the style's robot word may move it (ornament.slots).
+    if (this.era.id === "electro") return this.robotWordOf(c).slots;
+    // Future garage: the style's mention may move it (ornament.slots).
+    if (this.era.id === "futuregarage") return this.garageMentionOf(c).slots;
+    // Liquid: the style's mention may move it (ornament.slots).
+    if (this.era.id === "liquid") return this.liquidMentionOf(c).slots;
+    const slots = (plan[c.sid] ?? plan.classic).slots;
+    if (slots !== SLOTS_GAPS) return slots;
+    let busy: readonly number[] = [];
+    if (this.era.id === "dubtechno") {
+      const d = this.dubStyle(c);
+      busy = d.figures[hash32(c.epoch, 0x57ab) % d.figures.length];
+    } else if (this.era.id === "acid") {
+      const line = this.acid303Pattern(c);
+      busy = slots.filter((s) => line[s] != null);
+    }
+    const free = slots.filter((s) => !busy.includes(s));
+    return free.length > 0 ? free : SLOTS_OFFBEAT;
+  }
+
+  /**
+   * Electro (every base): the robot word, two syllables ("ah", then "ee") of a buzzy square through moving formants,
+   * crushed to a few steps, an 8th each, on the instance tonic's scale (successive mentions walk it). Smart: louder, an
+   * octave up and thrown into a dotted-8th echo. The owner chose this one over the bases' speak-and-spell / robot call.
+   */
+  private electroOrnament(c: Ctx, o: OrnamentPlay) {
+    this.robotWord(c, o);
+  }
+
+  /** The style's robot word: its `ornament` data merged over the base's preset (ROBOT_WORDS). */
+  private robotWordOf(c: Ctx): RobotWordSpec {
+    return specOf(dataOf<ElectroData>(c).ornament, ROBOT_WORDS[c.sid] ?? ROBOT_WORDS.client03);
+  }
+
+  /** The robot word itself (electroOrnament), in the base's character (ROBOT_WORDS); smart: louder, an octave up, echoed. */
+  private robotWord(c: Ctx, o: OrnamentPlay) {
+    const w = this.robotWordOf(c);
+    const notes = this.era.notes.length > 0 ? this.era.notes : [0, 3, 7, 10];
+    const midi = 48 + w.octave + c.tonic + notes[(o.index * 2) % notes.length] + (o.smart ? 12 : 0);
+    const t = c.t;
+    const sl = c.dur * w.syllable;
+    const peak = w.level * (o.smart ? 1.6 : 1);
+    const src = this.ctx.createOscillator();
+    src.type = w.wave;
+    src.frequency.setValueAtTime(midiToFreq(midi), t);
+    const rest: AudioNode[] = [];
+    let voice: AudioNode = src;
+    const extra: OscillatorNode[] = [];
+    if (w.ring > 0) {
+      // Ring modulation: the voice times a sine a fixed ratio above it, the metallic robot.
+      const mod = this.ctx.createOscillator();
+      mod.frequency.setValueAtTime(midiToFreq(midi) * w.ring, t);
+      const ring = this.ctx.createGain();
+      ring.gain.value = 0;
+      mod.connect(ring.gain);
+      src.connect(ring);
+      voice = ring;
+      extra.push(mod);
+      rest.push(ring);
+    }
+    const crush = this.ctx.createWaveShaper();
+    crush.curve = new Float32Array(Array.from({ length: 64 }, (_, i) => Math.round(((i / 63) * 2 - 1) * w.steps) / w.steps));
+    crush.oversample = "none";
+    rest.push(crush);
+    for (const [k, q] of [[0, 7], [1, 9]] as const) {
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.Q.value = q;
+      w.vowels.forEach((f, n) => bp.frequency.setValueAtTime(f[k], t + n * sl));
+      voice.connect(bp);
+      bp.connect(crush);
+      rest.push(bp);
+    }
+    const gate = this.ctx.createGain();
+    gate.gain.setValueAtTime(0.0001, t);
+    w.vowels.forEach((_, n) => {
+      const at = t + n * sl;
+      gate.gain.setValueAtTime(0.0001, at);
+      gate.gain.linearRampToValueAtTime(peak, at + 0.01);
+      gate.gain.setValueAtTime(peak, at + sl * 0.7);
+      gate.gain.linearRampToValueAtTime(0.0001, at + sl * 0.95);
+    });
+    let tone: AudioNode = crush;
+    if (w.lowpass > 0) {
+      const lp = this.ctx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = w.lowpass;
+      crush.connect(lp);
+      tone = lp;
+      rest.push(lp);
+    }
+    tone.connect(gate);
+    rest.push(gate);
+    const out = this.ctx.destination;
+    gate.connect(out);
+    let tail = 0.05;
+    const echo = w.echo ?? (o.smart ? { steps: 3, feedback: 0.4 } : null);
+    if (echo) {
+      const dl = this.ctx.createDelay(2);
+      const fb = this.ctx.createGain();
+      const lp = this.ctx.createBiquadFilter();
+      dl.delayTime.value = c.dur * echo.steps;
+      fb.gain.value = echo.feedback;
+      lp.type = "lowpass";
+      lp.frequency.value = 2600;
+      gate.connect(dl);
+      dl.connect(lp);
+      lp.connect(fb);
+      fb.connect(dl);
+      lp.connect(out);
+      rest.push(dl, fb, lp);
+      tail = 2.5;
+    }
+    const stop = t + sl * w.vowels.length + tail;
+    for (const m of extra) {
+      m.start(t);
+      m.stop(stop);
+    }
+    src.start(t);
+    this.end(src, rest, stop);
+  }
+
+  /** Acid: a short 303 chirp an octave over the line's last note; smart accents it and slides up another octave. */
+  private acidOrnament(c: Ctx, o: OrnamentPlay) {
+    const line = this.acid303Pattern(c);
+    let at = c.step;
+    while (at > 0 && !line[at]) at--;
+    const src = line[at] ?? line.find((n) => n != null) ?? { degree: 0, octave: 0, flags: 0 };
+    const note: Acid303Note = { degree: src.degree, octave: src.octave + 1, flags: 0, gate: 0.5 };
+    const run = o.smart
+      ? [{ step: 0, note: { ...note, flags: 3 } }, { step: 1, note: { ...note, octave: note.octave + 1 } }]
+      : [{ step: 0, note }];
+    // 303 Floor's voice is the hottest of the three: its chirp sits lower.
+    const level = (c.sid === "classic" ? 0.32 : 0.45) * (o.smart ? 1.4 : 1);
+    this.acid303Voice({ ...c, sec: { ...c.sec, bass: level } }, run, 0);
+  }
+
+  /**
+   * Ambient IDM. Tape Keys: one warm-keys note an octave over the ostinato (smart: two, a 16th apart). Tape Haze: the
+   * glitch row's tape-slip blip (smart: louder). Crystal: a glass bell on the chord's top into the echo (smart: louder,
+   * with its octave).
+   */
+  private ambientOrnament(c: Ctx, o: OrnamentPlay) {
+    const d = dataOf<AmbientIdmData>(c);
+    if (c.sid === "boc") {
+      this.ambientHazeBlip(c, o.smart ? 2.5 : 1.7);
+      return;
+    }
+    if (c.sid === "crystal") {
+      const { chord } = this.ambientChord(c, 0x51c0, 4);
+      const bell = specOf(d.bell, AMBIENT_BELL);
+      const highs = chord.glass.filter((semi) => semi >= 7 && semi <= 19).slice(-3);
+      const semi = highs.length > 0 ? highs[o.index % highs.length] : chord.glass[chord.glass.length - 1];
+      const midi = 60 + c.tonic + semi;
+      this.ambientBell(c, c.t, midi, bell.level * (o.smart ? 1.1 : 0.75), bell.decay, "lead", bell);
+      if (o.smart) this.ambientBell(c, c.t + 0.014, midi + 12, bell.level * 0.45, bell.decay * 0.8, "lead", bell);
+      return;
+    }
+    const { chord } = this.ambientChord(c, 0x7a9e, 4);
+    const root = 48 + c.tonic;
+    const length = 6 * c.dur;
+    this.motifNote(c, root + 24 + this.ambientArpTone(chord, o.index % 6), length, o.smart ? 0.13 : 0.09);
+    if (o.smart) this.motifNote({ ...c, t: c.t + c.dur }, root + 24 + this.ambientArpTone(chord, (o.index + 1) % 6), length, 0.1);
+  }
+
+  /** Drone: the base's own glint, on its own notes (Wall: bell tones, Dark Low: bowls, Overtone Pulse: glass partials). */
+  private droneOrnament(c: Ctx, o: OrnamentPlay) {
+    const d = dataOf<DroneData>(c);
+    const mood = this.droneMood(c);
+    // Under the base's own glints: they ring long, and a wave of mentions brings many at once.
+    const gain = (c.sid === "dark" ? 0.55 : c.sid === "pulse" ? 0.42 : 0.25) * (o.smart ? 1.5 : 1);
+    const walk = hash32(c.epoch, 0x0a77) + o.index;
+    if (c.sid === "dark") {
+      const glint = specOf(d.glint, DRONE_GLINTS.dark);
+      const notes = d.glints ?? DRONE_BOWL_NOTES;
+      const top = glint.top + 400 * mood.glow;
+      this.droneGlint(c, c.low + 24 + notes[walk % notes.length], glint.level * (0.75 + 0.4 * mood.glow) * gain, glint.decay, glint.attack, top);
+    } else if (c.sid === "pulse") {
+      const glint = specOf(d.glint, DRONE_GLINTS.pulse);
+      const glass = d.glints ?? DRONE_GLASS;
+      const freq = midiToFreq(c.low + 12) * glass[walk % glass.length];
+      this.droneGlint(c, 0, glint.level * (0.7 + 0.5 * mood.glow) * gain, glint.decay, glint.attack, glint.top, freq);
+    } else {
+      const glint = specOf(d.glint, DRONE_GLINTS.classic);
+      const notes = d.glints ?? DRONE_GLINT_NOTES;
+      this.droneGlint(c, 60 + c.tonic + notes[walk % notes.length], glint.level * (0.7 + 0.5 * mood.glow) * gain, glint.decay, glint.attack, glint.top);
+    }
+  }
+
+  /** Dub techno: the bar's chord stab thrown into the echo; smart throws harder and adds a bell on the chord's top. */
+  private dubOrnament(c: Ctx, o: OrnamentPlay) {
+    this.dubStab(c, o.smart ? 0.28 : 0.19, "fx");
+    const d = this.dubStyle(c);
+    if (o.smart && d.bell.level > 0) {
+      const tones = this.dubChordAt(c, d).upper;
+      this.dubBell(c, this.dubBase(c) + 12 + tones[tones.length - 1], c.vel * d.bell.level * 0.7, d.bell);
+    }
+  }
+
+  /**
+   * Liquid (every base): the owner's mention voices, per base (LIQUID_ORNAMENTS) and restyled by the style's
+   * `ornament`. Keys: nature far away (a bird, a gust, a drop); Soulful: an amen ghost snare; Atmospheric: one note of
+   * the style's keys. Smart: two birds answering, a four-hit ghost roll (and the birds), a dyad.
+   */
+  private liquidOrnament(c: Ctx, o: OrnamentPlay) {
+    this.liquidMention(c, o);
+  }
+
+  /** The style's mention: its `ornament` data merged over the base's preset (LIQUID_ORNAMENTS). */
+  private liquidMentionOf(c: Ctx): LiquidOrnamentSpec {
+    return specOf(dataOf<LiquidData>(c).ornament, LIQUID_ORNAMENTS[c.sid] ?? LIQUID_ORNAMENTS.classic);
+  }
+
+  /**
+   * One mention through every voice of the base's set (liquidOrnament). Nature and the amen ghosts are the owner's
+   * prototype at its levels on the engine's raw output, straight to the destination (past the buses, as the robot
+   * word does); nature also lightly into the genre's room through the fx bus, the ghosts dry. The key note is the
+   * style's lead patch on the lead bus, as the track's own keys.
+   */
+  private liquidMention(c: Ctx, o: OrnamentPlay) {
+    const m = this.liquidMentionOf(c);
+    for (const voice of o.smart ? m.smart : m.voices) {
+      if (voice === "nature") this.mentionNature(c, o.smart ? "bird" : m.nature[o.index % m.nature.length], o.smart, m.level, o.index);
+      else if (voice === "amen") this.mentionAmen(c, o.smart, m.level, o.index);
+      else if (voice === "keys") this.mentionKeys(c, o, m.level);
+    }
+  }
+
+  /**
+   * Nature, far away: a bird (two sine chirps 2600 -> 4200 -> 3000 Hz, 0.12 s apart, the second x1.1), a gust (bandpass
+   * noise sweeping 400 -> 1400 -> 500 Hz over 0.9 s) or a water drop (a sine 1100 -> 2100 Hz in 20 ms). `answer`: a
+   * second bird a beat later, slightly detuned (x0.95, x1.05), two birds answering.
+   */
+  private mentionNature(c: Ctx, kind: LiquidNatureKind, answer: boolean, level: number, index: number) {
+    const t = c.t;
+    const send = 0.25;
+    if (kind === "bird") {
+      const chirp = (at: number, up: number) => {
+        const osc = this.ctx.createOscillator();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(2600 * up, at);
+        osc.frequency.exponentialRampToValueAtTime(4200 * up, at + 0.05);
+        osc.frequency.exponentialRampToValueAtTime(3000 * up, at + 0.09);
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.0001, at);
+        g.gain.linearRampToValueAtTime(0.03 * level, at + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + 0.1);
+        osc.connect(g);
+        const rest: AudioNode[] = [g];
+        this.mentionOut(g, send, rest);
+        osc.start(at);
+        this.end(osc, rest, at + 0.11);
+      };
+      chirp(t, 1);
+      chirp(t + 0.12, 1.1);
+      if (answer) {
+        const at = t + c.dur * 4;
+        chirp(at, 0.95);
+        chirp(at + 0.12, 1.05);
+      }
+      return;
+    }
+    if (kind === "gust") {
+      this.mentionNoise(
+        t,
+        t + 0.9,
+        0.51 + index * 0.37,
+        (f) => {
+          f.type = "bandpass";
+          f.Q.value = 1.2;
+          f.frequency.setValueAtTime(400, t);
+          f.frequency.exponentialRampToValueAtTime(1400, t + 0.45);
+          f.frequency.exponentialRampToValueAtTime(500, t + 0.9);
+        },
+        (g) => {
+          g.setValueAtTime(0.0001, t);
+          g.linearRampToValueAtTime(0.03 * level, t + 0.4);
+          g.linearRampToValueAtTime(0.0001, t + 0.9);
+        },
+        send,
+      );
+      return;
+    }
+    const osc = this.ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(1100, t);
+    osc.frequency.exponentialRampToValueAtTime(2100, t + 0.02);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.04 * level, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+    osc.connect(g);
+    const rest: AudioNode[] = [g];
+    this.mentionOut(g, send, rest);
+    osc.start(t);
+    this.end(osc, rest, t + 0.09);
+  }
+
+  /**
+   * Amen ghosts: a soft ghost snare (bandpass noise at 2.4 kHz, q 0.9, and a triangle 240 -> 180 Hz) on the step, dry;
+   * `roll`: a quick four-hit roll on 32nds, rising (0.45 + 0.2 a hit).
+   */
+  private mentionAmen(c: Ctx, roll: boolean, level: number, index: number) {
+    const snare = (at: number, v: number, j: number) => {
+      this.mentionNoise(
+        at,
+        at + 0.09,
+        0.31 + index * 0.23 + j * 0.09,
+        (f) => {
+          f.type = "bandpass";
+          f.frequency.value = 2400;
+          f.Q.value = 0.9;
+        },
+        (g) => {
+          g.setValueAtTime(0.19 * v * level, at);
+          g.exponentialRampToValueAtTime(0.0001, at + 0.08);
+        },
+        0,
+      );
+      const osc = this.ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(240, at);
+      osc.frequency.exponentialRampToValueAtTime(180, at + 0.04);
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.16 * v * level, at);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.06);
+      osc.connect(g);
+      const rest: AudioNode[] = [g];
+      this.mentionOut(g, 0, rest);
+      osc.start(at);
+      this.end(osc, rest, at + 0.07);
+    };
+    if (roll) for (let j = 0; j < 4; j++) snare(c.t + j * c.dur * 0.5, 0.45 + j * 0.2, j);
+    else snare(c.t, 0.8, 0);
+  }
+
+  /**
+   * One note of the style's keys on the chord's top tones, an octave over the stabs (smart: a dyad, louder), through
+   * the lead bus as the track's keys. The attack is capped at 8 ms (motifNote `attack`): a slow patch (Atmospheric's
+   * tape flute, 70 ms) sounded late against the grid; the track's own notes keep the patch's attack.
+   */
+  private mentionKeys(c: Ctx, o: OrnamentPlay, level: number) {
+    const d = dataOf<LiquidData>(c);
+    const padRoot = 52 + ((c.tonic - 4 + 12) % 12);
+    let pad: readonly number[];
+    if (c.sid === "soulful") {
+      const progs = d.progressions ?? LIQUID_SOUL_PROGS;
+      pad = progs[hash32(c.epoch, 0x501) % progs.length][(c.hit.bar >> 1) & 3].pad;
+    } else {
+      const vamps = d.vamps ?? LIQUID_VAMPS;
+      const vamp = vamps[hash32(c.epoch, 0x11d) % vamps.length];
+      pad = (Math.floor(c.hit.bar / (c.sid === "atmos" ? 8 : 4)) % 2 === 1 ? vamp.b : vamp.a).pad;
+    }
+    const top = pad.filter((x) => x >= 0).sort((a, b) => a - b).slice(-3);
+    const length = 1.5 * c.dur;
+    this.motifNote(c, padRoot + 12 + top[o.index % top.length], length, (o.smart ? 0.48 : 0.34) * level, LIQUID_KEYS_ATTACK);
+    if (o.smart) this.motifNote({ ...c, t: c.t + 0.009 }, padRoot + 12 + top[(o.index + 1) % top.length], length, 0.36 * level, LIQUID_KEYS_ATTACK);
+  }
+
+  /**
+   * Future garage (every base): the owner's mention voices, per base (GARAGE_ORNAMENTS) and restyled by the style's
+   * `ornament`. Vocal Chops: a "yeah"; Dark Sub: a ghost groove and a foley object; Rain Atmos: a water drop. Smart:
+   * the base's smart set (a reverse breath, the lighter with its flame, a ghost snare roll).
+   */
+  private garageOrnament(c: Ctx, o: OrnamentPlay) {
+    this.garageMention(c, o);
+  }
+
+  /** The style's mention: its `ornament` data merged over the base's preset (GARAGE_ORNAMENTS). */
+  private garageMentionOf(c: Ctx): GarageOrnamentSpec {
+    return specOf(dataOf<GarageData>(c).ornament, GARAGE_ORNAMENTS[c.sid] ?? GARAGE_ORNAMENTS.classic);
+  }
+
+  /**
+   * One mention through every voice of the base's set (garageOrnament). The levels are the owner's prototype's, on
+   * the engine's raw output: the voices go straight to the destination (past the buses, as the robot word does), and
+   * the breath and the "yeah" (a little of the foley) also into the genre's own room and echo through the fx bus.
+   * Smart: the reverse, the "yeah" and the lighter's clicks x1.5.
+   */
+  private garageMention(c: Ctx, o: OrnamentPlay) {
+    const m = this.garageMentionOf(c);
+    const lvl = m.level * (o.smart ? 1.5 : 1);
+    for (const voice of o.smart ? m.smart : m.voices) {
+      if (voice === "reverse") this.mentionReverse(c, o, lvl);
+      else if (voice === "foley") this.mentionFoley(c.t, o.smart ? "lighter" : m.foley[o.index % m.foley.length], o.smart, lvl, m.level, o.index);
+      else if (voice === "groove") this.mentionGroove(c, o.smart, m.level, o.index);
+      else if (voice === "yeah") this.mentionYeah(c, lvl);
+    }
+  }
+
+  /** A mention voice's output: dry to the destination, `send` of it into the fx bus (the genre's room and echo). */
+  private mentionOut(g: AudioNode, send: number, rest: AudioNode[]) {
+    g.connect(this.ctx.destination);
+    if (send <= 0) return;
+    const s = this.ctx.createGain();
+    s.gain.value = send;
+    g.connect(s);
+    const pan = this.panNode(0, this.busIn.fx);
+    pan.add(s);
+    rest.push(s, pan.dest);
+  }
+
+  /** A mention's noise burst: the engine's seeded noise from a fixed offset (by mention), filtered, enveloped by `env`. */
+  private mentionNoise(at: number, stop: number, offset: number, filter: (f: BiquadFilterNode) => void, env: (g: AudioParam) => void, send: number) {
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noise();
+    src.loop = true;
+    const f = this.ctx.createBiquadFilter();
+    filter(f);
+    const g = this.ctx.createGain();
+    env(g.gain);
+    src.connect(f);
+    f.connect(g);
+    const rest: AudioNode[] = [f, g];
+    this.mentionOut(g, send, rest);
+    src.start(at, offset % 1.9);
+    this.end(src, rest, stop);
+  }
+
+  /**
+   * Reverse breath: an "aah" (a saw on the mention's scale note, MIDI 48 + tonic, through formants 780 / 1150 Hz) and
+   * a bandpass noise wash, both rising exponentially from the step and cut on the next strong beat (step 0 or 8). The
+   * live player cannot schedule into the past, so it starts on its slot (the prototype began a beat early and cut on
+   * the slot); a smart one is the same length, x1.5 louder and an octave up.
+   */
+  private mentionReverse(c: Ctx, o: OrnamentPlay, lvl: number) {
+    const notes = this.era.notes.length > 0 ? this.era.notes : [0, 3, 7, 10];
+    const midi = 48 + c.tonic + notes[(o.index * 2) % notes.length] + (o.smart ? 12 : 0);
+    const start = c.t;
+    const cut = Math.max(start + c.dur * 0.5, c.hit.gridTime + (8 - (c.step % 8)) * c.dur);
+    const osc = this.ctx.createOscillator();
+    osc.type = "sawtooth";
+    osc.frequency.value = midiToFreq(midi);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.exponentialRampToValueAtTime(0.05 * lvl, cut - 0.005);
+    g.gain.linearRampToValueAtTime(0.0001, cut);
+    const rest: AudioNode[] = [g];
+    for (const [fq, q] of [[780, 6], [1150, 8]] as const) {
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.value = fq;
+      bp.Q.value = q;
+      osc.connect(bp);
+      bp.connect(g);
+      rest.push(bp);
+    }
+    this.mentionOut(g, 0.5, rest);
+    osc.start(start);
+    this.end(osc, rest, cut + 0.01);
+    this.mentionNoise(
+      start,
+      cut + 0.02,
+      0.11 + o.index * 0.37,
+      (f) => {
+        f.type = "bandpass";
+        f.frequency.setValueAtTime(600, start);
+        f.frequency.exponentialRampToValueAtTime(3500, cut);
+        f.Q.value = 0.8;
+      },
+      (gain) => {
+        gain.setValueAtTime(0.0001, start);
+        gain.exponentialRampToValueAtTime(0.03 * lvl, cut - 0.005);
+        gain.linearRampToValueAtTime(0.0001, cut);
+      },
+      0.5,
+    );
+  }
+
+  /**
+   * Foley: a lighter click (two bandpassed noise clicks 35 ms apart), a water drop (a sine chirping up in 25 ms) or a
+   * vinyl crack (a 12 ms highpassed impulse); `flame` adds the lighter's hiss. `lvl` scales the clicks (smart x1.5),
+   * `level` (the style's) the rest, as in the prototype. A little of it goes into the room.
+   */
+  private mentionFoley(t: number, kind: GarageFoleyKind, flame: boolean, lvl: number, level: number, index: number) {
+    const send = 0.2;
+    if (kind === "lighter") {
+      for (const [dt, f0] of [[0, 3200], [0.035, 2400]] as const) {
+        const at = t + dt;
+        this.mentionNoise(
+          at,
+          at + 0.02,
+          0.03 + index * 0.29 + dt,
+          (f) => {
+            f.type = "bandpass";
+            f.frequency.value = f0;
+            f.Q.value = 3;
+          },
+          (g) => {
+            g.setValueAtTime(0.09 * lvl, at);
+            g.exponentialRampToValueAtTime(0.0001, at + 0.02);
+          },
+          send,
+        );
+      }
+      if (flame) {
+        const at = t + 0.05;
+        this.mentionNoise(
+          at,
+          t + 0.5,
+          0.77,
+          (f) => {
+            f.type = "bandpass";
+            f.frequency.value = 5000;
+            f.Q.value = 0.6;
+          },
+          (g) => {
+            g.setValueAtTime(0.0001, at);
+            g.linearRampToValueAtTime(0.02 * level, t + 0.12);
+            g.exponentialRampToValueAtTime(0.0001, t + 0.5);
+          },
+          send,
+        );
+      }
+      return;
+    }
+    if (kind === "drop") {
+      const osc = this.ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(900, t);
+      osc.frequency.exponentialRampToValueAtTime(1900, t + 0.025);
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.06 * level, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+      osc.connect(g);
+      const rest: AudioNode[] = [g];
+      this.mentionOut(g, send, rest);
+      osc.start(t);
+      this.end(osc, rest, t + 0.1);
+      return;
+    }
+    this.mentionNoise(
+      t,
+      t + 0.012,
+      0.05 + index * 0.31,
+      (f) => {
+        f.type = "highpass";
+        f.frequency.value = 1500;
+      },
+      (g) => {
+        g.setValueAtTime(0.12 * level, t);
+        g.exponentialRampToValueAtTime(0.0001, t + 0.012);
+      },
+      send,
+    );
+  }
+
+  /** Ghost groove: a ghost rim (noise at 1.9 kHz and a 420 Hz blip) and a closed hat 1.15 16ths later; smart: a rising three-hit roll. */
+  private mentionGroove(c: Ctx, smart: boolean, level: number, index: number) {
+    const rim = (at: number, v: number) => {
+      this.mentionNoise(
+        at,
+        at + 0.03,
+        0.09 + index * 0.23,
+        (f) => {
+          f.type = "bandpass";
+          f.frequency.value = 1900;
+          f.Q.value = 4;
+        },
+        (g) => {
+          g.setValueAtTime(0.07 * v * level, at);
+          g.exponentialRampToValueAtTime(0.0001, at + 0.03);
+        },
+        0,
+      );
+      const osc = this.ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.value = 420;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.04 * v * level, at);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.035);
+      osc.connect(g);
+      const rest: AudioNode[] = [g];
+      this.mentionOut(g, 0, rest);
+      osc.start(at);
+      this.end(osc, rest, at + 0.05);
+    };
+    if (smart) {
+      for (let j = 0; j < 3; j++) rim(c.t + j * c.dur, 0.6 + j * 0.25);
+      return;
+    }
+    rim(c.t, 1);
+    const at = c.t + c.dur * 1.15;
+    this.mentionNoise(
+      at,
+      at + 0.03,
+      0.21 + index * 0.23,
+      (f) => {
+        f.type = "highpass";
+        f.frequency.value = 7500;
+      },
+      (g) => {
+        g.setValueAtTime(0.035 * level, at);
+        g.exponentialRampToValueAtTime(0.0001, at + 0.025);
+      },
+      0,
+    );
+  }
+
+  /**
+   * The same vocal "yeah" every time: a saw on one note (MIDI 48 + the tonic), the formants gliding 300 -> 720 and
+   * 2200 -> 1150 Hz over its first 35%, a small fall (x0.89) at the end, 3 16ths long, deep in the room.
+   */
+  private mentionYeah(c: Ctx, lvl: number) {
+    const t = c.t;
+    const d = c.dur * 3;
+    const f0 = midiToFreq(48 + c.tonic);
+    const osc = this.ctx.createOscillator();
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(f0, t);
+    osc.frequency.setValueAtTime(f0, t + d * 0.6);
+    osc.frequency.exponentialRampToValueAtTime(f0 * 0.89, t + d);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.06 * lvl, t + 0.02);
+    g.gain.setValueAtTime(0.06 * lvl, t + d * 0.7);
+    g.gain.linearRampToValueAtTime(0.0001, t + d);
+    const rest: AudioNode[] = [g];
+    for (const [a, b, q] of [[300, 720, 7], [2200, 1150, 9]] as const) {
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.Q.value = q;
+      bp.frequency.setValueAtTime(a, t);
+      bp.frequency.linearRampToValueAtTime(b, t + d * 0.35);
+      osc.connect(bp);
+      bp.connect(g);
+      rest.push(bp);
+    }
+    this.mentionOut(g, 0.5, rest);
+    osc.start(t);
+    this.end(osc, rest, t + d + 0.02);
+  }
+
+  /**
+   * Lofi house. Dusty Keys: a short stab of the chord's top two tones an octave up (smart: three). Sample Chop: a slice
+   * of the sample's top an octave up (smart: a 32nd retrigger, as the busy loop does). Raw Rave: the crushed rave hit.
+   */
+  private lofiOrnament(c: Ctx, o: OrnamentPlay) {
+    const d = dataOf<LofiHouseData>(c);
+    const vamps = d.vamps ?? LIQUID_VAMPS;
+    const vamp = vamps[hash32(c.epoch, 0x10f) % vamps.length];
+    const chord = Math.floor(c.hit.bar / 2) % 2 === 1 ? vamp.b : vamp.a;
+    const padRoot = 52 + ((c.tonic - 4 + 12) % 12);
+    const tones = chord.pad.filter((x) => x >= 0).sort((a, b) => a - b);
+    if (c.sid === "rave") {
+      // The glitch row plays it at 0..1, deep under the kick; a mention has to be heard (about -23 dB under the track).
+      this.lofiRaveHit(c, padRoot + chord.root, o.smart ? 8.5 : 6);
+      return;
+    }
+    if (c.sid === "chop") {
+      const sample = specOf(d.chop, LOFIHOUSE_CHOP);
+      const notes = tones.slice(-2).map((x) => x + 12);
+      if (o.smart) {
+        this.lofiChopVoice(c, padRoot, notes, c.dur * 0.5, 0.9, 2, false, sample);
+        this.lofiChopVoice({ ...c, t: c.t + c.dur }, padRoot, notes, c.dur, 0.8, 2, false, sample);
+      } else this.lofiChopVoice(c, padRoot, notes, c.dur, 0.68, 2, false, sample);
+      return;
+    }
+    for (const semi of tones.slice(o.smart ? -3 : -2)) this.motifNote(c, padRoot + 12 + semi, c.dur, o.smart ? 0.32 : 0.24);
+  }
+
+  /**
+   * Wonky. Dilla Swing: a soul chop of the chord's top, late like the style's chops (smart: the whole voicing).
+   * Brainfeeder: a glass glint on the chord (smart: louder, its octave a 16th later). Glitch-hop: a pitched vocal chop
+   * on the chord's top, the vowels in turn (smart: a 32nd stutter into it).
+   */
+  private wonkyOrnament(c: Ctx, o: OrnamentPlay) {
+    if (c.sid === "brainfeeder") {
+      const voice = this.wonkyVoice(c, this.wonkyChord(c, WONKY_FEEDER_PROGS, 0xbf02, 2), 2, 0xbf03);
+      const midi = c.low + 48 + voice[o.index % voice.length];
+      const pan = o.index % 2 === 0 ? -0.45 : 0.45;
+      this.wonkyGlint(c.t, midi, o.smart ? 0.5 : 0.34, o.smart ? 1.4 : 1, pan, true);
+      if (o.smart) this.wonkyGlint(c.t + c.dur, midi + 12, 0.3, 0.9, -pan, true);
+      return;
+    }
+    if (c.sid === "glitch") {
+      const voice = this.wonkyVoice(c, this.wonkyChord(c, WONKY_GLITCH_PROGS, 0x91c2, 1), 1, 0x91c4);
+      const midi = c.low + 36 + voice[voice.length - 1 - (o.index % 2)];
+      const vowels = WONKY_VOWELS[o.index % WONKY_VOWELS.length];
+      if (o.smart) {
+        this.wonkyVox(c, c.t, midi, c.dur * 0.4, vowels, 0.7);
+        this.wonkyVox(c, c.t + c.dur * 0.5, midi, c.dur * 1.5, vowels, 0.8);
+      } else this.wonkyVox(c, c.t, midi, c.dur * 1.2, vowels, 0.55);
+      return;
+    }
+    const feel = WONKY_DILLA_FEELS[hash32(c.epoch, 0xd111) % WONKY_DILLA_FEELS.length];
+    const voice = this.wonkyVoice(c, this.wonkyChord(c, WONKY_DILLA_PROGS, 0xd113, 1), 1, 0xd114);
+    this.wonkySoul(c, c.t + feel.chop, o.smart ? voice : voice.slice(2), Math.min(2, 15.6 - c.step) * c.dur, o.smart ? 0.72 : 0.5);
   }
 }
 
@@ -8021,6 +9433,8 @@ interface DubStyle {
   figures: readonly (readonly number[])[];
   /** Level of each figure hit, in order. */
   accents: readonly number[];
+  /** Stab level per bar of a cycle (0 = the figure rests that bar); undefined = every bar at 1 (every house style). */
+  stabBars?: readonly number[];
   /** Bars per full open-close of the stab and pad filters, and of the echo's loop filter. */
   stabPeriod: number;
   echoPeriod: number;
@@ -8032,10 +9446,43 @@ interface DubStyle {
   hat: DubHatSpec;
   /** Two-bar figure: [16th in the two bars, 1 tonic / 1.5 fifth, level]. */
   perc: DubPercSpec & { figure: readonly (readonly [number, number, number])[] };
+  /** A station style's two-bar clap / rim figure [16th 0..31, level] in place of 2 and 4; none in house styles. */
+  claps?: readonly (readonly [number, number])[];
+  /** A station style's two-bar hat figure [16th 0..31, level, decay s?] in place of the offbeats; none in house styles. */
+  hats?: readonly (readonly [number, number, number?])[];
   vinyl: number;
   field: number;
   fieldHz: number;
+  /** The kick's rumble room (off in every house style: DUB_RUMBLE_OFF). */
+  rumble: DubRumbleSpec;
+  /** The echo's shape (every house style: DUB_ECHO_HOUSE, read only for station styles). */
+  echoTone: DubEchoToneSpec;
+  /** The sparse melody (off in every house style: DUB_MELODY_OFF). */
+  melody: DubMelodySpec;
+  /** The echo's breath (a station style's sweep.send / sweep.fb over `period` bars); none in house styles. */
+  breath?: { send: number; fb: number; period: number };
 }
+
+/** No rumble (level 0: nothing is built). A style that only raises `level` gets a dark, pumping 180 Hz room. */
+const DUB_RUMBLE_OFF: DubRumbleSpec = { level: 0, lp: 180, decay: 1.2, duck: 0.8 };
+/** The FM stab's defaults (stabTone.engine "fm"): a warm 1:1 pair with a short bright attack, no second modulator (its ratio a whole 7, in key). */
+const DUB_STAB_FM: DubStabFmSpec = { ratio: 1, index: 3, floor: 0.15, decay: 0.25, ratio2: 7, index2: 0, decay2: 0.06, vel: 0.5 };
+/** The resonator stab's defaults (stabTone.engine "pluck"): a string-like 1, 2, 3 bank, a soft mallet. */
+const DUB_STAB_PLUCK: DubStabPluckSpec = { modes: [1, 2, 3], decay: 1.2, damp: 0.8, tone: 2400, burst: 0.0008, vel: 0.5 };
+/** Level trims of the new stab voices against the oscillator pair (set by RMS on the same chords). */
+const DUB_FM_LEVEL = 0.9;
+const DUB_PLUCK_LEVEL = 1.4;
+/** A stab tone's source: an oscillator, or the pluck's mallet click. */
+type StabSource = OscillatorNode | AudioBufferSourceNode;
+/** The house echo shape: repeats panned 0.55 left and right, one time, no wobble. */
+const DUB_ECHO_HOUSE: DubEchoToneSpec = { width: 0.55, alt: 0, wobble: 0, rate: 0.4 };
+/**
+ * No melody (level 0: nothing plays). A style that only raises `level` gets a soft triangle an octave over the stabs,
+ * one note in about half of the four-bar cells, on the chord's tones, a slow swell and a long release into the echo.
+ */
+const DUB_MELODY_OFF: DubMelodySpec = {
+  level: 0, wave: "triangle", detune: 6, octave: 12, every: 4, count: 1, chance: 0.5, attack: 0.4, hold: 4, release: 2.5, lp: 2200, echo: 0.3, space: 0.3,
+};
 
 const DUB_STYLES: Record<string, DubStyle> = {
   // Lucidflow: the main deep groove. A round kick, a rolling offbeat sub, soft clap on 2 and 4, open hat and swung
@@ -8062,6 +9509,9 @@ const DUB_STYLES: Record<string, DubStyle> = {
     vinyl: 0.7,
     field: 1.2,
     fieldHz: 1800,
+    rumble: DUB_RUMBLE_OFF,
+    echoTone: DUB_ECHO_HOUSE,
+    melody: DUB_MELODY_OFF,
   },
   // Ixtlan: the ambient journey. Slower, a softer kick, a long sub, four chords of four bars each, long soft stabs
   // once or twice a bar, the pad up front, a slow bell melody every phrase, more rain and room; drums hushed but steady.
@@ -8086,6 +9536,9 @@ const DUB_STYLES: Record<string, DubStyle> = {
     vinyl: 0.7,
     field: 2,
     fieldHz: 1300,
+    rumble: DUB_RUMBLE_OFF,
+    echoTone: DUB_ECHO_HOUSE,
+    melody: DUB_MELODY_OFF,
   },
   // The Moment: minimal-techno leaning. Tighter kick, a hypnotic 16th sub roll, a rim on 2 and 4, a looping
   // four-hit stab figure over two chords with the filter wobbling every four bars, drier hats, a rare single pluck.
@@ -8110,6 +9563,9 @@ const DUB_STYLES: Record<string, DubStyle> = {
     vinyl: 0.3,
     field: 1.2,
     fieldHz: 600,
+    rumble: DUB_RUMBLE_OFF,
+    echoTone: DUB_ECHO_HOUSE,
+    melody: DUB_MELODY_OFF,
   },
 };
 
@@ -8134,12 +9590,19 @@ function dubStyleOf(style: GenreStyle, h: DubStyle): DubStyle {
     stab: specOf(d.stabTone, h.stab),
     figures: d.figures ?? h.figures,
     accents: d.accents ?? h.accents,
+    stabBars: d.stabBars ?? h.stabBars,
+    claps: d.claps ?? h.claps,
+    hats: d.hats ?? h.hats,
     stabPeriod: d.sweep?.stab ?? h.stabPeriod,
     echoPeriod: d.sweep?.echo ?? h.echoPeriod,
     pad: specOf(d.padTone, h.pad),
     bell: { ...specOf(d.bellTone, h.bell), frags: d.bells ?? h.bell.frags },
     field: d.field?.level ?? h.field,
     fieldHz: d.field?.hz ?? h.fieldHz,
+    rumble: specOf(d.rumble, h.rumble),
+    echoTone: specOf(d.echoTone, h.echoTone),
+    melody: specOf(d.melody, h.melody),
+    breath: { send: d.sweep?.send ?? 0, fb: d.sweep?.fb ?? 0, period: d.sweep?.breath ?? d.sweep?.echo ?? h.echoPeriod },
   };
   dubStyles.set(style, merged);
   return merged;
@@ -8697,6 +10160,9 @@ function dubDefaults(base: "classic" | "ixtlan" | "moment"): DubTechnoData {
     bellTone,
     sweep: { stab: h.stabPeriod, echo: h.echoPeriod },
     field: { level: h.field, hz: h.fieldHz },
+    rumble: h.rumble,
+    echoTone: h.echoTone,
+    melody: h.melody,
     vinyl: h.vinyl,
     mix: {},
     fx: fxOf("dubtechno", undefined, { ...MIX.dubtechno, ...DUB_MIX[base] }),

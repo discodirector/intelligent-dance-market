@@ -10,7 +10,7 @@ import { NETWORKS } from "./config";
 import { startVirtual } from "./data/virtual";
 import { decodeSlots, RULES, toSynth } from "./rules";
 import { WaveSky, type SkyAudio } from "./sky";
-import { APPLY_OPEN, applyTheme, chainOf, isPlus, loadStatus, onAir, playerHref, rpcUrlsOf, STATIONS, type Station } from "./stations";
+import { API_BASE, APPLY_OPEN, applyTheme, chainOf, isPlus, loadStatus, onAir, playerHref, rpcUrlsOf, STATIONS, type Station } from "./stations";
 import { mountApply } from "./stations-apply";
 
 const HOOK_POLL_MS = 15_000;
@@ -33,7 +33,7 @@ function card(s: Station, i: number, plus: boolean): Card {
   el.className = "st";
   // The card's own variables: its LCD, LED and button glow in the station's colours, the page stays as it is.
   applyTheme(s.theme, el);
-  const pool = s.kind === "hook" ? "v4 pool · $IDM hook" : `${s.kind} pool · no hook, the rules run in the browser`;
+  const pool = s.kind === "hook" ? "v4 pool · $IDM hook" : s.kind === "nft" ? "ERC-721 · every sale a note, the rules run in the browser" : `${s.kind} pool · no hook, the rules run in the browser`;
   el.innerHTML = `
     <div class="st-top"><span class="silk">STATION ${String(i + 1).padStart(2, "0")}${s.house ? " · HOUSE" : plus ? " · STATION+" : ""}</span><span class="led"></span></div>
     <div class="st-lcd">
@@ -132,7 +132,7 @@ const status = await loadStatus();
 const stations = onAir(status);
 const grid = document.getElementById("st-grid")!;
 document.getElementById("st-count")!.textContent = `${stations.length} station${stations.length === 1 ? "" : "s"} · house first, then station+`;
-if (APPLY_OPEN) mountApply(document.getElementById("st-apply-form")!, STATIONS.filter((s) => !s.house && s.kind !== "hook"), status);
+if (APPLY_OPEN) mountApply(document.getElementById("st-apply-form")!, STATIONS.filter((s) => !s.house && !s.gift && s.kind !== "hook"), status);
 const seen = new IntersectionObserver((entries) => {
   for (const e of entries) {
     if (!e.isIntersecting) continue;
@@ -173,3 +173,12 @@ for (const tab of planTabs) {
     }
   });
 }
+
+// Station+ places left (API /config): "ONLY 6 PLACES · 4 LEFT", or FULL. Without the API the badge keeps its text.
+void fetch(`${API_BASE}/config`).then((r) => (r.ok ? r.json() : null)).then((cfg: { plus?: { slots: number; left: number } } | null) => {
+  const badge = document.getElementById("st-slots");
+  if (!badge || !cfg?.plus) return;
+  const { slots, left } = cfg.plus;
+  badge.classList.toggle("full", left <= 0);
+  badge.lastChild!.textContent = left <= 0 ? `ALL ${slots} PLACES TAKEN` : `ONLY ${slots} PLACES · ${left} LEFT`;
+}).catch(() => {});

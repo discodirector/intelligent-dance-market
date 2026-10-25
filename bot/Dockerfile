@@ -12,6 +12,8 @@ COPY packages/synth/package.json packages/synth/
 COPY site/package.json site/
 RUN npm install --no-audit --no-fund
 COPY packages/core/src packages/core/src
+# The Credit rating table (core credittable.ts): the site bundles it as a lazily fetched asset.
+COPY packages/core/data packages/core/data
 COPY packages/synth/src packages/synth/src
 # bot.ts also plans releases (web/src/release.ts, the same plan web/render.html renders the WAV from).
 COPY web/src/timeline.ts web/src/release.ts web/src/trackSelect.ts web/src/build.d.ts web/src/
@@ -70,6 +72,8 @@ RUN npm install --omit=dev --no-audit --no-fund \
 
 COPY packages/synth/src packages/synth/src
 COPY packages/core/src packages/core/src
+# The Credit rating table: the credits station tags its sales with it (bot/src/station.ts ratingsFor).
+COPY packages/core/data packages/core/data
 COPY bot/src bot/src
 COPY bot/data bot/data
 # The station registry (bot/src/station.ts loadRegistry: ../../stations/registry.json) and its rules (validate.mjs,

@@ -90,13 +90,15 @@ export function renewedUntil(e: RegistryEntry, sub: Subscription | undefined, mo
 /**
  * One station's runtime status: the registry's switch, "expired" when a live station's subscription has run out, and
  * Station+ while a live station is inside its plusUntil (never a house station: the house is in the rotation anyway).
+ * A gift station (registry `gift`, docs/STATIONS.md "Gift stations") is never expired and never Station+, like a house
+ * station: its status is the registry's switch alone.
  */
 export function stationStatus(e: RegistryEntry, sub: Subscription | undefined, now: number): StationStatus {
   const paidUntil = effectivePaidUntil(e, sub);
   const end = paidEnd(paidUntil);
-  const expired = !e.house && e.status === "live" && end !== null && end <= now;
+  const expired = !e.house && !e.gift && e.status === "live" && end !== null && end <= now;
   const plusUntil = effectivePlusUntil(e, sub);
-  const plus = !e.house && !expired && e.status === "live" && (paidEnd(plusUntil) ?? 0) > now;
+  const plus = !e.house && !e.gift && !expired && e.status === "live" && (paidEnd(plusUntil) ?? 0) > now;
   return { status: expired ? "expired" : e.status, ...(paidUntil ? { paidUntil } : {}), ...(plus ? { plus: true as const, plusUntil } : {}) };
 }
 
@@ -112,7 +114,7 @@ export function expiring(reg: Registry, status: StatusFile, now: number, days = 
   for (const e of reg.stations) {
     const s = status[e.key];
     const end = paidEnd(s?.paidUntil);
-    if (e.house || e.status !== "live" || end === null || end - now > days * DAY) continue;
+    if (e.house || e.gift || e.status !== "live" || end === null || end - now > days * DAY) continue;
     out.push({ key: e.key, label: e.label, paidUntil: s.paidUntil!, daysLeft: Math.round(((end - now) / DAY) * 10) / 10, status: s.status });
   }
   return out.sort((a, b) => a.daysLeft - b.daysLeft);

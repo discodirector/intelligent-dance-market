@@ -7,6 +7,9 @@
 //   tsx packages/synth/scripts/engine-trace.ts --ref HEAD          compare the working tree against a git ref
 //   tsx packages/synth/scripts/engine-trace.ts                     print the working tree's trace hashes (JSON)
 //   options: --seconds 40  --epochs 3  --genre <id>  --verbose (print the first differing log line)
+//            --packs infer,credits   the baked packs' styles instead of the house ones (each in its pack's program)
+//            --cues                  the busy timeline also carries NFT cues (a rated sale per point, a BALANCE
+//                                    withdraw at point 4): what only a collection station's tags schedule
 //
 // No audio is rendered: a stand-in BaseAudioContext logs the calls (as test/pack.test.ts does). Two engines with equal
 // logs schedule the same audio. Exit 1 on any difference.
@@ -28,6 +31,8 @@ const SECONDS = Number(arg("--seconds") ?? 40);
 const EPOCHS = Number(arg("--epochs") ?? 3);
 const ONLY = arg("--genre");
 const VERBOSE = process.argv.includes("--verbose");
+const PACKS = arg("--packs")?.split(",").filter(Boolean) ?? [];
+const CUES = process.argv.includes("--cues");
 
 /** A stand-in BaseAudioContext that logs every node, connection, parameter write and buffer (hashed), in order. */
 function recordingContext() {
@@ -114,6 +119,9 @@ function timelines(synth: Synth, epoch: number) {
     state: busy(k),
     ...(k === 2 ? { drop: { track: 1, fill: true } } : k === 5 ? { drop: { track: 2, fill: false } } : {}),
     ...(k === 8 ? { trackDrop: { held: busy(k - 1) } } : {}),
+    // NFT cues: a sale per point, every rating and plate mask in turn; one withdraw.
+    ...(CUES ? { sale: { pct: (k * 37) % 256, mask: (k % 15) + 1 } } : {}),
+    ...(CUES && k === 4 ? { lock: { points: 40_856, ink: [24, 23, 24, 27] } } : {}),
   }));
   // Idle: the last swap was long ago; virtual time runs through the thinning and sparse stages, then a swap lands.
   const last = 1_800_000_000;
@@ -125,17 +133,38 @@ function timelines(synth: Synth, epoch: number) {
 }
 
 /** sha256 of the engine's log for one genre/style/epoch/timeline, and the log itself. */
-function trace(synth: Synth, engine: Engine, genre: string, epoch: number, points: any[]) {
+function trace(synth: Synth, engine: Engine, genre: string, epoch: number, points: any[], pack?: string) {
   const { ctx, log } = recordingContext();
   const era = synth.eraById(genre as any);
-  const voice = new engine.VoiceEngine(ctx, era.index, epoch);
-  for (const hit of synth.planSteps(points, SECONDS, genre, 8)) if (hit.time < SECONDS) voice.trigger(hit);
+  const program = pack ? synth.programFromPack(synth.PACKS[pack]) : undefined;
+  const voice = new engine.VoiceEngine(ctx, era.index, epoch, program);
+  for (const hit of synth.planSteps(points, SECONDS, genre, 8, program)) if (hit.time < SECONDS) voice.trigger(hit);
   return { hash: createHash("sha256").update(log.join("\n")).digest("hex"), log };
 }
 
 /** Every house (genre, style, epoch) case: the first EPOCHS epochs in the house program that play the style. */
 function cases(synth: Synth) {
-  const out: { genre: string; style: string; epoch: number }[] = [];
+  const out: { genre: string; style: string; epoch: number; pack?: string }[] = [];
+  // A pack's styles: the first EPOCHS epochs of its program that play each.
+  for (const key of PACKS) {
+    const pack = synth.PACKS[key];
+    if (!pack) throw new Error(`no baked pack ${key}`);
+    const program = synth.programFromPack(pack);
+    for (const [genre, styles] of Object.entries(pack.styles)) {
+      if (ONLY && genre !== ONLY) continue;
+      const era = synth.eraById(genre as any);
+      for (const style of styles as { id: string }[]) {
+        let found = 0;
+        for (let e = 0; e < 200_000 && found < EPOCHS; e++) {
+          if (synth.eraOf(e, program).id === genre && synth.styleOf(era, e, program).style.id === style.id) {
+            out.push({ genre, style: style.id, epoch: e, pack: key });
+            found++;
+          }
+        }
+      }
+    }
+  }
+  if (PACKS.length) return out;
   for (const era of synth.ERAS) {
     if (ONLY && era.id !== ONLY) continue;
     for (const style of synth.GENRE_STYLES[era.id]) {
@@ -164,7 +193,7 @@ if (!REF) {
   const out: Record<string, string> = {};
   for (const c of list) {
     const tl = timelines(local.synth, c.epoch);
-    for (const [name, points] of Object.entries(tl)) out[`${c.genre}/${c.style}/e${c.epoch}/${name}`] = trace(local.synth, local.engine, c.genre, c.epoch, points).hash;
+    for (const [name, points] of Object.entries(tl)) out[`${c.genre}/${c.style}/e${c.epoch}/${name}`] = trace(local.synth, local.engine, c.genre, c.epoch, points, c.pack).hash;
   }
   console.log(JSON.stringify(out, null, 2));
   process.exit(0);
@@ -179,8 +208,8 @@ try {
   let lines = 0;
   for (const c of list) {
     for (const name of ["busy", "idle"] as const) {
-      const a = trace(local.synth, local.engine, c.genre, c.epoch, timelines(local.synth, c.epoch)[name]);
-      const b = trace(other.synth, other.engine, c.genre, c.epoch, timelines(other.synth, c.epoch)[name]);
+      const a = trace(local.synth, local.engine, c.genre, c.epoch, timelines(local.synth, c.epoch)[name], c.pack);
+      const b = trace(other.synth, other.engine, c.genre, c.epoch, timelines(other.synth, c.epoch)[name], c.pack);
       lines += a.log.length;
       const label = `${c.genre}/${c.style}/e${c.epoch}/${name}`;
       if (a.hash === b.hash) {
@@ -193,7 +222,7 @@ try {
     }
   }
   const styles = new Set(list.map((c) => `${c.genre}/${c.style}`)).size;
-  console.log(`engine trace vs ${REF}: ${styles} house styles x ${EPOCHS} epochs x 2 timelines x ${SECONDS} s = ${same + diffs.length} cases, ${lines} log lines`);
+  console.log(`engine trace vs ${REF}${CUES ? " (with NFT cues)" : ""}: ${styles} ${PACKS.length ? `styles of ${PACKS.join(", ")}` : "house styles"} x ${EPOCHS} epochs x 2 timelines x ${SECONDS} s = ${same + diffs.length} cases, ${lines} log lines`);
   if (diffs.length) {
     console.log(`DIFFERENT: ${diffs.length} case(s)\n${diffs.join("\n")}`);
     process.exitCode = 1;

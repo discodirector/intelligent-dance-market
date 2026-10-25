@@ -4,14 +4,16 @@ import { PackSyntaxError, parsePackSource } from "../src/packLiteral.ts";
 import { programFromPack, validatePack } from "../src/pack.ts";
 import { packFor, programFor, registerPack } from "../src/stations/index.ts";
 import example from "../src/stations/example.ts";
+import credits from "../src/stations/credits.ts";
+import creditsDubhouse from "../src/stations/credits-dubhouse.ts";
 import infer from "../src/stations/infer.ts";
 
 const src = (name: string) => readFileSync(new URL(`../src/stations/${name}.ts`, import.meta.url), "utf8");
 const wrap = (body: string) => `import type { StationPack } from "../pack.ts";\n\nexport default ${body} satisfies StationPack;\n`;
 
 describe("pack literal parser", () => {
-  it("reads example.ts and infer.ts as the same data the module exports", () => {
-    for (const [name, mod] of [["example", example], ["infer", infer]] as const) {
+  it("reads example.ts, infer.ts and the Credits packs as the same data the module exports", () => {
+    for (const [name, mod] of [["example", example], ["infer", infer], ["credits", credits], ["credits-dubhouse", creditsDubhouse]] as const) {
       const data = parsePackSource(src(name));
       expect(data).toEqual(JSON.parse(JSON.stringify(mod)));
       expect(validatePack(data)).toEqual([]);
@@ -55,6 +57,18 @@ describe("pack literal parser", () => {
       expect(() => parsePackSource(text)).toThrow(PackSyntaxError);
     });
   }
+});
+
+describe("baked packs", () => {
+  it("the Credits station plays credits.ts (ten styles); its first pack (credits-dubhouse) is baked, unused", () => {
+    expect(packFor("credits")).toBe(credits);
+    expect(packFor("credits-dubhouse")).toBe(creditsDubhouse);
+    expect(programFor("credits-dubhouse").key).toBe("credits-dubhouse");
+    const ids = (p: { styles: { dubtechno: readonly { id: string }[] } }) => p.styles.dubtechno.map((s) => s.id);
+    expect(ids(credits)).toEqual(["void", "watermark", "null", "signature", "provenance", "escrow", "clearing", "redacted", "foil", "letterpress"].map((n) => `credits-${n}`));
+    const all = [...ids(credits), ...ids(creditsDubhouse)];
+    expect(new Set(all).size).toBe(all.length);
+  });
 });
 
 describe("runtime packs", () => {

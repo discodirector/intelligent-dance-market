@@ -8,7 +8,7 @@ import { Audio } from "./audio";
 import { startLive } from "./data/live";
 import { startVirtual } from "./data/virtual";
 import { startReplay } from "./data/replay";
-import type { Feed } from "./data/types";
+import { noteNftCues, type Feed } from "./data/types";
 import { chainOf, stationFor } from "./stations";
 
 type TapSink = (b64: string) => void;
@@ -43,6 +43,7 @@ const feed: Feed = {
       audio.player!.setState(asSynth(state));
       if (e.whale) audio.player!.noteDrop({ track: e.track, fill: e.isBuy });
       if (tc) audio.player!.noteTrackDrop(asSynth(tc.held));
+      noteNftCues(audio.player!, e);
     }
   },
   onState(s) {

@@ -19,8 +19,8 @@ export {
 } from "./state.ts";
 export type { DecodeOptions, SequencerState, Slots, State } from "./state.ts";
 
-export { advanceIdle, eraAt, freshIdleMemory, genreStep, nowAt, planSteps, stateAt, stepCharacter, stepDuration, viewAt } from "./clock.ts";
-export type { DropCue, IdleMemory, StepHit, TimelinePoint, TrackDropCue, TransportView } from "./clock.ts";
+export { advanceIdle, CueQueue, eraAt, freshIdleMemory, genreStep, nowAt, planSteps, SALE_QUEUE, stateAt, stepCharacter, stepDuration, viewAt } from "./clock.ts";
+export type { DropCue, IdleMemory, LockCue, SaleCue, StepHit, TimelinePoint, TrackDropCue, TransportView } from "./clock.ts";
 
 export { arrange, euclid, FORM_BARS, sectionAt } from "./arrange.ts";
 export { LEAD_PATCHES, leadPatch } from "./leads.ts";
@@ -30,8 +30,8 @@ export type { Arrangement, MotifNote, Section, SectionName } from "./arrange.ts"
 export { heatIdleFactor, IDLE_DRONE_SEC, IDLE_FULL_SEC, IDLE_SPARSE_SEC, idleLabel, idleStage } from "./idle.ts";
 export type { IdleGains, IdleName, IdleStage } from "./idle.ts";
 
-export { createLivePlayer, projectTimeline, renderReleaseToBuffer, renderTimelineToBuffer, renderToBuffer } from "./player.ts";
-export type { EraView, LivePlayer, LivePlayerOptions, RenderOptions, StepListenerEvent } from "./player.ts";
+export { createLivePlayer, OrnamentQueue, projectTimeline, renderReleaseToBuffer, renderTimelineToBuffer, renderToBuffer } from "./player.ts";
+export type { EraView, LivePlayer, LivePlayerOptions, OrnamentCue, RenderOptions, StepListenerEvent } from "./player.ts";
 
 export {
   CHAIN_BPM,
@@ -57,7 +57,8 @@ export { PACKS, packFor, programFor, registerPack } from "./stations/index.ts";
 export { PackSyntaxError, parsePackSource } from "./packLiteral.ts";
 export type { PackBases, PackLeadPatch, StationPack, StationStyle } from "./pack.ts";
 export { BUS_NAMES, DATA_FIELDS, DATA_GENRES } from "./styledata.ts";
-export { SOUND_DEFAULTS } from "./engine.ts";
+export { ORNAMENT_PLAN, SOUND_DEFAULTS } from "./engine.ts";
+export type { OrnamentPlay } from "./engine.ts";
 export type {
   AcidData,
   BusName,

@@ -14,6 +14,52 @@ export interface DropCue {
 }
 
 /**
+ * NFT station cues (core nft.ts tags; only a collection station with them emits these, so every other station and the
+ * house never see one). A rated Credit sale: its percentile in the edition (0..255) and its CMYK plates (1..15, bit0
+ * C, bit1 M, bit2 Y, bit3 K). The engine plays it as a plate stab (engine.ts creditSale).
+ */
+export interface SaleCue {
+  pct: number;
+  mask: number;
+}
+
+/** A BALANCE withdraw (a Statement locked): the points released and the release's CMYK split in whole percent. */
+export interface LockCue {
+  points: number;
+  ink?: readonly [number, number, number, number];
+}
+
+/** Sales waiting for their 8th: a sweep longer than this plays its newest ones. */
+export const SALE_QUEUE = 4;
+
+/**
+ * Where the NFT cues land, shared by every scheduler (planSteps, the live player): a sale on the next 8th (one per
+ * 8th, so a sweep is a short run of stabs), a withdraw on the next downbeat. Deterministic: the same pushes and steps
+ * give the same landings.
+ */
+export class CueQueue {
+  private sales: SaleCue[] = [];
+  private lock: LockCue | null = null;
+  pushSale(cue: SaleCue) {
+    this.sales.push(cue);
+    if (this.sales.length > SALE_QUEUE) this.sales.shift();
+  }
+  pushLock(cue: LockCue) {
+    this.lock = cue;
+  }
+  /** The cues this step plays, as StepHit fields (none: an empty object, so a hit without cues is unchanged). */
+  take(step: number): { sale?: SaleCue; lock?: LockCue } {
+    const out: { sale?: SaleCue; lock?: LockCue } = {};
+    if (this.lock && step === 0) {
+      out.lock = this.lock;
+      this.lock = null;
+    }
+    if (this.sales.length && step % 2 === 0) out.sale = this.sales.shift()!;
+    return out;
+  }
+}
+
+/**
  * Heat -> drop prototype: this point's swap finished the track (core `trackComplete`).
  * The rest of the bar keeps playing `held` (the finished track, at full heat); the next bar
  * lands as the drop: the song form jumps to the first bar of "full" and the engine plays the impact.
@@ -32,6 +78,9 @@ export interface TimelinePoint {
   flash?: { track: number; step: number; bass?: boolean; row?: boolean };
   drop?: DropCue;
   trackDrop?: TrackDropCue;
+  /** NFT stations: this point's sale was a rated Credit (SaleCue), or a BALANCE withdraw (LockCue). */
+  sale?: SaleCue;
+  lock?: LockCue;
 }
 
 export interface StepCharacter {
@@ -65,6 +114,9 @@ export interface StepHit extends StepCharacter {
   drop?: DropCue & { land: boolean };
   /** Heat -> drop: this downbeat is the first bar of the new track. */
   trackDrop?: boolean;
+  /** NFT stations (CueQueue): a rated sale lands on this step, a withdraw on this downbeat. Absent everywhere else. */
+  sale?: SaleCue;
+  lock?: LockCue;
 }
 
 /**
@@ -212,6 +264,7 @@ export function planSteps(
   let index = 0;
   let dropCursor = 0;
   let pending: TimelinePoint["drop"] | null = null;
+  const cues = new CueQueue();
   let idleMem = freshIdleMemory();
   // Heat -> drop: the cue's point index and the state held until the next downbeat; form shift after a landing.
   let trackPending: { at: number; held: SequencerState } | null = null;
@@ -221,6 +274,8 @@ export function planSteps(
     while (dropCursor < points.length && points[dropCursor].time <= grid + 1e-6) {
       const point = points[dropCursor];
       if (point.drop) pending = point.drop;
+      if (point.sale) cues.pushSale(point.sale);
+      if (point.lock) cues.pushLock(point.lock);
       if (point.trackDrop) {
         trackPending = { at: dropCursor, held: point.trackDrop.held ?? points[dropCursor - 1]?.state ?? point.state };
       }
@@ -266,6 +321,7 @@ export function planSteps(
       recover: idleStep.recover || undefined,
       drop,
       ...(trackDrop ? { trackDrop } : {}),
+      ...cues.take(step),
       ...character,
     });
     grid += duration;

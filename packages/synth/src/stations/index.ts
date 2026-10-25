@@ -1,12 +1,15 @@
 import { HOUSE_PROGRAM, type Program } from "../program.ts";
 import { programFromPack, validatePack, type StationPack } from "../pack.ts";
+import credits from "./credits.ts";
+import creditsDubhouse from "./credits-dubhouse.ts";
 import infer from "./infer.ts";
 
 /**
  * Station packs on air, by the registry's `program` key (stations/registry.json). "idm" is the house program; every
  * other key names a pack here. example.ts is the swarm's reference, not a station, so it is not listed.
+ * credits-dubhouse is baked but on no station yet (the Credits station's first pack, kept for later).
  */
-export const PACKS: Record<string, StationPack> = { infer };
+export const PACKS: Record<string, StationPack> = { infer, credits, "credits-dubhouse": creditsDubhouse };
 
 /**
  * Packs added at runtime (docs/STATIONS.md "Automatic pipeline"): the pipeline publishes a gated pack as JSON

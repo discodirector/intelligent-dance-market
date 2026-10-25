@@ -73,6 +73,27 @@ services:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
 
+  # Hamster telemetry recorder (src/hamster/recorder.ts): polls the Squeekchain API (/v1/status every second,
+  # /v1/events every 30 s; public, no key) and appends to /opt/swarm-sequencer/hamster (status-YYYY-MM-DD.jsonl,
+  # events.jsonl). No env file, no secrets, no out/. Behind a profile: `docker compose --profile hamster up -d hamster`;
+  # day stats: `docker exec swarm-sequencer-hamster npx tsx src/hamster/stats.ts [YYYY-MM-DD]`.
+  hamster:
+    image: swarm-sequencer-bot:latest
+    container_name: swarm-sequencer-hamster
+    profiles: ["hamster"]
+    command: ["npx", "tsx", "src/hamster/recorder.ts"]
+    restart: unless-stopped
+    stop_grace_period: 15s
+    environment:
+      HAMSTER_DIR: /data/hamster
+    volumes:
+      - ../hamster:/data/hamster
+    mem_limit: 256m
+    cpus: 0.25
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
   # Pulse keeper (src/pulse.ts): same image, needs only LIVE_RPC_URL + PULSE_TREASURY (+ PULSE_KEY to send).
   # Dry run unless pulse.env sets PULSE_SEND=true. Behind a profile, so `docker compose up -d` starts only the bot;
   # start it after launch with `docker compose --profile pulse up -d pulse`.

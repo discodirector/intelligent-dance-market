@@ -7,7 +7,7 @@ import { STYLE_SCHEDULE, type GenreStyle, type StyleScheduleEntry } from "./styl
 
 /**
  * Style packs: a station's sound as one data-only file, `stations/<key>.ts` (docs/STATIONS.md "Style pack",
- * stations/README.md). A pack names 2 or more of the opened genres (styledata.ts DATA_GENRES) and 1..4 styles for each;
+ * stations/README.md). A pack names 1 or more of the opened genres (styledata.ts DATA_GENRES) and 1..10 styles for each;
  * every style is a variant of a house style (`base`) with its own id, feel and table overrides (`data`).
  * validatePack checks the whole contract; programFromPack turns a valid pack into the station's Program.
  */
@@ -39,9 +39,12 @@ export interface StationPack {
   key: string;
   /** Display name of the sound, 1..40 characters. */
   name: string;
-  /** 2 or more distinct opened genres; the first cycle plays them in this order, later cycles shuffle them. */
+  /**
+   * 1 or more distinct opened genres; the first cycle plays them in this order, later cycles shuffle them. One genre
+   * plays every epoch (its styles still walk in order).
+   */
   genres: readonly DataGenre[];
-  /** For each genre in `genres` (and no other), 1..4 styles, in play order. */
+  /** For each genre in `genres` (and no other), 1..10 styles, in play order. */
   styles: { readonly [G in DataGenre]?: readonly StationStyle<G>[] };
   /**
    * The pack's own lead patches (the LeadPatch shape of leads.ts, without `id`), by id: 1..8 of them, ids like style
@@ -182,6 +185,14 @@ const hatFields = { hp: num(1000, 14000), decay: num(0.005, 1), metal: num(0, 1)
 const hat = shape(hatFields, ["q", "off", "crush"]);
 const liquidHat = shape({ ...hatFields, pan: num(-1, 1) }, ["q", "off", "crush"]);
 const waves = ["sine", "triangle", "square", "sawtooth"] as const;
+/** Future garage mention voices (styledata.ts GarageMentionVoice). */
+const garageVoices = ["reverse", "foley", "groove", "yeah"] as const;
+/** Liquid mention voices (styledata.ts LiquidMentionVoice). */
+const liquidVoices = ["nature", "amen", "keys"] as const;
+/** A list without repeats. */
+const distinct: Check = (x, p, e) => {
+  if (Array.isArray(x) && new Set(x).size !== x.length) e(`${p}: expected each entry once, got ${show(x)}`);
+};
 const layerCommon = { level: num(0, 1.5), at: num(0, 0.08), tail: bool, pan: num(-1, 1), flip: bool, accent: bool };
 const layerOptional = ["at", "tail", "pan", "flip", "accent"];
 const toneLayer = shape(
@@ -456,6 +467,14 @@ const FIELD_CHECKS: { readonly [G in DataGenre]: Readonly<Record<keyof GenreData
     pad: padSpec,
     choir: padSpec,
     strings: padSpec,
+    // The attention layer's mention voices (styledata.ts LiquidOrnamentSpec): each voice once, level at most x1.6 the preset.
+    ornament: partial({
+      voices: both(list(1, 3, oneOf(liquidVoices)), distinct),
+      smart: both(list(1, 3, oneOf(liquidVoices)), distinct),
+      nature: both(list(1, 3, oneOf(["bird", "gust", "drop"])), distinct),
+      level: num(0, 1.6),
+      slots: list(1, 8, int(0, 15)),
+    }),
   },
   futuregarage: {
     chords: list(2, 12, garageChord),
@@ -475,6 +494,14 @@ const FIELD_CHECKS: { readonly [G in DataGenre]: Readonly<Record<keyof GenreData
     choir: padSpec,
     vowels: list(1, 6, tuple(num(200, 1200), num(600, 3000))),
     rain: num(0, 2.5),
+    // The attention layer's mention voices (styledata.ts GarageOrnamentSpec): each voice once, level at most x1.6 the preset.
+    ornament: partial({
+      voices: both(list(1, 4, oneOf(garageVoices)), distinct),
+      smart: both(list(1, 4, oneOf(garageVoices)), distinct),
+      foley: both(list(1, 3, oneOf(["lighter", "drop", "vinyl"])), distinct),
+      level: num(0, 1.6),
+      slots: list(1, 8, int(0, 15)),
+    }),
   },
   triphop: {
     chords: (x, p, e) => {
@@ -542,20 +569,45 @@ const FIELD_CHECKS: { readonly [G in DataGenre]: Readonly<Record<keyof GenreData
     })),
     figures: list(1, 6, list(1, 6, int(0, 15))),
     accents: list(1, 6, num(0, 1.5)),
+    stabBars: list(1, 16, num(0, 1.5)),
     bassline: list(1, 16, dubSubNote),
     bells: list(1, 6, list(1, 8, tuple(int(0, 63), int(0, 5), num(0, 1.5)))),
     percs: list(1, 8, tuple(int(0, 31), num(0.5, 3), num(0, 1.5))),
+    claps: list(1, 8, tuple(int(0, 31), num(0, 1.5))),
+    hats: list(1, 16, (x, p, e) => {
+      if (!Array.isArray(x) || (x.length !== 2 && x.length !== 3)) return e(`${p}: expected [16th, level] or [16th, level, decay], got ${show(x)}`);
+      int(0, 31)(x[0], `${p}[0]`, e);
+      num(0, 1.5)(x[1], `${p}[1]`, e);
+      if (x.length === 3) num(0.005, 0.5)(x[2], `${p}[2]`, e);
+    }),
     ...SOUND_CHECKS,
     kit: dubKit,
     subTone: partial({ level: num(0, 1.2), octave: num(0, 0.5), lp: num(80, 1000), attack: num(0.002, 0.2), release: num(0.01, 1), drive: num(0.1, 4) }),
     stabTone: partial({
       octave: int(-12, 12), wave: oneOf(waves), detune: num(0, 40), lp: num(150, 4000), env: num(1, 6), envTime: num(0.01, 1), q: num(0.3, 12),
       hp: num(20, 1000), attack: num(0.001, 1), release: num(0.02, 3), gain: num(0, 1.5), pan: num(-1, 1), move: num(0, 1),
+      wave2: oneOf([...waves, "pulse"]), mix2: num(0, 1.5), width: num(0.05, 0.5), octave2: int(-12, 24), velLp: num(0, 1),
+      engine: oneOf(["osc", "fm", "pluck"]),
+      fm: partial({
+        ratio: num(0.5, 12), index: num(0, 12), floor: num(0, 1), decay: num(0.01, 2), ratio2: num(0.5, 16), index2: num(0, 12), decay2: num(0.005, 1),
+        vel: num(0, 1),
+      }),
+      pluck: partial({ modes: list(1, 4, num(0.5, 16)), decay: num(0.05, 4), damp: num(0, 2), tone: num(200, 10000), burst: num(0.0002, 0.005), vel: num(0, 1) }),
     }),
-    padTone: partial({ level: num(0, 3), wave: oneOf(waves), detune: num(0, 40), octave: int(-12, 12), lp: num(150, 5000), attack: num(0.01, 8), release: num(0.05, 6) }),
+    padTone: partial({
+      level: num(0, 3), wave: oneOf(waves), detune: num(0, 40), octave: int(-12, 12), lp: num(150, 5000), attack: num(0.01, 8), release: num(0.05, 6),
+      hp: num(20, 1000),
+    }),
     bellTone: partial({ level: num(0, 3), every: int(1, 8), ratio: num(0.5, 8), index: num(0, 4), decay: num(0.1, 4) }),
-    sweep: partial({ stab: num(2, 64), echo: num(2, 64) }),
+    sweep: partial({ stab: num(2, 64), echo: num(2, 64), send: num(0, 1), fb: num(0, 1), breath: num(2, 64) }),
     field: partial({ level: num(0, 3), hz: num(200, 6000) }),
+    rumble: partial({ level: num(0, 1.5), lp: num(60, 400), decay: num(0.3, 3), duck: num(0, 1) }),
+    echoTone: partial({ width: num(0, 1), alt: int(0, 8), wobble: num(0, 1), rate: num(0.05, 2) }),
+    melody: partial({
+      level: num(0, 2), wave: oneOf(waves), detune: num(0, 30), octave: int(-12, 24), notes: list(1, 8, int(-12, 24)),
+      every: int(1, 16), count: int(1, 4), chance: num(0, 1), attack: num(0.005, 4), hold: num(0, 32), release: num(0.1, 8),
+      lp: num(200, 8000), echo: num(0, 1), space: num(0, 1),
+    }),
   },
   electro: {
     kicks: electroKicks,
@@ -587,6 +639,19 @@ const FIELD_CHECKS: { readonly [G in DataGenre]: Readonly<Record<keyof GenreData
       cutoff: num(200, 4000), color: num(0, 4000), q: num(0.3, 8), hp: num(20, 1000), bend: num(0, 12), detune: list(1, 4, num(-50, 50)), level: num(0, 0.4),
     }),
     vox: partial({ ring: num(0.25, 4), level: num(0, 1.2) }),
+    // The attention layer's robot word (styledata.ts RobotWordSpec): quiet by construction (level <= 0.1), echo feedback < 0.7.
+    ornament: partial({
+      vowels: list(1, 4, tuple(num(150, 1200), num(500, 3500))),
+      wave: oneOf(waves),
+      steps: int(2, 16),
+      octave: int(-24, 24),
+      syllable: num(0.5, 4),
+      ring: num(0, 4),
+      lowpass: num(0, 12000),
+      echo: (x, p, e) => (x === null ? undefined : partial({ steps: int(1, 8), feedback: num(0, 0.7) })(x, p, e)),
+      level: num(0.01, 0.1),
+      slots: list(1, 8, int(0, 15)),
+    }),
   },
   ambientidm: AMBIENT_CHECKS,
   drone: DRONE_CHECKS,
@@ -701,9 +766,9 @@ export function validatePack(pack: unknown): string[] {
   else if (HOUSE_KEYS.includes(key)) e(`key: "${key}" is a house station`);
   if (typeof name !== "string" || name.trim().length === 0 || name.length > 40) e(`name: expected 1..40 characters, got ${show(name)}`);
   const pool: DataGenre[] = [];
-  if (!Array.isArray(genres)) e(`genres: expected a list of 2..${DATA_GENRES.length} of ${DATA_GENRES.join(", ")}`);
+  if (!Array.isArray(genres)) e(`genres: expected a list of 1..${DATA_GENRES.length} of ${DATA_GENRES.join(", ")}`);
   else {
-    if (genres.length < 2 || genres.length > DATA_GENRES.length) e(`genres: expected 2..${DATA_GENRES.length} genres, got ${genres.length}`);
+    if (genres.length < 1 || genres.length > DATA_GENRES.length) e(`genres: expected 1..${DATA_GENRES.length} genres, got ${genres.length}`);
     genres.forEach((g, i) => {
       if (!(DATA_GENRES as readonly unknown[]).includes(g)) e(`genres[${i}]: expected one of ${DATA_GENRES.join(", ")}, got ${show(g)}`);
       else if (pool.includes(g as DataGenre)) e(`genres[${i}]: "${g}" is listed twice`);
@@ -715,8 +780,8 @@ export function validatePack(pack: unknown): string[] {
   const seen = new Set<string>();
   for (const g of pool) {
     const list = styles[g];
-    if (!Array.isArray(list) || list.length < 1 || list.length > 4) {
-      e(`styles.${g}: expected 1..4 styles, got ${Array.isArray(list) ? list.length : show(list)}`);
+    if (!Array.isArray(list) || list.length < 1 || list.length > 10) {
+      e(`styles.${g}: expected 1..10 styles, got ${Array.isArray(list) ? list.length : show(list)}`);
       continue;
     }
     list.forEach((style, i) => checkStyle(g, style, `styles.${g}[${i}]`, e, seen, patchIds));

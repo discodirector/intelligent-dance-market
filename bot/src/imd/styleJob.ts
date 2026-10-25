@@ -37,6 +37,12 @@ const GENRE_FIELDS = {
     "harmony in chords/progressions, the phrase material in figures (Tape Keys), phrases (Tape Haze) or arps (Crystal), tiers for how fast it gets busy, notes for the blips; sound in kit (each base its own parts), pad, bass, lead, line, glass, bell, shimmer.",
   drone:
     "the layers in voicing/colours/busy and bars (phrase length), the Overtone Pulse series in partials/figures, glints for the bell pitches; sound in wall/pad (waves, detune, breathing), bed (beating subs), overtone, glint, kick, breath, rumble, swell. Keep it beatless and slow.",
+  liquid:
+    "give every style its own `ornament`: what a mention of the token on X plays (voices and smart from nature, amen, keys; nature sounds bird, gust, drop; level 0..1.6; slots). It is silent without mentions; keep it quiet, far away or a ghost under the break, not a melody, different per style.",
+  futuregarage:
+    "give every style its own `ornament`: what a mention of the token on X plays (voices and smart from reverse, foley, groove, yeah; foley objects lighter, drop, vinyl; level 0..1.6; slots). It is silent without mentions; keep it quiet, a reaction in the room, not a melody, different per style.",
+  electro:
+    "give every style its own `ornament`: the robot word a mention of the token on X plays (vowels, wave, steps, octave, syllable, ring, lowpass, echo, level, slots). It is silent without mentions; make it this station's own robot, a quiet answer between the kicks, different per style.",
 } as const;
 
 export const packPath = (key: string) => `packages/synth/src/stations/${key}.ts`;
@@ -57,7 +63,7 @@ export interface StyleOrder {
 export function orderProblems(o: StyleOrder): string[] {
   const out: string[] = [];
   if (!/^[a-z0-9-]{2,24}$/.test(o.key) || o.key === "idm" || o.key === "imd-eth") out.push(`key "${o.key}": a-z 0-9 "-", 2..24 chars, not idm / imd-eth`);
-  if (o.genres.length < 2 || o.genres.length > DATA_GENRES.length) out.push(`genres: 2..${DATA_GENRES.length} of ${DATA_GENRES.join(", ")}, got ${o.genres.length}`);
+  if (o.genres.length < 1 || o.genres.length > DATA_GENRES.length) out.push(`genres: 1..${DATA_GENRES.length} of ${DATA_GENRES.join(", ")}, got ${o.genres.length}`);
   for (const g of o.genres) if (!(DATA_GENRES as readonly string[]).includes(g)) out.push(`genre "${g}": not one of ${DATA_GENRES.join(", ")}`);
   if (new Set(o.genres).size !== o.genres.length) out.push("genres: listed twice");
   const n = o.styles ?? 2;

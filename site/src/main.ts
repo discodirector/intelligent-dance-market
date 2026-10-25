@@ -1,5 +1,5 @@
 import "./style.css";
-import { initialState, type State } from "@swarm-sequencer/core";
+import { initialState, plateLetters, type State } from "@swarm-sequencer/core";
 import { ERAS, epochOf, eraOf, FORM_BARS, genreKey, idleStage, programFor, NOTE_NAMES, sectionAt, stepDuration, styleOf, stylesAt, type Era, type Program, type SequencerState } from "@swarm-sequencer/synth";
 import { LINKS, NATIVE_ETH, readSource } from "./config";
 import { RULES, toSynth } from "./rules";
@@ -10,10 +10,11 @@ import { WaveSky } from "./sky";
 import { drawGrid, drawScope, drawSpectrum, Surface, type Flash } from "./visuals";
 import { startLive } from "./data/live";
 import { startVirtual } from "./data/virtual";
-import { applyTheme, chainOf, loadStatus, stationFor } from "./stations";
+import { applySkin, applyTheme, chainOf, loadStatus, stationFor } from "./stations";
+import { NftScreen } from "./nftscreen";
 import { playerMode, type PlayerMode } from "./runtime";
 import { EPOCH_PLAY, startReplay } from "./data/replay";
-import { formatQuote, type Feed, type SwapEvent } from "./data/types";
+import { formatQuote, inkText, noteNftCues, type Feed, type SwapEvent } from "./data/types";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const TRACKS = ["KICK", "SNARE", "HAT", "GLITCH"];
@@ -25,7 +26,19 @@ const v2 = rules.heatMax > 0;
 document.body.classList.toggle("rules-v2", v2);
 /** Registry entry for this pool (stations/registry.json); live, its theme recolours every LCD before the first frame. */
 const station = stationFor(net);
-if (station && source.kind === "live") applyTheme(station.theme);
+if (station && source.kind === "live") {
+  applyTheme(station.theme);
+  applySkin(station);
+}
+/**
+ * An nft station (kind "nft", core nft.ts): every input is one item sold, named on the feed ("BUY Credit #1234 ·
+ * 0.0092 ETH · OpenSea"), and the NFT screen (nftscreen.ts) shows its art on the beat.
+ */
+const nftItem = station?.kind === "nft" ? station.ticker[0] + station.ticker.slice(1).toLowerCase() : null;
+const nftScreen =
+  station?.kind === "nft" && source.kind === "live"
+    ? new NftScreen($("nft-screen"), net, station.token, nftItem!, { statements: station.nft?.statements, balance: station.nft?.balance })
+    : null;
 /**
  * A calibrated quote (not ETH: CHOG/MON, INFER/IMD): swaps reach the player valued in ETH (core swaps.ts), but the feed
  * shows them in the pool's own quote, named by the pool label.
@@ -89,6 +102,20 @@ function pushLine(li: HTMLLIElement) {
 // Swaps sent by the pulse treasury (an automatic buy after 15 min of silence) are labelled, never passed off as trades.
 const pulseTag = (e: SwapEvent) => (e.pulse ? ` <span class="tag pulse">PULSE · treasury buy</span>` : "");
 
+/**
+ * An nft station's sale as the feed says it: "BUY Credit #1234 · 0.0092 ETH · OpenSea · RATING 132 · CK", a compose
+ * "COMPOSE · 80 Credits → page #563 · 0.74 ETH", a withdraw "LOCK · page #144 → 29,958 BALANCE · C24 M23 Y24 K27".
+ * Everything comes from the decoder (digits, plate letters and a fixed venue name).
+ */
+function nftWhat(e: SwapEvent): string {
+  const n = e.nft!;
+  const amt = formatQuote(e.quote);
+  if (n.via === "compose") return `<span class="sd">COMPOSE</span> · ${n.items ?? 80} ${nftItem}s → page #${n.id} · ${amt} ETH`;
+  if (n.via === "withdraw") return `<span class="sd">LOCK</span> · page #${n.id} → ${(n.points ?? 0).toLocaleString("en-US")} ${n.venue}${n.ink ? ` · ${inkText(n.ink)}` : ""}`;
+  const rating = n.rating !== undefined && n.mask ? ` · RATING ${Math.floor(n.rating / 10)} · ${plateLetters(n.mask)}` : "";
+  return `<span class="sd">${e.isBuy ? "BUY " : "SELL"}</span> ${nftItem} #${n.id} · ${amt} ETH · ${n.venue}${rating}`;
+}
+
 function swapLine(e: SwapEvent) {
   const li = document.createElement("li");
   li.className = (e.whale ? "whale" : e.isBuy ? "buy" : "sell") + (e.pulse ? " pulse" : "");
@@ -97,8 +124,9 @@ function swapLine(e: SwapEvent) {
   const amt = formatQuote(shownQuote(e)).padStart(8, " ");
   const tag = (e.whale ? ` <span class="tag">${e.isBuy ? "FILL" : "DROP"}</span>` : "") + pulseTag(e);
   const tx = e.tx ? `<a href="${explorer}/tx/${e.tx}" target="_blank" rel="noopener">${short(e.tx)}</a>` : "";
+  const what = e.nft ? nftWhat(e) : `<span class="sd">${side}</span> ${amt} ${quoteName ?? e.quoteSymbol}`;
   li.innerHTML =
-    `<span class="p">&gt;</span> <span class="t">${hhmm(e.ts)}</span>  <span class="sd">${side}</span> ${amt} ${quoteName ?? e.quoteSymbol}  ` +
+    `<span class="p">&gt;</span> <span class="t">${hhmm(e.ts)}</span>  ${what}  ` +
     `<span class="trk">${TRACKS[e.track].padEnd(6, " ")}</span> s${String(e.step + 1).padStart(2, "0")} <span class="pm">${e.on ? "+" : "−"}</span>${tag}  ${tx}  ` +
     `<a class="blk" href="${explorer}/block/${e.block}" target="_blank" rel="noopener">blk ${e.block}</a>`;
   pushLine(li);
@@ -119,8 +147,9 @@ function tapeSwap(e: SwapEvent) {
   const side = e.isBuy ? "BUY " : "SELL";
   const tag = (e.whale ? ` <span class="tag">${e.isBuy ? "FILL" : "DROP"}</span>` : "") + pulseTag(e);
   const tx = e.tx ? ` <a href="${explorer}/tx/${e.tx}" target="_blank" rel="noopener">${short(e.tx)}</a>` : "";
+  const what = e.nft ? nftWhat(e) : `<span class="sd">${side}</span> ${formatQuote(shownQuote(e)).padStart(8, " ")} ${quoteName ?? e.quoteSymbol}`;
   tapeLine(
-    `<span class="t">${hhmm(e.ts)}</span> <span class="sd">${side}</span> ${formatQuote(shownQuote(e)).padStart(8, " ")} ${quoteName ?? e.quoteSymbol} ` +
+    `<span class="t">${hhmm(e.ts)}</span> ${what} ` +
       `<span class="trk">${TRACKS[e.track].padEnd(7, " ")}</span>s${String(e.step + 1).padStart(2, "0")} <span class="pm">${e.on ? "+" : "−"}</span>${tag}${tx}`,
     e.whale ? "whale" : e.isBuy ? "buy" : "sell",
   );
@@ -148,6 +177,7 @@ const feed: Feed = {
     lastEpoch = epoch;
     swapLine(e);
     tapeSwap(e);
+    nftScreen?.push(e, !backfill);
     // The backfill replays history after onState showed the current hook state: never step the grid back.
     // (A replay restarts its tape at a lower swapCount, so only the backfill is guarded.)
     if (!backfill || e.state.swapCount >= state.swapCount) state = e.state;
@@ -167,6 +197,7 @@ const feed: Feed = {
         audio.player!.setState(asSynth(state));
         if (e.whale) audio.player!.noteDrop({ track: e.track, fill: e.isBuy });
         if (tc) audio.player!.noteTrackDrop(asSynth(tc.held));
+        noteNftCues(audio.player!, e);
       }
       if (tc) trackDrop(now);
       if (e.whale) {
@@ -363,13 +394,19 @@ const src = (a: string | null) => (a && net.sourcify ? ([["sourcify", `${net.sou
 $("oc-grid").innerHTML = [
   ocRow("CHAIN", `${net.label} · id ${net.chainId}`),
   net.virtual
-    ? ocRow("HOOK", "none on this pool · the $IDM rules run in your browser")
+    ? ocRow("HOOK", `none on this ${net.virtual.source.kind === "nft" ? "collection" : "pool"} · the $IDM rules run in your browser`)
     : ocRow("HOOK", net.hook ?? "pending launch", [...addr(net.hook), ...src(net.hook)]),
-  ocRow(`TOKEN $${net.virtual?.tokenSymbol ?? "IDM"}`, net.token ?? "pending launch", [...addr(net.token, "token"), ...src(net.token)]),
+  ocRow(`${net.virtual?.source.kind === "nft" ? "COLLECTION" : "TOKEN"} $${net.virtual?.tokenSymbol ?? "IDM"}`, net.token ?? "pending launch", [...addr(net.token, "token"), ...src(net.token)]),
   net.quote === NATIVE_ETH
-    ? ocRow("PAIRED WITH", "native ETH")
+    ? ocRow("PAIRED WITH", net.virtual?.source.kind === "nft" ? "ETH (WETH bids included) · one note per item sold" : "native ETH")
     : ocRow(`PAIRED WITH $${quoteName ?? net.quoteSymbol}`, net.quote ?? "—", addr(net.quote, "token")),
-  ...(net.virtual && net.virtual.source.kind !== "v4"
+  ...(net.virtual?.source.kind === "nft"
+    ? (() => {
+      const s = net.virtual.source;
+      const venues: [string, `0x${string}` | undefined][] = [["SEAPORT (OPENSEA)", s.seaport?.[0]], ["CREDITSTRATEGY", s.strategy], ["CORE", s.core], ["STATEMENTS · COMPOSE", s.statements]];
+      return venues.filter(([, a]) => a).map(([k, a]) => ocRow(k, a!, addr(a!)));
+    })()
+    : net.virtual && net.virtual.source.kind !== "v4"
     ? [ocRow("POOL", `${net.virtual.source.kind} · ${net.virtual.source.address}`, addr(net.virtual.source.address))]
     : [ocRow("POOL ID", net.poolId ?? "pending launch"), ocRow("POOL MANAGER", net.poolManager ?? "—", addr(net.poolManager))]),
   ocRow("LAUNCH", net.launchedBy, net.launchUrl ? [["job", net.launchUrl]] : [["imd.fun", LINKS.imd]]),
@@ -453,6 +490,7 @@ function frame(now: number) {
   }
   while (flashes.length && now - flashes[0].at > 1200) flashes.shift();
   drawGrid(grid, asSynth(state), step, bar, phase, flashes, now);
+  nftScreen?.tick(bar * 16 + step);
 
   const rms = audio.sample();
   level = Math.max(rms * 3, level * 0.9);
@@ -517,7 +555,7 @@ function sparkline() {
 
 // ---------------------------------------------------------------- boot
 systemLine(
-  (source.kind === "replay" ? `${source.replay.label} · ${EPOCH_PLAY[0]}–${EPOCH_PLAY[1]} s per genre` : net.virtual && station ? `${net.label} · ${station.label} pool on ${chainOf(station).name} · no hook, the $IDM rules run here` : `${net.label} · hook ${net.hook ? short(net.hook) : "pending"}`) +
+  (source.kind === "replay" ? `${source.replay.label} · ${EPOCH_PLAY[0]}–${EPOCH_PLAY[1]} s per genre` : net.virtual && station ? `${net.label} · ${station.label} ${station.kind === "nft" ? "collection" : "pool"} on ${chainOf(station).name}${station.kind === "nft" ? " · one note per item sold" : ""} · no hook, the $IDM rules run here` : `${net.label} · hook ${net.hook ? short(net.hook) : "pending"}`) +
     (v2 ? ` · rules v2${source.kind === "replay" && source.resim ? " (re-simulated)" : ""}` : ""),
 );
 requestAnimationFrame(frame);

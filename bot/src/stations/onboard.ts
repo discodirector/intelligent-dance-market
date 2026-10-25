@@ -361,10 +361,10 @@ export function setField(text: string, key: string, field: string, value: string
 /**
  * The included first month starts when a station goes on air: setting a non-house station live with no paidUntil yet
  * gives it now + 1 month (ISO timestamp, UTC). null = leave paidUntil as it is (house, or already set: renewals extend
- * from the current end).
+ * from the current end; a gift station, never paid, never expires).
  */
-export function firstPaidUntil(e: { house?: boolean; kind: string; paidUntil?: string }, status: Status, now: number): string | null {
-  if (status !== "live" || e.house || e.kind === "hook" || e.paidUntil) return null;
+export function firstPaidUntil(e: { house?: boolean; gift?: boolean; kind: string; paidUntil?: string }, status: Status, now: number): string | null {
+  if (status !== "live" || e.house || e.gift || e.kind === "hook" || e.paidUntil) return null;
   return isoSeconds(addMonths(now, 1));
 }
 

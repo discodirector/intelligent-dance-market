@@ -4,6 +4,7 @@
 // replaying the blocks after it from that state is the full replay, bit for bit (test/checkpoint.test.ts).
 // Pure: the bot writes the JSON (bot/src/station.ts), the site fetches and checks it (site/src/data/virtual.ts).
 import { decode, V2_SLOTS, type State } from "./index.ts";
+import type { NftTag } from "./nft.ts";
 
 export const CHECKPOINT_VERSION = 1;
 
@@ -26,6 +27,8 @@ export interface CheckpointSwap {
   slot0: string;
   slot1: string;
   trackComplete?: { trackNo: number; swaps: number; slot0: string; slot1: string };
+  /** NFT stations: the item and venue (nft.ts). */
+  nft?: NftTag;
 }
 
 export interface StationCheckpoint {
@@ -46,6 +49,11 @@ export interface StationCheckpoint {
   generatedAt: string;
   /** The last swaps before `block`, oldest first, for the player's tape (may be empty). */
   recent: CheckpointSwap[];
+  /**
+   * NFT stations only: the decoder's carry after `block` (nft.ts nftCarryToJSON: the last price and the median's window,
+   * wei as decimal strings), so the sizes, ticks and composes after it are those of the full replay.
+   */
+  nft?: { lastPrice: string | null; recent: string[] };
 }
 
 const isHexStr = (v: unknown) => typeof v === "string" && /^0x[0-9a-fA-F]{1,64}$/.test(v);
@@ -59,7 +67,7 @@ export const checkpointState = (cp: StationCheckpoint): State => decode(cp.slot0
  * (fingerprint), a block before genesis or past the RPC's head, or slots that disagree with their own summary.
  * The caller falls back to the full replay from genesis on any of these.
  */
-export function checkpointProblem(cp: unknown, want: { key: string; fingerprint: string; genesisBlock: number; head?: number }): string | null {
+export function checkpointProblem(cp: unknown, want: { key: string; fingerprint: string; genesisBlock: number; head?: number; nft?: boolean }): string | null {
   const c = cp as Partial<StationCheckpoint> | null;
   if (!c || typeof c !== "object") return "not an object";
   if (c.version !== CHECKPOINT_VERSION) return `version ${String(c.version)}, want ${CHECKPOINT_VERSION}`;
@@ -73,5 +81,10 @@ export function checkpointProblem(cp: unknown, want: { key: string; fingerprint:
   if (s.swapCount !== c.swapCount || (s.trackNo ?? 0) !== c.trackNo) return "slots disagree with swapCount/trackNo";
   if (c.trackStartSwap! > c.swapCount!) return "trackStartSwap past swapCount";
   if (!Array.isArray(c.recent)) return "recent is not an array";
+  if (want.nft) {
+    const p = c.nft?.lastPrice;
+    const digits = (v: unknown) => typeof v === "string" && /^\d+$/.test(v);
+    if (!c.nft || (p !== null && !digits(p)) || !Array.isArray(c.nft.recent) || !c.nft.recent.every(digits)) return "nft carry missing";
+  }
   return null;
 }

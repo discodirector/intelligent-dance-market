@@ -63,10 +63,13 @@ export async function getLogsChunked<E extends AbiEvent>(
   return chunked(clients, read, params.fromBlock, params.toBlock, opts);
 }
 
-/** Same loop over a raw eth_getLogs filter (address + topics), e.g. core swapLogFilter(); returns core RawLogs. */
+/**
+ * Same loop over a raw eth_getLogs filter (address or addresses + topics), e.g. core swapLogFilter() or the NFT
+ * filters (core nft.ts); returns core RawLogs.
+ */
 export async function getRawLogsChunked(
   clients: PublicClient[],
-  filter: { address: `0x${string}`; topics: (`0x${string}` | `0x${string}`[])[] },
+  filter: { address: `0x${string}` | `0x${string}`[]; topics: (`0x${string}` | `0x${string}`[])[] },
   fromBlock: bigint,
   toBlock: bigint,
   opts: ChunkOptions = {},

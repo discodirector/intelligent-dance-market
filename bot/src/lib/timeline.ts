@@ -1,5 +1,5 @@
 // Timeline format consumed by web/render.html and the bot. See bot/TIMELINE.md.
-import { encode, mutate, whaleThresholdFor, type MutationInput, type State } from "@swarm-sequencer/core";
+import { encode, mutate, whaleThresholdFor, type MutationInput, type NftTag, type State } from "@swarm-sequencer/core";
 import { initialFor, mutateOptions, slotOptions, type HookRules } from "./hookRules.ts";
 
 export interface TimelineState {
@@ -70,6 +70,8 @@ export interface TimelineEntry {
   trackComplete?: TimelineTrackComplete;
   /** Mutated.sender was the pulse treasury (PULSE_TREASURY): an automatic buy after 15 min of silence. */
   pulse?: true;
+  /** NFT stations: the item sold and where (core nft.ts). */
+  nft?: NftTag;
 }
 
 export interface TimelineMeta {
@@ -118,6 +120,7 @@ export interface RawSwap extends MutationInput {
   txHash?: string;
   logIndex?: number;
   poolId?: string;
+  nft?: NftTag;
 }
 
 export function buildTimeline(swaps: RawSwap[], start?: State, rules: HookRules = "v1") {
@@ -147,7 +150,8 @@ export function buildTimeline(swaps: RawSwap[], start?: State, rules: HookRules 
       poolId: sw.poolId,
       isBuy: sw.isBuy,
       quoteAmt: sw.quoteAmt.toString(),
-      quote: weiToFloat(sw.quoteAmt),
+      // An NFT item: quoteAmt is its size for the rules, the price is in its tag.
+      quote: weiToFloat(sw.nft ? BigInt(sw.nft.price) : sw.quoteAmt),
       tick: sw.tick,
       track: r.event.track,
       step: r.event.step,
@@ -159,6 +163,7 @@ export function buildTimeline(swaps: RawSwap[], start?: State, rules: HookRules 
       slot1: hex(r.event.slot1),
       state: toTimelineState(s),
       ...extra,
+      ...(sw.nft ? { nft: sw.nft } : {}),
     };
   });
   const init = encode(start, slotOptions(rules));

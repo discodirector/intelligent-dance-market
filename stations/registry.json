@@ -93,6 +93,31 @@
       "program": "infer",
       "status": "live",
       "paidUntil": "2026-11-22"
+    },
+    {
+      "key": "credits",
+      "label": "CREDITS",
+      "ticker": "CREDIT",
+      "chainId": 1,
+      "genesisBlock": 26255150,
+      "token": "0x97630aa70ab14ed9883b41dafccbc11349723043",
+      "quote": "0x0000000000000000000000000000000000000000",
+      "quoteSymbol": "ETH",
+      "kind": "nft",
+      "nft": {
+        "itemSupply": 77114,
+        "refPrice": "0.01",
+        "seaport": ["0x0000000000000068F116a894984e2DB1123eB395"],
+        "strategy": "0x8e607209899b5d12Bd3167a6CD0E8E11FEB053d6",
+        "core": "0xcdb1889ae12074d750CD9B8531B692015465e0dD",
+        "statements": "0x75Edd94b7e49b3bD5C8047b91F165A5e265a069b",
+        "balance": "0x3620540c994433D7B4a628C46d2ED5F92572eA07",
+        "ratings": "credits"
+      },
+      "theme": { "phos": "#e2dfd4", "phosDim": "#7a7870", "ghost": "#222220", "lcd": "#0b0b0a", "panel": "#f2f1ec", "sell": "#ff3d9a", "whale": "#ffd100" },
+      "program": "credits",
+      "status": "pending",
+      "gift": true
     }
   ]
 }

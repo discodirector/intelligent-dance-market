@@ -38,13 +38,16 @@ One image (`bot/Dockerfile`, context = repo root, ignore file `bot/Dockerfile.do
 vite as in `npm run build -w web`), and the bot stage copies both dists in (`RENDER_SITE_DIR=/app/site/dist`,
 `RENDER_WEB_DIR=/app/web/dist`) next to `bot/src`, `packages/core/src`, `bot/data` and `web/src/trackSelect.ts`
 (imported by `bot/src/lib/release.ts`, so the scheduler needs it). Chromium headless shell + ffmpeg are in the image.
-Four compose services (`bot/docker-compose.yml`) run the same image:
+Five compose services (`bot/docker-compose.yml`) run the same image:
 - `bot` — `npx tsx src/scheduler.ts`, env `../.env`, volume `../out:/app/out`, always on;
 - `pulse` — `npx tsx src/pulse.ts`, env `../pulse.env` only, profile `pulse` (not started by a plain `up`);
 - `api` — `npx tsx src/api/index.ts`, the stations API (docs/STATIONS.md "Applications and payment"), env
   `../api.env` only, volume `../out:/app/out`, host port 127.0.0.1:8797 (8787 inside), profile `api`;
 - `stations` — `npx tsx src/stations/worker.ts`, the automatic station pipeline (docs/STATIONS.md "Automatic
   pipeline"), env `../stations.env` only (the only file with SWARM_KEY), volume `../out:/app/out`, profile `stations`.
+- `hamster` — `npx tsx src/hamster/recorder.ts`, the Squeekchain hamster telemetry recorder (public API, no env
+  file), volume `../hamster:/data/hamster` (`status-YYYY-MM-DD.jsonl`, `events.jsonl`), profile `hamster`; day stats:
+  `docker exec swarm-sequencer-hamster npx tsx src/hamster/stats.ts [YYYY-MM-DD]`.
 ```
 /opt/swarm-sequencer/
   .env                 # bot secrets (chmod 600), from bot/.env.example — DRY_RUN=true
@@ -53,6 +56,7 @@ Four compose services (`bot/docker-compose.yml`) run the same image:
   stations.env         # stations worker (chmod 600), from bot/stations.env.example — SWARM_KEY, TELEGRAM_*
   packages/core/ packages/synth/ bot/ site/ web/ stations/ contracts/deployments/  # rsync of the repo dirs
   out/                 # queue + scheduler state (volume)
+  hamster/             # hamster recorder log (volume, append-only)
 ```
 ```sh
 rsync -azR --delete --exclude node_modules --exclude out --exclude dist --exclude screenshots --exclude .env --exclude pulse.env --exclude api.env --exclude stations.env \

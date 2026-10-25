@@ -5,17 +5,24 @@
 // shared with the bot, for every pool kind (v4, v3, v2 and their forks).
 // Long histories: the bot publishes each station's state as a checkpoint (core checkpoint.ts); the replay starts
 // there and reads only the blocks after it. Missing, unreadable or for another stream: the full replay from genesis.
+// An NFT station (kind "nft", core nft.ts) reads its collection instead of a pool: per log chunk, the collection's
+// Transfers and the ecosystem's events over the chunk, then Seaport only at the blocks where a Credit moved (JSON-RPC
+// batched), and plays one input per item sold.
 import { createPublicClient, defineChain, fallback, http, toHex, type PublicClient } from "viem";
-import { checkpointProblem, checkpointState, decodeSwapLogs, mutate, rawLog, swapLogFilter, type CheckpointSwap, type SwapSource, type State } from "@swarm-sequencer/core";
+import {
+  checkpointProblem, checkpointState, decodeNftLogs, nftCarryFromJSON, decodeSwapLogs, mutate, rawLog, readNftLogs, swapLogFilter,
+  type CheckpointSwap, type CreditTable, type DecodedSwap, type NftCarry, type NftTag, type RawLog, type StationSource, type State,
+} from "@swarm-sequencer/core";
 import type { Network } from "../config";
 import { decodeSlots, RULES } from "../rules";
+import { loadRatings } from "./ratings";
 import { fromWei, type Feed, type SwapEvent } from "./types";
 
 const POLL_MS = 12_000;
 
 export interface VirtualPool {
-  /** Where the swaps come from: kind, PoolManager + poolId (v4) or the pool, and which side is ETH. */
-  source: SwapSource;
+  /** Where the swaps come from: kind, PoolManager + poolId (v4) or the pool, and which side is ETH; or a collection. */
+  source: StationSource;
   /** The station's state starts from the v2 initial state at this block, for every viewer. */
   genesisBlock: number;
   /** Blocks per eth_getLogs request (registry chains.logChunk). */
@@ -28,16 +35,25 @@ export interface VirtualPool {
 }
 
 const CHECKPOINT_TIMEOUT_MS = 8_000;
+/** JSON-RPC batch size of an NFT station's reads; at most this many log ranges in flight (more trips Tenderly's 429). */
+const NFT_BATCH = 5;
 
 export function startVirtual(net: Network, feed: Feed): () => void {
   const pool = net.virtual!;
   const chain = defineChain({ id: net.chainId, name: net.label, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: [net.rpcUrl] } } });
   const urls = [net.rpcUrl, ...(net.rpcFallbacks ?? [])];
-  const transport = urls.length > 1 ? fallback(urls.map((u) => http(u, { retryCount: 1 }))) : http(net.rpcUrl, { retryCount: 3 });
+  const src = pool.source;
+  // An NFT station sends its per-block Seaport reads in JSON-RPC batches (Tenderly and publicnode take them).
+  const batch = src.kind === "nft" ? { batch: { batchSize: NFT_BATCH } } : {};
+  const transport = urls.length > 1 ? fallback(urls.map((u) => http(u, { retryCount: 1, ...batch }))) : http(net.rpcUrl, { retryCount: 3, ...batch });
   const client = createPublicClient({ chain, transport }) as PublicClient;
   const rules = RULES.v2;
-  const filter = swapLogFilter(pool.source);
+  const filter = src.kind === "nft" ? null : swapLogFilter(src);
   const chunk = BigInt(pool.logChunk);
+  /** NFT stations: the decoder's carry after the cursor (the last item price, for a compose). */
+  let carry: NftCarry = { lastPrice: null };
+  /** NFT stations with a rating table (nft.ratings): loaded before the first read; null = untagged sales. */
+  let ratings: CreditTable | null = null;
   let state: State = rules.initial();
   let trackStart = state.swapCount;
   let cursor = BigInt(pool.genesisBlock) - 1n;
@@ -57,7 +73,7 @@ export function startVirtual(net: Network, feed: Feed): () => void {
       const res = await fetch(cp.url, { cache: "no-cache", signal: AbortSignal.timeout(CHECKPOINT_TIMEOUT_MS) });
       if (!res.ok) return null;
       const j = await res.json();
-      const why = checkpointProblem(j, { key: cp.key, fingerprint: cp.fingerprint, genesisBlock: pool.genesisBlock, head: Number(head) });
+      const why = checkpointProblem(j, { key: cp.key, fingerprint: cp.fingerprint, genesisBlock: pool.genesisBlock, head: Number(head), nft: src.kind === "nft" });
       if (why) {
         console.warn(`${net.key}: checkpoint not used (${why}); replaying from genesis`);
         return null;
@@ -65,6 +81,7 @@ export function startVirtual(net: Network, feed: Feed): () => void {
       state = checkpointState(j);
       trackStart = j.trackStartSwap;
       cursor = BigInt(j.block);
+      if (src.kind === "nft") carry = nftCarryFromJSON(j.nft);
       return j.recent;
     } catch (err) {
       console.warn(`${net.key}: no checkpoint (${(err as Error).message}); replaying from genesis`);
@@ -80,7 +97,8 @@ export function startVirtual(net: Network, feed: Feed): () => void {
         block: r.block,
         tx: r.tx,
         isBuy: r.isBuy,
-        quote: fromWei(BigInt(r.quoteAmt)),
+        // An NFT input's quoteAmt is its size for the rules; the feed shows the price.
+        quote: fromWei(BigInt(r.nft?.price ?? r.quoteAmt)),
         quoteSymbol: "ETH",
         track: r.track,
         step: r.step,
@@ -88,28 +106,60 @@ export function startVirtual(net: Network, feed: Feed): () => void {
         bassNote: r.bassNote,
         whale: r.whale,
         state: decodeSlots(r.slot0, r.slot1, rules),
+        ...(r.nft ? { nft: r.nft } : {}),
       };
       if (r.trackComplete) ev.trackComplete = { trackNo: r.trackComplete.trackNo, swaps: r.trackComplete.swaps, held: decodeSlots(r.trackComplete.slot0, r.trackComplete.slot1, rules) };
       feed.onSwap(ev, true);
     }
   }
 
+  /**
+   * eth_getLogs over [a, b]: halved when the RPC refuses the size (a busy collection can pass Tenderly's 20k results in
+   * one chunk), retried after a pause on anything else (a rate limit: splitting would only send more).
+   */
+  async function getLogs(f: { address: `0x${string}` | `0x${string}`[]; topics: (`0x${string}` | `0x${string}`[])[] }, a: bigint, b: bigint, tries = 3): Promise<RawLog[]> {
+    try {
+      const logs = await client.request({ method: "eth_getLogs", params: [{ ...f, fromBlock: toHex(a), toBlock: toHex(b) }] } as never);
+      return (logs as Parameters<typeof rawLog>[0][]).map(rawLog);
+    } catch (err) {
+      if (closed) throw err;
+      const msg = String((err as Error)?.message ?? err).toLowerCase();
+      if (/more than \d+ results|block range|too large|response size/.test(msg) && b - a >= 16n) {
+        const m = (a + b) / 2n;
+        return [...(await getLogs(f, a, m)), ...(await getLogs(f, m + 1n, b))];
+      }
+      if (tries <= 1) throw err;
+      await new Promise((r) => setTimeout(r, 1500 * (4 - tries)));
+      return getLogs(f, a, b, tries - 1);
+    }
+  }
+
+  /** One chunk of the source as rules inputs: a pool's swaps, or a collection's sales and the carry after them. */
+  async function readChunk(from: bigint, end: bigint): Promise<{ swaps: (DecodedSwap & { nft?: NftTag; holdTempo?: true; holdSizeEma?: true })[]; carry?: NftCarry }> {
+    if (src.kind !== "nft") {
+      const logs = await client.request({ method: "eth_getLogs", params: [{ ...filter!, fromBlock: toHex(from), toBlock: toHex(end) }] });
+      return { swaps: decodeSwapLogs(src, logs.map(rawLog)) };
+    }
+    const r = decodeNftLogs(src, await readNftLogs(src, from, end, getLogs, { concurrency: NFT_BATCH }), carry, { ratings });
+    return { swaps: r.sales, carry: r.carry };
+  }
+
   async function pull(to: bigint, backfill: boolean) {
     const times = new Map<bigint, number>();
     for (let from = cursor + 1n; from <= to && !closed; from += chunk) {
       const end = from + chunk - 1n > to ? to : from + chunk - 1n;
-      const logs = await client.request({ method: "eth_getLogs", params: [{ ...filter, fromBlock: toHex(from), toBlock: toHex(end) }] });
-      for (const sw of decodeSwapLogs(pool.source, logs.map(rawLog))) {
+      const read = await readChunk(from, end);
+      for (const sw of read.swaps) {
         if (closed) return;
         const ts = sw.timestamp ?? (await blockTime(sw.blockNumber, times));
-        const r = mutate(state, { isBuy: sw.isBuy, quoteAmt: sw.quoteAmt, tick: sw.tick, blockNumber: sw.blockNumber, timestamp: ts }, undefined, rules.mutate);
+        const r = mutate(state, { isBuy: sw.isBuy, quoteAmt: sw.quoteAmt, tick: sw.tick, blockNumber: sw.blockNumber, timestamp: ts, ...(sw.holdTempo ? { holdTempo: true } : {}), ...(sw.holdSizeEma ? { holdSizeEma: true } : {}) }, undefined, rules.mutate);
         state = r.state;
         const ev: SwapEvent = {
           ts,
           block: Number(sw.blockNumber),
           tx: sw.txHash,
           isBuy: r.event.isBuy,
-          quote: fromWei(sw.quoteAmt),
+          quote: fromWei(sw.nft ? BigInt(sw.nft.price) : sw.quoteAmt),
           quoteSymbol: "ETH",
           track: r.event.track,
           step: r.event.writeStep ?? r.event.step,
@@ -117,6 +167,7 @@ export function startVirtual(net: Network, feed: Feed): () => void {
           bassNote: r.event.bassNote,
           whale: r.event.whale,
           state,
+          ...(sw.nft ? { nft: sw.nft } : {}),
         };
         const tc = r.event.trackComplete;
         if (tc) {
@@ -126,6 +177,7 @@ export function startVirtual(net: Network, feed: Feed): () => void {
         feed.onSwap(ev, backfill);
       }
       cursor = end;
+      if (read.carry) carry = read.carry;
     }
   }
 
@@ -138,13 +190,14 @@ export function startVirtual(net: Network, feed: Feed): () => void {
       if (closed) return;
       feed.onBlock(Number(head));
       if (first) {
+        if (src.kind === "nft" && src.ratings && !ratings) ratings = await loadRatings(src.ratings);
         // Once: a retry after an RPC error goes on from the cursor, wherever the first attempt started.
         const recent = checkpointTried ? null : await fromCheckpoint(head);
         checkpointTried = true;
         if (closed) return;
         if (recent) replayRecent(recent);
         feed.onState(state);
-        feed.onStatus(recent ? `${net.label} · from checkpoint #${cursor}` : `${net.label} · replaying the pool from #${cursor + 1n}`, true);
+        feed.onStatus(recent ? `${net.label} · from checkpoint #${cursor}` : `${net.label} · replaying the ${src.kind === "nft" ? "collection" : "pool"} from #${cursor + 1n}`, true);
       }
       await pull(head, first);
       if (first) feed.onState(state);

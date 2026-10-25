@@ -4,7 +4,9 @@ A **station** is a radio for one token (docs/STATIONS.md). Its sound is a **styl
 `packages/synth/src/stations/<key>.ts`, that only holds data. The engine plays it; the pack can never break it.
 Our gate checks it automatically, then the owner listens. Nothing goes on air unheard.
 
-`example.ts` in this folder is the reference: copy it.
+`example.ts` in this folder is the reference: copy it. The other files are packs on air (`infer.ts`, `credits.ts`:
+Credits Techno, dark dub techno with the kick `rumble` and sparse `stabBars`) or kept for later (`credits-dubhouse.ts`: the Credits
+station's first pack, dub house, on no station).
 
 ## What a pack is
 
@@ -14,8 +16,8 @@ import type { StationPack } from "../pack.ts";
 export default {
   key: "pepe",                         // the station key: a-z 0-9 "-", 2..24 chars (not "idm" / "imd-eth")
   name: "Pepe Night Shift",            // 1..40 chars
-  genres: ["liquid", "triphop", "acid"],   // 2 or more distinct genres from those below
-  styles: {                            // for every genre in `genres` (and no other): 1..4 styles, in play order
+  genres: ["liquid", "triphop", "acid"],   // 1 or more distinct genres from those below
+  styles: {                            // for every genre in `genres` (and no other): 1..10 styles, in play order
     liquid: [{ id: "pepe-keys", name: "Pepe Keys", base: "classic", leads: ["pepe-ep"], data: { /* tables, sound */ } }],
     triphop: [/* ... */],
     acid: [/* ... */],
@@ -25,8 +27,9 @@ export default {
 ```
 
 How it plays: the station walks its genres one epoch each, the first cycle in the listed order, then shuffled
-cycles (never the same genre twice in a row). Each appearance of a genre plays one style for its whole epoch; a
-genre's appearances walk its styles in order, round and round.
+cycles (never the same genre twice in a row, unless the pack names one genre: then it plays every epoch). Each
+appearance of a genre plays one style for its whole epoch; a genre's appearances walk its styles in order, round
+and round.
 
 ## Styles: ids and bases
 
@@ -73,7 +76,7 @@ figure 0..63. `core: true` notes play even in a quiet market; the others need th
 | `acid` | `classic` 303 Floor | `lines` | `kit` `voice` |
 | | `acidhouse` Acid House | `lines` | `kit` `voice` |
 | | `rubber` Slow Rubber | `lines` | `kit` `voice` |
-| `dubtechno` | `classic` Lucidflow | `chords` (merged over i9 i11 iv7 VI9 VII9 v7) `progressions` `figures` `accents` `bassline` `bells` `percs` | `kit` `subTone` `stabTone` `padTone` `bellTone` `sweep` `field` |
+| `dubtechno` | `classic` Lucidflow | `chords` (merged over i9 i11 iv7 VI9 VII9 v7) `progressions` `figures` `accents` `stabBars` `bassline` `bells` `percs` `claps` `hats` | `kit` `subTone` `stabTone` `padTone` `bellTone` `sweep` `field` `rumble` `echoTone` `melody` |
 | | `ixtlan` Ixtlan | the same | the same |
 | | `moment` The Moment | the same | the same |
 | `electro` | `classic` Cold 808 | `kicks` `arps` | `kit` `bassTone` |
@@ -99,18 +102,40 @@ The shapes in short (full rules in `styledata.ts`):
 - `lines` (acid): 16 steps, each `null` (rest) or `{ degree 0..4, octave -1..1, flags (1 accent + 2 slide +
   4 ornament), gate? 16ths }`; at least 4 notes.
 - `sub`: the sub level 0..1 (futuregarage up to 1.2).
+- futuregarage `ornament` (every base; not Dark Sub's `foley` ticks): the attention layer's mention voices, what a
+  mention of the token plays: `{ voices, smart, foley, level, slots }` over the base's preset. `voices` / `smart` 1..4
+  of `"reverse"` (an "aah" and a noise wash swelling from the step into the next 0 or 8, cut there), `"foley"` (one
+  object; smart: the lighter with its flame), `"groove"` (a ghost rim + a shuffled hat; smart: a rising ghost snare
+  roll), `"yeah"` (the same vocal "yeah" on the tonic, 3 16ths), each once, all played every mention; `foley` 1..3 of
+  `"lighter"` `"drop"` `"vinyl"` in turn; `level` 0..1.6 (1 = the preset); `slots` 1..8 of 0..15. Presets: Vocal
+  Chops a "yeah" on 6 / 14 (smart + the roll), Dark Sub groove + lighter / vinyl on 3 / 11 (smart: reverse + flame),
+  Rain Atmos a drop on 3 / 11 (smart: reverse). Silent without mentions; a quiet reaction, never a melody.
+- liquid `ornament` (every base): the attention layer's mention voices: `{ voices, smart, nature, level, slots }` over
+  the base's preset. `voices` / `smart` 1..3 of `"nature"` (one far-away sound; smart: two birds answering, a beat
+  apart), `"amen"` (a soft ghost snare; smart: a rising four-hit roll on 32nds), `"keys"` (one note of the style's
+  keys on the chord's top, fast attack; smart: a dyad), each once, all played every mention; `nature` 1..3 of
+  `"bird"` `"gust"` `"drop"` in turn; `level` 0..1.6 (1 = the preset); `slots` 1..8 of 0..15. Presets: Keys nature
+  (bird, gust, drop) on 2 / 10 (smart: two birds), Soulful an amen ghost on 3 7 11 15 (smart: the roll + two birds),
+  Atmospheric a key note on the offbeats (smart: a dyad). Silent without mentions; far away or under the break.
 - dubtechno: `progressions` `[{ bars, seq: ["i9", "VI9", ...] }]` (chord names, `bars` each); `chords`
   `{ name: { root, upper } }` (your own names next to the house ones); `figures` the stab's steps in a bar (0..15; the
-  last hit is the answer a busy chain adds) with `accents` their levels; `bassline` `[[step, length, level,
-  interval?]]` per bar; `bells` four-bar fragments `[[16th 0..63, tone from the top, level]]`; `percs` the two-bar
-  percussion `[[16th 0..31, pitch ratio (1 tonic, 1.5 fifth), level]]`.
+  last hit is the answer a busy chain adds) with `accents` their levels; `stabBars` the figure's level per bar of a
+  1..16-bar cycle (0 rests it: `[1, 0, 0, 0]` = one bar in four, the echo carries the rest; left out, every bar plays);
+  `bassline` `[[step, length, level, interval?]]` per bar; `bells` four-bar fragments `[[16th 0..63, tone from the top, level]]`; `percs` the two-bar
+  percussion `[[16th 0..31, pitch ratio (1 tonic, 1.5 fifth), level]]`; `claps` the clap's (or rim's) two-bar placement
+  `[[16th 0..31, level]]` (left out: 2 and 4; `[[12, 1], [28, 1]]` = the 4 only); `hats` the hat's two-bar placement
+  `[[16th 0..31, level, decay?]]` (left out: every offbeat; `kit.hat.off` still scales it, a long `decay` opens it).
 - electro: `kicks` `{ half, lo, mid, hi }` lists of **two-bar** kick figures (onsets 0..31; `half` plays in the intro);
   `arps` (classic) 1..3 semitones the bass cycles through; `chords` `[{ bass, tones, third?, seventh? }]` with
   `progressions` of 4 indices (give 6+ chords or your own progressions); `riffs` (client03) two-bar bass notes
   `{ s, semi, len, f }` (f: 1 accent, 2 slide, 4 ornament, 8 dead note); `lines` (alienrave) 6..16 steps of `null` or
   `[semi, flags]`; `ghosts`, `stabs` two-bar `{ s, ... , core }` figures; `warps` 16 hat pitch multipliers; `chops`
   `{ open, steps }`; `opens` open-hat steps; `arpCells` chord-tone indices; `words` / `calls` the computer voice's
-  syllables `[F1, F2, consonant]` and the robot's vowels `[F1, F2]`.
+  syllables `[F1, F2, consonant]` and the robot's vowels `[F1, F2]`; `ornament` (every base) the attention layer's
+  robot word, the voice a mention of the token plays: `{ vowels [[F1, F2]] 1..4, wave, steps 2..16 (crush), octave
+  -24..24, syllable 0.5..4 16ths, ring 0..4, lowpass 0..12000, echo { steps, feedback } | null, level 0.01..0.1, slots }`
+  over the base's preset (Cold 808 dark dry "oh-oo", Client_03 "ah-ee", Alien Rave ring-modulated and echoed). It is
+  silent without mentions; make it the station's own robot, a quiet answer between the kicks.
 - `chords` (ambientidm): `[{ bass, pad, glass, arp, sing }]`, 2..8 chords in the minor pentatonic: `pad` over the pad
   root (Tape Haze plays the tones at and above 0), `glass` Crystal's bed an octave up, `arp` the four chord tones
   low to high, `sing` the melody roles `[3rd, 5th, colour, root, 7th]`. `progressions`: indices into `chords`.
@@ -155,7 +180,7 @@ Per genre (which base reads which: the table above and `DATA_FIELDS` in `styleda
 | `triphop` | `kit` `{ kick, snare, drag, hat, open }`, `bass`, `bassTone` (bristol, cinematic), `bowed` (the strings) |
 | `lofihouse` | `kit` `{ kick, clap, snare, hat, open, shaker }`, `bass`, `organTone` + `pad` (rave), `chop` + `pump` (chop) |
 | `acid` | `kit` `{ kick, clap, snare, hat, open, perc }`, `voice` (the 303: `wave` saw/square, `cutoff`, `envMod`, `resonance`, `decay`, `drive`, `level`, `accent`, `gate`, `sweep`) |
-| `dubtechno` | `kit` `{ kick: { center, rise, sweep, hold, decay, drive, lp, click, clickHz, level }, clap: { level, hz, decay, rim }, hat: { off, decay, hp, metal, shaker, shakerDecay, shuffle }, perc: { level, decay } }` (each voice merged field by field); `subTone` `{ level, octave, lp, attack, release, drive }`; `stabTone` `{ wave, detune, lp, env, envTime, q, hp, attack, release, gain, pan, move, octave }`; `padTone` `{ level, wave, detune, octave, lp, attack, release }`; `bellTone` `{ level, every, ratio, index, decay }`; `sweep` `{ stab, echo }` bars per filter open-close; `field` `{ level, hz }` the rain. The echo is `fx.echo` (`steps` 3 = dotted 8th, up to 12 `taps`, `fb` < 0.75) |
+| `dubtechno` | `kit` `{ kick: { center, rise, sweep, hold, decay, drive, lp, click, clickHz, level }, clap: { level, hz, decay, rim }, hat: { off, decay, hp, metal, shaker, shakerDecay, shuffle }, perc: { level, decay } }` (each voice merged field by field); `subTone` `{ level, octave, lp, attack, release, drive }`; `stabTone` `{ wave, detune, lp, env, envTime, q, hp, attack, release, gain, pan, move, octave }` plus, optional and off by default, a second oscillator per tone `wave2` (a wave or `"pulse"` of `width` 0.05..0.5) at `mix2` 0..1.5, `octave2` -12..24, and `velLp` 0..1 (the figure hit's level opens or darkens the cutoff), and the voice `engine` `"osc"` (default) / `"fm"` / `"pluck"`: `fm` `{ ratio 0.5..12, index 0..12, floor 0..1, decay 0.01..2, ratio2 0.5..16, index2 0..12, decay2 0.005..1, vel 0..1 }` (a sine modulator into two detuned sine carriers per tone, its index falling over `decay`; the second modulator off unless `index2` > 0), `pluck` `{ modes: 1..4 ratios 0.5..16, decay 0.05..4, damp 0..2, tone 200..10000, burst 0.0002..0.005, vel 0..1 }` (a mallet click strikes a resonator per tone and mode, each ringing `decay` x (1 / ratio)^`damp` s); `padTone` `{ level, wave, detune, octave, lp, attack, release }` and an optional `hp` 20..1000 Hz; `bellTone` `{ level, every, ratio, index, decay }`; `sweep` `{ stab, echo }` bars per filter open-close, and the echo's breath `send` / `fb` 0..1 (how far the level into the echo / of its repeats dips) over `breath` bars (default `echo`); `field` `{ level, hz }` the rain; `rumble` `{ level, lp, decay, duck }` the techno rumble (the kick into its own dark room, ducked by the kick; off unless `level` > 0); `echoTone` `{ width, alt, wobble, rate }` the echo's shape (repeats panned `width` 0..1, house 0.55; `alt` 1..8 16ths for the odd repeats = a ping-pong of two times; `wobble` 0..1 a tape wobble of up to 3 ms at `rate` Hz); `melody` `{ level, wave, detune, octave, notes?, every, count, chance, attack, hold, release, lp, echo, space }` a sparse melody of rare single notes (off unless `level` > 0: `count` notes in a cell of `every` bars with probability `chance`, pitches from `notes` or the bar's chord, a whale buy answers with one). The echo is `fx.echo` (`steps` 3 = dotted 8th, up to 12 `taps`, `fb` < 0.75) |
 | `electro` | `kit` `{ kick, snare: "808" \| "client" \| "alien" \| layers, ghost (client03), hat: { hp, decay, metal, q }, open: { hp, decay, metal, q, level, crush? }, accents: [on, e, and, a] }`; `bassTone` `{ osc, cutoff, color, q, open, decay, drive, level, sub, glide, fm }` (pairs `[plain, accent]`; classic reads `cutoff color q decay level sub`); `pad` (client03); `voice` `{ pitch, bits, hp, lp, level }` (client03's speak-and-spell); `hoover` `{ cutoff, color, q, hp, bend, detune, level }` and `vox` `{ ring, level }` (alienrave) |
 | `ambientidm` | `kit`: each base its own parts (classic `{ kick, snare, hat }`, boc `{ kick, thump, snare, dust, ghost, hat, open }`, crystal `{ click, rim, crack, tick, hat, open }`), `pad` (classic, boc), `bass` + `lead` (boc), `line` (classic, crystal), `glass` + `bell` + `shimmer` (crystal) |
 | `drone` | `wall` (classic) / `pad` (dark) the breathing layers, `bed` (dark: the beating subs), `overtone` (pulse), `glint` (all), `kick` (dark's concussion), `breath` (classic), `rumble` (dark), `swell` (classic, pulse) |

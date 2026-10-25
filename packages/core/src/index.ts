@@ -176,6 +176,16 @@ export interface MutationInput {
   tick: number; // pool tick after the swap
   blockNumber: bigint | number;
   timestamp: bigint | number;
+  /**
+   * Off-chain stations only, set by nothing but the NFT decoder (nft.ts): this input is not the first of its block, so
+   * the tempo (step 6: intervalEma, bpm) is left as it is. Absent = the hook's rules exactly (every pool, every vector).
+   */
+  holdTempo?: boolean;
+  /**
+   * Off-chain stations only, set by nothing but the NFT decoder: the size EMA (relative tiers) is not moved, so the
+   * tier reads the size against a fixed reference (the decoder's size already says "dearer / cheaper than usual").
+   */
+  holdSizeEma?: boolean;
 }
 
 export interface MutationEvent {
@@ -702,11 +712,13 @@ export function mutate(
 
   // 6. tempo
   // First swap = swapCount == 0 before increment; dt = 0 if the clock goes backwards (SPEC §3.3 edge cases).
-  const dt =
-    prev.swapCount === 0 ? s.intervalEma : now < prev.lastTs ? 0 : Math.min(now - prev.lastTs, EMA_CAP);
-  s.intervalEma = Math.floor((s.intervalEma * 7 + dt) / 8) >>> 0;
-  const bpm = BPM_MAX - Math.floor((s.intervalEma * (BPM_MAX - BPM_MIN)) / EMA_CAP);
-  s.bpm = Math.min(BPM_MAX, Math.max(BPM_MIN, bpm));
+  if (!(input.holdTempo && prev.swapCount !== 0)) {
+    const dt =
+      prev.swapCount === 0 ? s.intervalEma : now < prev.lastTs ? 0 : Math.min(now - prev.lastTs, EMA_CAP);
+    s.intervalEma = Math.floor((s.intervalEma * 7 + dt) / 8) >>> 0;
+    const bpm = BPM_MAX - Math.floor((s.intervalEma * (BPM_MAX - BPM_MIN)) / EMA_CAP);
+    s.bpm = Math.min(BPM_MAX, Math.max(BPM_MIN, bpm));
+  }
 
   // 7. pressure (Solidity int division truncates toward zero)
   s.pressure = s.pressure - Math.trunc(s.pressure / 16) + (isBuy ? 1000 : -1000);
@@ -726,7 +738,7 @@ export function mutate(
   // 10.
   s.lastTs = now;
   s.lastTick = tick;
-  if (rel) s.sizeLogEma = nextSizeLogEma(s.sizeLogEma ?? INITIAL_SIZE_LOG_EMA, quoteAmt, thresholds, rel);
+  if (rel && !input.holdSizeEma) s.sizeLogEma = nextSizeLogEma(s.sizeLogEma ?? INITIAL_SIZE_LOG_EMA, quoteAmt, thresholds, rel);
 
   const slotOpts: SlotOptions | undefined = rel || dr ? { relative: !!rel, drop: !!dr } : undefined;
 
@@ -825,5 +837,9 @@ export function pulseSize(sizeLogEma: number, balanceWei: bigint): bigint {
 
 // Swap sources: pool logs of every station kind -> the rules input (swaps.ts).
 export * from "./swaps.ts";
+// NFT sources: a collection's sales -> the rules input, one per item sold (nft.ts).
+export * from "./nft.ts";
+// Credit ratings: the offline table of every Credit's score and plates (credittable.ts).
+export * from "./credittable.ts";
 // Station checkpoints: the state a bot replay reached, for the site to start from (checkpoint.ts).
 export * from "./checkpoint.ts";

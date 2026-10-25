@@ -215,6 +215,7 @@ export function createHandler(d: Deps) {
       const entry = d.registry().stations.find((s) => s.key === r.key);
       if (!entry) throw new HttpError(404, "no such station");
       if (entry.house) throw new HttpError(400, "house stations need no renewal");
+      if (entry.gift) throw new HttpError(400, "a gift station needs no renewal");
       // Station+ runs to the new paid end, so the days of the current period not on Station+ yet are paid with it.
       const days = r.plus ? upgradeDays(entry, d.store.subscriptions()[r.key], now()) : 0;
       const app = await createApp({ kind: "renew", months: r.months, ...(r.plus ? { plus: true, ...(days ? { upgradeDays: days } : {}) } : {}) },
@@ -231,6 +232,7 @@ export function createHandler(d: Deps) {
       const entry = d.registry().stations.find((s) => s.key === r.key);
       if (!entry) throw new HttpError(404, "no such station");
       if (entry.house) throw new HttpError(400, "house stations are not sold");
+      if (entry.gift) throw new HttpError(400, "a gift station is not sold");
       const sub = d.store.subscriptions()[r.key];
       const st = stationStatus(entry, sub, now());
       if (st.status !== "live") throw new HttpError(409, `the station is ${st.status === "expired" ? "off air" : st.status}: renew it as Station+ instead`, { code: "not-live" });

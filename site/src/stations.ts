@@ -1,7 +1,7 @@
 // Station registry (stations/registry.json, docs/STATIONS.md "Registry"), shared with the bot. The shape is checked
 // by scripts/check-stations.mjs before every build; this module only types it and derives what the site needs.
 import registry from "@stations/registry.json";
-import { stationFingerprint, type Calibration, type PoolKind, type SwapSource } from "@swarm-sequencer/core";
+import { stationFingerprint, type Calibration, type PoolKind, type StationSource, type SwapSource } from "@swarm-sequencer/core";
 import type { Network } from "./config";
 import { withRuntime } from "./runtime";
 
@@ -13,6 +13,24 @@ export interface StationTheme {
   ghost: string;
   /** LCD glass. */
   lcd: string;
+  /** Optional skin of the player page (applyTheme on the root): the faceplate, and the sell / whale accents. */
+  panel?: string;
+  sell?: string;
+  whale?: string;
+}
+
+/** kind "nft": the collection is the entry's `token`; the supply frame and the venues (core nft.ts NftSource). */
+export interface StationNft {
+  itemSupply: number;
+  refPrice: string;
+  seaport?: `0x${string}`[];
+  strategy?: `0x${string}`;
+  core?: `0x${string}`;
+  statements?: `0x${string}`;
+  /** BALANCE (the Statements' ERC-20): its withdraws are deep events (core nft.ts). */
+  balance?: `0x${string}`;
+  /** The offline rating table its sales are tagged with (core credittable.ts), loaded only by this station. */
+  ratings?: "credits";
 }
 
 export interface Station {
@@ -40,12 +58,15 @@ export interface Station {
   quoteSymbol: "ETH" | "IMD";
   /**
    * "hook": the $IDM hook pool, state on chain. Any other kind is a pool without the hook, played in the browser
-   * (data/virtual.ts) from its Swap logs through core swaps.ts.
+   * (data/virtual.ts) from its Swap logs through core swaps.ts; "nft" a collection's sales through core nft.ts.
    */
-  kind: "hook" | PoolKind;
+  kind: "hook" | PoolKind | "nft";
   hook?: `0x${string}`;
+  nft?: StationNft;
   /** House stations (run by theidm) are listed first. */
   house?: boolean;
+  /** A gift: on air without a subscription, never expires (docs/STATIONS.md "Gift stations"). */
+  gift?: boolean;
   theme: StationTheme;
   /** Style program key; "idm" = the house schedules. */
   program: string;
@@ -153,9 +174,13 @@ export function stationFor(net: Network): Station | undefined {
 /** Player link for a station: the hook station is the bare player (config ACTIVE_NETWORK), the rest ?net=<key>. */
 export const playerHref = (s: Station): string => (s.kind === "hook" ? "/" : `/?net=${s.key}`);
 
-/** Where a played station's swaps come from (check-stations guarantees the fields its kind needs). */
-export function swapSourceOf(s: Station): SwapSource {
+/**
+ * Where a played station's swaps come from (check-stations guarantees the fields its kind needs): its pool, or for an
+ * "nft" station its collection, venues and supply frame (core nft.ts), with the chain's WETH.
+ */
+export function swapSourceOf(s: Station): StationSource {
   if (s.kind === "hook") throw new Error(`${s.key}: the hook station is read on chain, not replayed`);
+  if (s.kind === "nft") return { kind: "nft", collection: s.token, ...s.nft!, weth: chainOf(s).weth };
   const src: SwapSource = s.kind === "v4"
     ? { kind: "v4", address: s.poolManager!, poolId: s.poolId!, ethSide: s.ethSide ?? 0 }
     : { kind: s.kind, address: s.pool!, ethSide: s.ethSide! };
@@ -187,7 +212,9 @@ export function stationNetwork(s: Station): Network {
     poolManager: s.poolManager ?? null,
     poolId: s.poolId ?? null,
     startBlock: s.genesisBlock,
-    launchedBy: `the $IDM hook's rules, played in your browser on ${s.ticker}'s own pool`,
+    launchedBy: s.kind === "nft"
+      ? `the $IDM hook's rules, played in your browser on every ${s.label.toLowerCase()} sale, one note per item`
+      : `the $IDM hook's rules, played in your browser on ${s.ticker}'s own pool`,
     launchUrl: null,
     treasury: null,
     virtual: {
@@ -213,4 +240,23 @@ export function applyTheme(t: StationTheme, el: HTMLElement = document.documentE
   el.style.setProperty("--phos-dim", t.phosDim);
   el.style.setProperty("--phos-ghost", t.ghost);
   el.style.setProperty("--lcd-bg", t.lcd);
+}
+
+/** a mixed toward black by `k` (0..1), as #rrggbb: the faceplate's shades from its one colour. */
+const shade = (hex: string, k: number) => "#" + [1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * (1 - k)).toString(16).padStart(2, "0")).join("");
+
+/**
+ * The station's skin on the player page only (main.ts; cards keep the house faceplate): the faceplate colour and its
+ * shades, the sell and whale accents, and `body.skin-<key>` for anything CSS adds (style.css).
+ */
+export function applySkin(s: Station, el: HTMLElement = document.documentElement) {
+  const t = s.theme;
+  if (t.panel) {
+    el.style.setProperty("--bone", t.panel);
+    el.style.setProperty("--bone-2", shade(t.panel, 0.05));
+    el.style.setProperty("--bone-3", shade(t.panel, 0.12));
+  }
+  if (t.sell) el.style.setProperty("--sell", t.sell);
+  if (t.whale) el.style.setProperty("--amber", t.whale);
+  if (t.panel || t.sell || t.whale) document.body.classList.add(`skin-${s.key}`);
 }

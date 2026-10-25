@@ -342,6 +342,35 @@ export interface LiquidData extends SoundData {
   choir?: Partial<PadSpec>;
   /** soulful. The string swells (reads osc, cutoff, q, attack, release, level, vib; the swell takes 55% of the chord unless `attack` is shorter). */
   strings?: Partial<PadSpec>;
+  /**
+   * classic, atmos, soulful. The attention layer's mention voices (engine.ts liquidMention), merged field by field
+   * over the base's preset (LIQUID_ORNAMENTS). Only plays on a mention of the token.
+   */
+  ornament?: Partial<LiquidOrnamentSpec>;
+}
+
+/** A liquid mention voice: nature far away, an amen ghost snare, one note of the style's keys. */
+export type LiquidMentionVoice = "nature" | "amen" | "keys";
+/** A far-away nature sound: a bird (two chirps), a gust of wind, a water drop. */
+export type LiquidNatureKind = "bird" | "gust" | "drop";
+
+/**
+ * The liquid mention (attention layer: one per mention of the token). Every mention plays all of `voices`, a smart
+ * one all of `smart`: "nature" one far-away sound of `nature` in turn (smart: two birds answering, a beat apart);
+ * "amen" a soft ghost snare (smart: a quick four-hit roll on 32nds, rising); "keys" one note of the style's keys on
+ * the chord's top, an octave over the stabs, with a fast attack so it speaks on its step (smart: a dyad).
+ */
+export interface LiquidOrnamentSpec {
+  /** 1..3 distinct voices a mention plays. */
+  voices: readonly LiquidMentionVoice[];
+  /** 1..3 distinct voices a smart mention plays. */
+  smart: readonly LiquidMentionVoice[];
+  /** 1..3 distinct nature sounds, played in turn by plain mentions. */
+  nature: readonly LiquidNatureKind[];
+  /** Overall level 0..1.6 (1 = the preset, as the owner approved it by ear). */
+  level: number;
+  /** The bar's 16ths it may land on, 1..8 of 0..15. */
+  slots: readonly number[];
 }
 
 // ---------------------------------------------------------------------------------------------- futuregarage
@@ -430,6 +459,35 @@ export interface GarageData extends SoundData {
   vowels?: readonly (readonly [number, number])[];
   /** classic, dark, atmos. The rain bed level 0..2.5 (0 = none). Default classic 0, dark 1, atmos 0.75. */
   rain?: number;
+  /**
+   * classic, dark, atmos. The attention layer's mention voices (engine.ts garageMention), merged field by field over
+   * the base's preset (GARAGE_ORNAMENTS). Not the Dark Sub `foley` ticks above: this one only plays on a mention.
+   */
+  ornament?: Partial<GarageOrnamentSpec>;
+}
+
+/** A future garage mention voice: a reverse breath, a foley object, a ghost groove, a vocal "yeah". */
+export type GarageMentionVoice = "reverse" | "foley" | "groove" | "yeah";
+/** A mention's foley object: a lighter click, a water drop, a vinyl crack. */
+export type GarageFoleyKind = "lighter" | "drop" | "vinyl";
+
+/**
+ * The future garage mention (attention layer: one per mention of the token). Every mention plays all of `voices`, a
+ * smart one all of `smart`: "reverse" an "aah" and a noise wash swelling from the step into the next strong beat
+ * (step 0 or 8) and cut there; "foley" one object (smart: the lighter with its flame); "groove" a ghost rim and a
+ * shuffled hat (smart: a three-hit ghost snare roll, rising); "yeah" the same vocal "yeah" on the tonic, 3 16ths.
+ */
+export interface GarageOrnamentSpec {
+  /** 1..4 distinct voices a mention plays. */
+  voices: readonly GarageMentionVoice[];
+  /** 1..4 distinct voices a smart mention plays (louder: reverse and yeah x1.5). */
+  smart: readonly GarageMentionVoice[];
+  /** 1..3 foley objects, played in turn by plain mentions. */
+  foley: readonly GarageFoleyKind[];
+  /** Overall level 0..1.6 (1 = the preset, as the owner approved it by ear). */
+  level: number;
+  /** The bar's 16ths it may land on, 1..8 of 0..15 (reverse swells from its slot to the next 0 or 8). */
+  slots: readonly number[];
 }
 
 // --------------------------------------------------------------------------------------------------- triphop
@@ -743,6 +801,82 @@ export interface DubStabSpec {
   pan: number;
   /** Depth of the four-bar cutoff wobble 0..1. */
   move: number;
+  /**
+   * A second oscillator per chord tone under the same filter (off unless `mix2` > 0): `wave2` a wave or "pulse" (a
+   * pulse of width `width` 0.05..0.5, 0.5 = square; default 0.3), `mix2` its level against the detuned pair 0..1.5,
+   * `octave2` its register in semitones over the stab -12..24 (default 0; -12 a sub, 12 / 19 / 24 glass). Saw + pulse
+   * = a Prophet-ish stab, square + a sine under it = hollow, a sine two octaves up = glassy. Default: no layer.
+   */
+  wave2?: Wave | "pulse";
+  mix2?: number;
+  width?: number;
+  octave2?: number;
+  /**
+   * Velocity to cutoff 0..1: the figure hit's level (its accent times the `stabBars` level) scales the cutoff by
+   * level^(1.5 velLp), so quieter hits are darker and accents open (ornaments, throws and whale stabs are not
+   * scaled). Default 0: every hit at the same cutoff.
+   */
+  velLp?: number;
+  /**
+   * The voice that plays the chord tones, under the same highpass, lowpass envelope, sweep and amp: "osc" the
+   * detuned oscillator pair (default, every house style), "fm" a two-operator FM voice per tone (`fm`), "pluck" a
+   * struck resonator bank per tone (`pluck`). The `mix2` layer, `velLp` and every send work with each.
+   */
+  engine?: DubStabEngine;
+  /** The FM voice (engine "fm"), merged over DUB_STAB_FM. */
+  fm?: Partial<DubStabFmSpec>;
+  /** The struck resonator voice (engine "pluck"), merged over DUB_STAB_PLUCK. */
+  pluck?: Partial<DubStabPluckSpec>;
+}
+export type DubStabEngine = "osc" | "fm" | "pluck";
+/**
+ * The FM stab: per chord tone two sine carriers (detuned by the stab's `detune`, which `wave` does not touch) on one
+ * sine modulator at `ratio` times the tone; the modulator's index jumps to `index` at the hit and falls to
+ * `floor` x index over `decay` s, so the hit is bright and metallic and the tail a near sine that the dub filter
+ * darkens. An optional second modulator (`ratio2` at `index2`, falling over `decay2` s to nothing) adds a clang on
+ * the attack only. `vel` 0..1: the figure hit's level scales both indices by level^(1.5 vel).
+ */
+export interface DubStabFmSpec {
+  /**
+   * Modulator / carrier ratio 0.5..12 (1 warm, 2 hollow, 3 / 7 metallic; 3.5 / 1.41 bell-like). A whole ratio keeps
+   * every partial on the tone's harmonic series; a non-whole one adds partials off the key (3.5: x2.5, x5.5 ...) that
+   * clash with the chord and the sub, and the echo's highpass lifts them over the fundamentals.
+   */
+  ratio: number;
+  /** Peak index 0..12 (the deviation is index x the modulator's frequency). */
+  index: number;
+  /** Held share of the index after the decay 0..1. */
+  floor: number;
+  /** Index fall s 0.01..2. */
+  decay: number;
+  /** The second modulator: ratio 0.5..16 (default 7, a whole metal ping), peak index 0..12 (0 = none, the default), fall s 0.005..1. */
+  ratio2: number;
+  index2: number;
+  decay2: number;
+  /** Velocity to index 0..1. */
+  vel: number;
+}
+/**
+ * The struck resonator stab (modal synthesis): one mallet click (a half sine `burst` s wide, through a lowpass at
+ * `tone` Hz: the narrower and the higher, the harder the mallet) strikes a bank of tuned resonators per chord tone, one per `modes` ratio (1 = the tone; 2, 3
+ * a string, 4 a marimba bar's two-octave mode; its 9.9 mode or a wooden bar's 2.76 / 5.4 ring off the key, a quarter
+ * tone from any scale tone, so a stab over a chord and a sub keeps to whole ratios). Each rings `decay` s (to -60 dB) times
+ * (1 / ratio)^`damp`, so the upper modes die first and the hit darkens as it rings. `vel` 0..1: the figure hit's
+ * level opens the mallet's lowpass by level^(1.5 vel). The stab's `wave` and `detune` do not apply.
+ */
+export interface DubStabPluckSpec {
+  /** Mode ratios over the tone, 1..4 of 0.5..16. */
+  modes: readonly number[];
+  /** Ring of the first mode, s to -60 dB 0.05..4. */
+  decay: number;
+  /** How much faster the upper modes die 0..2. */
+  damp: number;
+  /** Mallet lowpass Hz 200..10000. */
+  tone: number;
+  /** Click width s 0.0002..0.005. */
+  burst: number;
+  /** Velocity to the mallet's lowpass 0..1. */
+  vel: number;
 }
 /** The pad under the stabs: the chord with its root an octave under, held and crossfading; in the room, not ducked. */
 export interface DubPadSpec {
@@ -756,6 +890,8 @@ export interface DubPadSpec {
   lp: number;
   attack: number;
   release: number;
+  /** A highpass under the pad, Hz 20..1000, keeping it out of the kick and the sub. Default: none. */
+  hp?: number;
 }
 /** The bell: a sine with a harmonic FM partial (`ratio` 0.5..8, `index` 0..4) that fades faster than the note. */
 export interface DubBellSpec {
@@ -769,6 +905,67 @@ export interface DubBellSpec {
   decay: number;
 }
 
+/**
+ * The techno rumble: the kick feeds its own dark room (a lowpassed, feed-forward tap chain, so it can never ring) and
+ * the kick ducks the room's output, so the low smear pumps between the kicks. Off in every house style (`level` 0).
+ */
+export interface DubRumbleSpec {
+  /** Send of the kick into the rumble room 0..1.5 (0 = no rumble: nothing is built). */
+  level: number;
+  /** Lowpass Hz 60..400, before and after the room. */
+  lp: number;
+  /** Tail length s 0.3..3 (the taps fall about 30 dB over it). */
+  decay: number;
+  /** Sidechain depth 0..1: at each kick the rumble drops to 1 - duck and recovers by the next beat. */
+  duck: number;
+}
+
+/**
+ * The dub echo's shape (dub techno; the echo itself is `fx.echo`, a chain of feed-forward taps that can never ring).
+ * `width` pans its repeats left and right 0..1 (0 = centre, 1 = hard; house 0.55). `alt` 0..8 16ths: when > 0 the odd
+ * repeats wait `alt` 16ths instead of `fx.echo.steps`, a ping-pong of two times (steps 4 + alt 3 = a quarter left, a
+ * dotted eighth right, ...). `wobble` 0..1 a tape wobble: one slow sine (`rate` 0.05..2 Hz, default 0.4) moves every
+ * repeat's time by up to 3 ms. House: { width 0.55, alt 0, wobble 0 }.
+ */
+export interface DubEchoToneSpec {
+  width: number;
+  alt: number;
+  wobble: number;
+  rate: number;
+}
+
+/**
+ * A sparse atmospheric melody (off unless `level` > 0): rare single synth notes from a pool, floating over the
+ * groove through the echo and the room. Every `every` bars (a cell) a note may come, `count` 1..4 of them in the cell
+ * on 8th onsets, each cell with probability `chance` (heat raises it); the epoch and the cell pick the onsets and the
+ * pitches, so a new epoch is a new line. A whale buy answers with one note. It plays on the lead bus (its own `fx.echoSend.lead` /
+ * `spaceSend.lead`) plus its own `echo` and `space` sends 0..1.
+ */
+export interface DubMelodySpec {
+  /** Level 0..2 (0 = no melody). */
+  level: number;
+  wave: Wave;
+  /** ± cents between its two oscillators 0..30. */
+  detune: number;
+  /** Register: semitones over the stab register -12..24 (12 = an octave over the stabs). */
+  octave: number;
+  /** Pitches, semitones over the stab root -12..24, 1..8 of them. Default: the bar's chord tones (`upper`). */
+  notes?: readonly number[];
+  /** Bars per cell 1..16, notes per played cell 1..4, the chance a cell plays 0..1. */
+  every: number;
+  count: number;
+  chance: number;
+  /** Attack s 0.005..4, then held `hold` 16ths 0..32, then released over `release` s 0.1..8. */
+  attack: number;
+  hold: number;
+  release: number;
+  /** Lowpass Hz 200..8000. */
+  lp: number;
+  /** Extra sends straight into the echo and the room, 0..1. */
+  echo: number;
+  space: number;
+}
+
 /** Dub techno. Bases: "classic" (Lucidflow), "ixtlan" (Ixtlan), "moment" (The Moment). Every base reads every field. */
 export interface DubTechnoData extends SoundData {
   /** Chords by name, merged over the house set (i9 i11 iv7 VI9 VII9 v7). Default DUB_CHORDS. */
@@ -776,12 +973,18 @@ export interface DubTechnoData extends SoundData {
   /** 1..6 progressions; the epoch picks one. Default DUB_STYLES[base].progs. */
   progressions?: readonly DubProgression[];
   /**
-   * Stab figures: steps of one bar (0..15), 1..6 hits, played every bar; the last hit is the answer only a busy chain
-   * adds. 1..6 figures, one per epoch. Default DUB_STYLES[base].figures.
+   * Stab figures: steps of one bar (0..15), 1..6 hits, played every bar (`stabBars` may rest some); the last hit is
+   * the answer only a busy chain adds. 1..6 figures, one per epoch. Default DUB_STYLES[base].figures.
    */
   figures?: readonly (readonly number[])[];
   /** Level of each figure hit in order (cycled), 1..6 values 0..1.5. Default DUB_STYLES[base].accents. */
   accents?: readonly number[];
+  /**
+   * The stab's bar mask: the figure's level per bar of a 1..16-bar cycle (counted from bar 0, like the progressions),
+   * each 0..1.5; 0 rests the figure that bar, so the echo carries the space ([1, 0] = every other bar, [1, 0, 0, 0] =
+   * once a phrase, [1, 0, 0.6, 0] = an answer softer). Default: every bar at 1.
+   */
+  stabBars?: readonly number[];
   /**
    * The sub's figure per bar: [step 0..15, length in 16ths 0.25..16, level 0..1.5, interval over the chord root
    * 0..24 (optional: 7 the fifth, 12 the octave)], 1..16 notes. Default DUB_STYLES[base].bass.notes.
@@ -791,6 +994,17 @@ export interface DubTechnoData extends SoundData {
   bells?: readonly (readonly (readonly [number, number, number])[])[];
   /** The percussion's two-bar figure: [16th 0..31, pitch ratio over the tonic 0.5..3 (1.5 the fifth), level 0..1.5], 1..8. */
   percs?: readonly (readonly [number, number, number])[];
+  /**
+   * The clap's (or rim's) two-bar figure: [16th 0..31, level 0..1.5], 1..8 hits, in place of 2 and 4 (`[[12, 1],
+   * [28, 1]]` = the 4 only). The clap still follows the song form and the chain's snare row. Default: 2 and 4.
+   */
+  claps?: readonly (readonly [number, number])[];
+  /**
+   * The hat's two-bar figure: [16th 0..31, level 0..1.5, decay s 0.005..0.5 (optional, default kit.hat.decay)], 1..16
+   * hits, in place of the offbeat hat (`kit.hat.off` still scales it; a long decay is an open hat). Default: every
+   * offbeat at 1.
+   */
+  hats?: readonly (readonly [number, number, number?])[];
   /** The drum kit, merged per voice over the base's (DUB_STYLES). */
   kit?: Partial<DubTechnoKit>;
   /** The rolling sub's voice. */
@@ -801,10 +1015,21 @@ export interface DubTechnoData extends SoundData {
   padTone?: Partial<DubPadSpec>;
   /** The bell's voice and how often it plays. */
   bellTone?: Partial<DubBellSpec>;
-  /** Bars per full open-close of the stab and pad filters (`stab`) and of the echo loop's filter (`echo`), 2..64. */
-  sweep?: { stab?: number; echo?: number };
+  /**
+   * Bars per full open-close of the stab and pad filters (`stab`) and of the echo loop's filter (`echo`), 2..64.
+   * The echo may breathe too (both off by default): `send` 0..1 dips the level into the echo by up to that share and
+   * `fb` 0..1 the level of its repeats, over `breath` bars 2..64 (default the `echo` period). They only ever lower
+   * the echo from its `fx.echo` values, so it can never build.
+   */
+  sweep?: { stab?: number; echo?: number; send?: number; fb?: number; breath?: number };
   /** The field texture (rain on a window, a far room): level 0..3 (0 = none), band centre Hz 200..6000. */
   field?: { level?: number; hz?: number };
+  /** The kick's rumble room, ducked by the kick (DubRumbleSpec). Default off (level 0). */
+  rumble?: Partial<DubRumbleSpec>;
+  /** The echo's stereo width, ping-pong second time and tape wobble (DubEchoToneSpec). Default the house echo. */
+  echoTone?: Partial<DubEchoToneSpec>;
+  /** The sparse atmospheric melody (DubMelodySpec). Default off (level 0). */
+  melody?: Partial<DubMelodySpec>;
 }
 
 // --------------------------------------------------------------------------------------------------- electro
@@ -964,6 +1189,38 @@ export interface ElectroData extends SoundData {
   hoover?: Partial<HooverSpec>;
   /** alienrave. The robot call voice. */
   vox?: Partial<VoxSpec>;
+  /**
+   * Every base. The attention layer's robot word, the voice a mention of the token plays (engine.ts robotWord), merged
+   * field by field over the base's preset (ROBOT_WORDS). Default: the base's preset.
+   */
+  ornament?: Partial<RobotWordSpec>;
+}
+
+/**
+ * The electro robot word (attention layer: one per mention of the token). A buzzy oscillator through two formants
+ * per syllable, crushed, gated; smart mentions play it louder, an octave up and echoed.
+ */
+export interface RobotWordSpec {
+  /** 1..4 syllables, [F1 Hz 150..1200, F2 Hz 500..3500] each ("ah" ~ [700, 1200], "ee" ~ [400, 2200], "oo" ~ [330, 650]). */
+  vowels: readonly (readonly [number, number])[];
+  /** The buzz: "square" (classic), "sawtooth" (brighter), "triangle" / "sine" (softer). */
+  wave: OscillatorType;
+  /** Crush steps per half wave 2..16: fewer is rougher (Cold 808: 3, Client_03: 6). */
+  steps: number;
+  /** Register in semitones from MIDI 48 + the tonic, -24..24. */
+  octave: number;
+  /** Syllable length in 16ths, 0.5..4. */
+  syllable: number;
+  /** Ring modulation, a sine at this ratio of the pitch, 0..4 (0 = off; 1.5 is metallic). */
+  ring: number;
+  /** Lowpass Hz 0..12000 (0 = open). */
+  lowpass: number;
+  /** An echo on every mention ({ steps 1..8 16ths, feedback 0..0.7 }), or null: only smart mentions are echoed. */
+  echo: { steps: number; feedback: number } | null;
+  /** Peak 0.01..0.1 (smart: x1.6): the word stays a quiet answer under the track. */
+  level: number;
+  /** The bar's 16ths it may land on, 1..8 of 0..15 (default the offbeats 2, 6, 10, 14). */
+  slots: readonly number[];
 }
 
 // ------------------------------------------------------------------------------------------------ ambientidm
@@ -1295,14 +1552,14 @@ const SOUND = ["mix", "fx", "vinyl"] as const;
  */
 export const DATA_FIELDS: { readonly [G in DataGenre]: Readonly<Record<string, readonly (keyof GenreDataMap[G])[]>> } = {
   liquid: {
-    classic: ["vamps", "stabs", "answers", "contours", "kit", "fills", "sub", ...SOUND, "bass", "pad"],
-    atmos: ["vamps", "phrases", "contours", "kit", "fills", "sub", ...SOUND, "bass", "pad", "choir"],
-    soulful: ["progressions", "walks", "comps", "kit", "fills", "sub", ...SOUND, "bass", "strings"],
+    classic: ["vamps", "stabs", "answers", "contours", "kit", "fills", "sub", ...SOUND, "bass", "pad", "ornament"],
+    atmos: ["vamps", "phrases", "contours", "kit", "fills", "sub", ...SOUND, "bass", "pad", "choir", "ornament"],
+    soulful: ["progressions", "walks", "comps", "kit", "fills", "sub", ...SOUND, "bass", "strings", "ornament"],
   },
   futuregarage: {
-    classic: ["chords", "progressions", "skips", "kicks", "sub", ...SOUND, "kit", "bass", "pad", "vowels", "rain"],
-    dark: ["chords", "progressions", "foley", "kicks", "sub", ...SOUND, "kit", "bass", "reese", "choir", "rain"],
-    atmos: ["vamps", "choirs", "pans", "kicks", "sub", ...SOUND, "kit", "bass", "pad", "choir", "rain"],
+    classic: ["chords", "progressions", "skips", "kicks", "sub", ...SOUND, "kit", "bass", "pad", "vowels", "rain", "ornament"],
+    dark: ["chords", "progressions", "foley", "kicks", "sub", ...SOUND, "kit", "bass", "reese", "choir", "rain", "ornament"],
+    atmos: ["vamps", "choirs", "pans", "kicks", "sub", ...SOUND, "kit", "bass", "pad", "choir", "rain", "ornament"],
   },
   triphop: {
     classic: ["chords", "progressions", "statements", "answers", "turns", "space", "kicks", "sub", ...SOUND, "kit", "bass", "bowed"],
@@ -1320,14 +1577,14 @@ export const DATA_FIELDS: { readonly [G in DataGenre]: Readonly<Record<string, r
     rubber: ["lines", ...SOUND, "kit", "voice"],
   },
   dubtechno: {
-    classic: ["chords", "progressions", "figures", "accents", "bassline", "bells", "percs", ...SOUND, "kit", "subTone", "stabTone", "padTone", "bellTone", "sweep", "field"],
-    ixtlan: ["chords", "progressions", "figures", "accents", "bassline", "bells", "percs", ...SOUND, "kit", "subTone", "stabTone", "padTone", "bellTone", "sweep", "field"],
-    moment: ["chords", "progressions", "figures", "accents", "bassline", "bells", "percs", ...SOUND, "kit", "subTone", "stabTone", "padTone", "bellTone", "sweep", "field"],
+    classic: ["chords", "progressions", "figures", "accents", "stabBars", "bassline", "bells", "percs", "claps", "hats", ...SOUND, "kit", "subTone", "stabTone", "padTone", "bellTone", "sweep", "field", "rumble", "echoTone", "melody"],
+    ixtlan: ["chords", "progressions", "figures", "accents", "stabBars", "bassline", "bells", "percs", "claps", "hats", ...SOUND, "kit", "subTone", "stabTone", "padTone", "bellTone", "sweep", "field", "rumble", "echoTone", "melody"],
+    moment: ["chords", "progressions", "figures", "accents", "stabBars", "bassline", "bells", "percs", "claps", "hats", ...SOUND, "kit", "subTone", "stabTone", "padTone", "bellTone", "sweep", "field", "rumble", "echoTone", "melody"],
   },
   electro: {
-    classic: ["kicks", "arps", ...SOUND, "kit", "bassTone"],
-    client03: ["chords", "progressions", "kicks", "ghosts", "warps", "chops", "riffs", "words", ...SOUND, "kit", "bassTone", "pad", "voice"],
-    alienrave: ["chords", "progressions", "kicks", "opens", "lines", "stabs", "arpCells", "calls", ...SOUND, "kit", "bassTone", "hoover", "vox"],
+    classic: ["kicks", "arps", ...SOUND, "kit", "bassTone", "ornament"],
+    client03: ["chords", "progressions", "kicks", "ghosts", "warps", "chops", "riffs", "words", ...SOUND, "kit", "bassTone", "pad", "voice", "ornament"],
+    alienrave: ["chords", "progressions", "kicks", "opens", "lines", "stabs", "arpCells", "calls", ...SOUND, "kit", "bassTone", "hoover", "vox", "ornament"],
   },
   ambientidm: {
     classic: ["chords", "progressions", "figures", "tiers", ...SOUND, "kit", "pad", "line"],

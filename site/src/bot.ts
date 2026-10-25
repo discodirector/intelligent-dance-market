@@ -39,6 +39,8 @@ interface Entry extends RawTimelineEvent {
   rules?: "v1" | "v2";
   /** v2: this swap finished a track; slots = the finished track before the reset. */
   trackComplete?: { trackNo: number; swaps?: number; slot0: string; slot1: string };
+  /** NFT stations (core nft.ts tag): a rated sale or a BALANCE withdraw cues the engine (synth SaleCue / LockCue). */
+  nft?: { via: string; score?: number; mask?: number; points?: number; ink?: [number, number, number, number] };
 }
 
 interface SetupOptions {
@@ -128,6 +130,14 @@ function spread(raw: Entry[], seconds: number): TimelinePoint[] {
   return base.map((p, i) => ({ ...p, time: i === 0 ? 0 : 0.25 + (i / n) * span, now: keepIdle ? p.now : undefined }));
 }
 
+/** An NFT station entry's cues: a withdraw's lock, a rated sale's plate stab; nothing for any other entry. */
+function nftCues(e: Entry): Pick<TimelinePoint, "sale" | "lock"> {
+  const n = e.nft;
+  if (n?.via === "withdraw") return { lock: { points: n.points ?? 0, ...(n.ink ? { ink: n.ink } : {}) } };
+  if (n?.score !== undefined && n.mask) return { sale: { pct: n.score, mask: n.mask } };
+  return {};
+}
+
 /** v2: states carry heat (normalised by heatMax) and trackNo; a track complete holds the finished track, then drops. */
 function withHeat(pts: TimelinePoint[], raw: Entry[]): TimelinePoint[] {
   if (pts.length !== raw.length) return pts;
@@ -138,6 +148,7 @@ function withHeat(pts: TimelinePoint[], raw: Entry[]): TimelinePoint[] {
       ...p,
       state: decode(e.slot0, e.slot1, { heatMax: HEAT_MAX }),
       ...(tc ? { trackDrop: { held: decode(tc.slot0, tc.slot1, { heatMax: HEAT_MAX }) } } : {}),
+      ...nftCues(e),
     };
   });
 }

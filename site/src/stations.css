@@ -98,6 +98,11 @@ body.stations-page { background: var(--black); }
 .st-plus { border: 1px solid rgba(var(--phos-rgb), 0.35); background: #0b0d0b; padding: 16px 20px; display: grid; grid-template-columns: auto auto 1fr; gap: 6px 14px; align-items: baseline; }
 .st-plus b { color: var(--bone); letter-spacing: 0.24em; font-size: 13px; }
 .st-plus .soon { color: var(--phos); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; }
+/* Station+ is limited: an amber badge with the places left (API /config plus.left). */
+.st-slots { justify-self: start; display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px; border: 1px solid var(--amber); color: var(--amber); background: rgba(255, 181, 61, 0.08); font-size: 12px; font-weight: 800; letter-spacing: 0.16em; box-shadow: 0 0 14px rgba(255, 181, 61, 0.22); white-space: nowrap; }
+.st-slots i { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+.st-slots.full { color: var(--sell); border-color: var(--sell); background: rgba(255, 95, 82, 0.08); box-shadow: none; }
+.st-slots.full i { background: var(--sell); box-shadow: none; }
 .st-plus p { margin: 0; color: #b4bbb5; font-size: 14px; line-height: 1.6; }
 
 .table-term.big table { font-size: 15px; }
@@ -183,6 +188,7 @@ body.stations-page { background: var(--black); }
   .st-list6 { grid-template-columns: 1fr; }
   .st-plus { grid-template-columns: auto 1fr; }
   .st-plus p { grid-column: 1 / -1; }
+  .st-slots { font-size: 11px; letter-spacing: 0.1em; }
 }
 @media (max-width: 560px) {
   .st-list6 li { font-size: 16px; }

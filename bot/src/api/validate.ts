@@ -62,7 +62,7 @@ export function vibe(v: unknown, max: number): string {
   return s;
 }
 
-/** None (the owner picks), or 2 or more distinct data genres (a pack names 2 or more). */
+/** None (the owner picks), or 1 or more distinct data genres (a pack names 1 or more). */
 export function genres(v: unknown): string[] {
   if (v === undefined || v === null) return [];
   if (!Array.isArray(v) || v.some((g) => typeof g !== "string")) throw new Invalid("genres: a list of genre ids");
@@ -70,7 +70,6 @@ export function genres(v: unknown): string[] {
   if (set.length !== v.length) throw new Invalid("genres: listed twice");
   const bad = set.find((g) => !(DATA_GENRES as readonly string[]).includes(g));
   if (bad !== undefined) throw new Invalid(`genres: one of ${DATA_GENRES.join(", ")}`);
-  if (set.length === 1) throw new Invalid("genres: pick 2 or more, or none");
   return set;
 }
 

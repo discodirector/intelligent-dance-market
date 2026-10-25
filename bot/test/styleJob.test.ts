@@ -59,7 +59,7 @@ describe("styleOpenBody", () => {
     expect(bad({ key: "idm" })).toThrow(/key "idm"/);
     expect(bad({ key: "Chog" })).toThrow(/key/);
     expect(bad({ key: "c" })).toThrow(/key/);
-    expect(bad({ genres: ["liquid"] })).toThrow(/genres: 2\.\./);
+    expect(bad({ genres: [] })).toThrow(/genres: 1\.\./);
     expect(bad({ genres: ["liquid", "dubstep"] })).toThrow(/genre "dubstep"/);
     expect(bad({ genres: ["liquid", "liquid"] })).toThrow(/listed twice/);
     expect(bad({ styles: 5 })).toThrow(/styles per genre/);

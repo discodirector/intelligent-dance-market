@@ -7,9 +7,10 @@
 // starts from instead of replaying the whole history (docs/STATIONS.md "Checkpoints").
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { gunzipSync } from "node:zlib";
 import {
-  CHECKPOINT_VERSION, decodeSwapLogs, encode, stationFingerprint, swapLogFilter,
-  type Calibration, type CheckpointSwap, type PoolKind, type StationCheckpoint, type SwapSource,
+  CHECKPOINT_VERSION, decodeNftLogs, decodeSwapLogs, nftCarryFromJSON, nftCarryToJSON, encode, parseCreditTable, readNftLogs, stationFingerprint, swapLogFilter,
+  type Calibration, type CreditTable, type CheckpointSwap, type DecodedSwap, type NftCarryJSON, type NftTag, type PoolKind, type StationCheckpoint, type StationSource, type SwapSource,
 } from "@swarm-sequencer/core";
 import { getRawLogsChunked, makeClients, withRetry } from "./replay/rpc.ts";
 import { MAIN_POOL_ID, POOL_MANAGER } from "./replay/pools.ts";
@@ -23,7 +24,8 @@ export interface BotStation {
   /** Pool name for captions, e.g. "IMD/ETH". */
   pool: string;
   chainId: number;
-  source: SwapSource;
+  /** A pool (core swaps.ts) or, kind "nft", a collection's sales (core nft.ts). */
+  source: StationSource;
   genesisBlock: bigint;
   /** Blocks per eth_getLogs request to start with. */
   logChunk: bigint;
@@ -63,16 +65,20 @@ export interface RegistryEntry {
   ticker: string;
   chainId: number;
   rpcUrls?: string[];
-  kind: "hook" | PoolKind;
+  kind: "hook" | PoolKind | "nft";
   poolManager?: `0x${string}`;
   poolId?: `0x${string}`;
   pool?: `0x${string}`;
   ethSide?: 0 | 1;
   quote?: `0x${string}`;
   calibration?: Calibration;
+  /** kind "nft": the collection is `token`; its supply frame and venues (core nft.ts NftSource). */
+  nft?: { itemSupply: number; refPrice: string; seaport?: `0x${string}`[]; strategy?: `0x${string}`; core?: `0x${string}`; statements?: `0x${string}`; balance?: `0x${string}`; ratings?: "credits" };
   genesisBlock: number;
   token: `0x${string}`;
   house?: boolean;
+  /** A gift: on air without a subscription, never expires (docs/STATIONS.md "Gift stations"). */
+  gift?: boolean;
   /** What it plays: "idm" (house schedules) or a pack key (baked, or a runtime pack). */
   program: string;
   quoteSymbol?: string;
@@ -101,8 +107,12 @@ export const loadRegistry = (path: string | URL = REGISTRY_PATH): Registry => JS
 export function stationFromEntry(e: RegistryEntry, reg: Registry): BotStation {
   if (e.kind === "hook") throw new Error(`${e.key}: the hook station is read on chain, not replayed`);
   const chain = reg.chains[String(e.chainId)];
-  const pool: SwapSource = e.kind === "v4" ? { kind: "v4", address: e.poolManager!, poolId: e.poolId!, ethSide: e.ethSide ?? 0 } : { kind: e.kind, address: e.pool!, ethSide: e.ethSide! };
-  const source: SwapSource = e.calibration ? { ...pool, calibration: e.calibration } : pool;
+  let source: StationSource;
+  if (e.kind === "nft") source = { kind: "nft", collection: e.token, ...e.nft!, weth: chain.weth };
+  else {
+    const pool: SwapSource = e.kind === "v4" ? { kind: "v4", address: e.poolManager!, poolId: e.poolId!, ethSide: e.ethSide ?? 0 } : { kind: e.kind, address: e.pool!, ethSide: e.ethSide! };
+    source = e.calibration ? { ...pool, calibration: e.calibration } : pool;
+  }
   return {
     key: e.key,
     label: `${e.label.toLowerCase()} station`,
@@ -124,13 +134,15 @@ export interface StationCache {
   slot1: string;
   trackStart: number; // swapCount at the start of the current track
   entries: TimelineEntry[];
+  /** NFT stations: the decoder's carry after `cursor` (core nft.ts nftCarryToJSON: last price, the median's window). */
+  nft?: NftCarryJSON;
 }
 
 const hex = (v: bigint) => "0x" + v.toString(16);
 
 export function emptyCache(st: BotStation): StationCache {
   const s = encode(initialFor("v2"), slotOptions("v2"));
-  return { cursor: Number(st.genesisBlock) - 1, slot0: hex(s.slot0), slot1: hex(s.slot1), trackStart: 0, entries: [] };
+  return { cursor: Number(st.genesisBlock) - 1, slot0: hex(s.slot0), slot1: hex(s.slot1), trackStart: 0, entries: [], ...(st.source.kind === "nft" ? { nft: { lastPrice: null, recent: [] } } : {}) };
 }
 
 function load(path: string, st: BotStation): StationCache {
@@ -171,6 +183,7 @@ export function checkpointOf(st: BotStation, c: StationCache, now = new Date()):
     ts: e.ts, block: e.blockNumber, tx: e.txHash ?? null, isBuy: e.isBuy, quoteAmt: e.quoteAmt, tick: e.tick,
     track: e.track, step: e.writeStep ?? e.step, on: e.on, bassNote: e.bassNote, whale: e.whale, slot0: e.slot0, slot1: e.slot1,
     ...(e.trackComplete ? { trackComplete: { trackNo: e.trackComplete.trackNo, swaps: e.trackComplete.swaps ?? 0, slot0: e.trackComplete.slot0, slot1: e.trackComplete.slot1 } } : {}),
+    ...(e.nft ? { nft: e.nft } : {}),
   }));
   return {
     version: CHECKPOINT_VERSION,
@@ -184,6 +197,7 @@ export function checkpointOf(st: BotStation, c: StationCache, now = new Date()):
     trackStartSwap: c.trackStart,
     generatedAt: now.toISOString(),
     recent,
+    ...(st.source.kind === "nft" ? { nft: c.nft ?? { lastPrice: null, recent: [] } } : {}),
   };
 }
 
@@ -196,18 +210,51 @@ export function writeCheckpoint(dir: string, cp: StationCheckpoint): string {
   return path;
 }
 
-/** A station's swaps in [from, to] as rules inputs (timestamps filled from the blocks when the logs lack them). */
-export async function readStationSwaps(st: BotStation, from: bigint, to: bigint, clients = makeClients(st.rpcUrls)): Promise<RawSwap[]> {
-  const logs = await getRawLogsChunked(clients, swapLogFilter(st.source), from, to, { chunk: st.logChunk, maxChunk: st.maxChunk });
+/** Rating tables (core credittable.ts) by registry nft.ratings name: core's data/, read once. */
+const RATING_FILES: Record<string, URL> = { credits: new URL("../../packages/core/data/credit-scores.bin.gz", import.meta.url) };
+const ratingTables = new Map<string, CreditTable | null>();
+
+/** The station's rating table, or null (none named, or unreadable: the sales go untagged, the rules input is the same). */
+export function ratingsFor(name: string | undefined): CreditTable | null {
+  if (!name || !RATING_FILES[name]) return null;
+  if (!ratingTables.has(name)) {
+    try {
+      ratingTables.set(name, parseCreditTable(gunzipSync(readFileSync(RATING_FILES[name]))));
+    } catch (err) {
+      console.warn(`ratings ${name}: ${(err as Error).message}; sales untagged`);
+      ratingTables.set(name, null);
+    }
+  }
+  return ratingTables.get(name)!;
+}
+
+/**
+ * A station's swaps in [from, to] as rules inputs (timestamps filled from the blocks when the logs lack them). An NFT
+ * station reads its collection (core readNftLogs: Transfers and the ecosystem over the range, Seaport at the sale
+ * blocks) and decodes from `carry` (its state after from - 1), which is set to the carry after `to`.
+ */
+export async function readStationSwaps(st: BotStation, from: bigint, to: bigint, clients = makeClients(st.rpcUrls), carry?: NftCarryJSON): Promise<RawSwap[]> {
+  const opts = { chunk: st.logChunk, maxChunk: st.maxChunk };
+  const src = st.source;
+  let decoded: (DecodedSwap & { nft?: NftTag; holdTempo?: true; holdSizeEma?: true })[];
+  if (src.kind === "nft") {
+    const logs = await readNftLogs(src, from, to, (filter, a, b) => getRawLogsChunked(clients, filter, a, b, opts));
+    const r = decodeNftLogs(src, logs, nftCarryFromJSON(carry), { ratings: ratingsFor(src.ratings) });
+    decoded = r.sales;
+    if (carry) Object.assign(carry, nftCarryToJSON(r.carry));
+  } else decoded = decodeSwapLogs(src, await getRawLogsChunked(clients, swapLogFilter(src), from, to, opts));
   const times = new Map<bigint, number>();
   const swaps: RawSwap[] = [];
-  for (const sw of decodeSwapLogs(st.source, logs)) {
+  for (const sw of decoded) {
     let ts = sw.timestamp ?? times.get(sw.blockNumber);
     if (ts === undefined) {
       ts = Number((await withRetry(clients, (cl) => cl.getBlock({ blockNumber: sw.blockNumber }))).timestamp);
       times.set(sw.blockNumber, ts);
     }
-    swaps.push({ isBuy: sw.isBuy, quoteAmt: sw.quoteAmt, tick: sw.tick, blockNumber: sw.blockNumber, timestamp: ts, txHash: sw.txHash, logIndex: sw.logIndex, poolId: st.source.poolId });
+    swaps.push({
+      isBuy: sw.isBuy, quoteAmt: sw.quoteAmt, tick: sw.tick, blockNumber: sw.blockNumber, timestamp: ts, txHash: sw.txHash, logIndex: sw.logIndex,
+      ...(src.kind === "nft" ? { nft: sw.nft, ...(sw.holdTempo ? { holdTempo: true } : {}), ...(sw.holdSizeEma ? { holdSizeEma: true } : {}) } : { poolId: src.poolId }),
+    });
   }
   return swaps;
 }
@@ -223,7 +270,11 @@ export async function updateStation(path: string, st: BotStation = IMD_STATION, 
   const from = BigInt(c.cursor) + 1n;
   let finished: { trackNo: number; block: number }[] = [];
   if (from <= head) {
-    finished = extendCache(c, await readStationSwaps(st, from, head, clients), Number(head), opts.keep);
+    // An NFT station's carry: a copy, kept only when the whole read went through.
+    const carry = st.source.kind === "nft" ? { ...(c.nft ?? { lastPrice: null, recent: [] }) } : undefined;
+    const swaps = await readStationSwaps(st, from, head, clients, carry);
+    if (carry) c.nft = carry;
+    finished = extendCache(c, swaps, Number(head), opts.keep);
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, JSON.stringify(c));
   }
@@ -235,15 +286,16 @@ export async function updateStation(path: string, st: BotStation = IMD_STATION, 
 const KEEP_ENTRIES = 2_000;
 
 /**
- * Every live played registry station (or only `keys`; none in `expired`): cache extended, checkpoint published to
- * `checkpointDir`.
+ * Every played registry station that is live, pending or in preview (or only `keys`; none in `expired`, none paused):
+ * cache extended, checkpoint published to `checkpointDir`. A pending station (?net=<key>, not listed) gets one too, so
+ * its page starts from the checkpoint instead of replaying its whole window from the browser.
  * One station failing (RPC down) does not stop the others; its error is returned in its place.
  */
 export async function updateStations(outDir: string, checkpointDir: string, opts: { keys?: string[]; reg?: Registry; expired?: Set<string> } = {}) {
   const reg = opts.reg ?? loadRegistry();
   const out = new Map<string, Awaited<ReturnType<typeof updateStation>> | Error>();
   for (const e of reg.stations) {
-    if (e.kind === "hook" || e.status !== "live" || (opts.keys && !opts.keys.includes(e.key))) continue;
+    if (e.kind === "hook" || e.status === "paused" || (opts.keys && !opts.keys.includes(e.key))) continue;
     // A lapsed subscription (stations/subscription.ts) is off air: its cache and last checkpoint stay as they are.
     if (opts.expired?.has(e.key)) continue;
     // The IMD/ETH station keeps its own RPC list and chunk (the bot's Ethereum RPCs), as before the registry.

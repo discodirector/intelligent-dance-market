@@ -1,4 +1,4 @@
-import { whaleThresholdFor, type State } from "@swarm-sequencer/core";
+import { whaleThresholdFor, type NftTag, type State } from "@swarm-sequencer/core";
 
 export interface SwapEvent {
   ts: number; // unix seconds
@@ -18,6 +18,8 @@ export interface SwapEvent {
   state: State;
   /** v2 only: this swap pushed heat to heatMax and finished the track. */
   trackComplete?: TrackDone;
+  /** NFT stations: the item sold (a compose: the page) and the venue (core nft.ts). */
+  nft?: NftTag;
 }
 
 export interface TrackDone {
@@ -45,3 +47,23 @@ export const whaleWeiFor = (q: QuoteSymbol, tick: number): bigint => whaleThresh
 /** ETH amounts are small: four decimals below 1. */
 export const formatQuote = (v: number): string => (v >= 100 ? v.toFixed(0) : v >= 1 ? v.toFixed(2) : v.toFixed(4));
 export const fromWei = (w: bigint) => Number(w / 10n ** 12n) / 1e6;
+
+/** What the NFT cues need of a player (synth LivePlayer noteSale / noteLock). */
+interface NftCuePlayer {
+  noteSale(cue: { pct: number; mask: number }): void;
+  noteLock(cue: { points: number; ink?: readonly [number, number, number, number] }): void;
+}
+
+/**
+ * An NFT station's sound cues of a live input (core nft.ts tags): a rated Credit sale is a plate stab, a BALANCE
+ * withdraw the deep lock event (synth clock.ts SaleCue / LockCue). Untagged inputs (every other station) cue nothing.
+ */
+export function noteNftCues(player: NftCuePlayer, e: SwapEvent) {
+  const n = e.nft;
+  if (!n) return;
+  if (n.via === "withdraw") player.noteLock({ points: n.points ?? 0, ...(n.ink ? { ink: n.ink } : {}) });
+  else if (n.score !== undefined && n.mask) player.noteSale({ pct: n.score, mask: n.mask });
+}
+
+/** A withdraw's ink, "C24 M23 Y24 K27". */
+export const inkText = (ink: readonly number[]) => ink.map((x, i) => "CMYK"[i] + x).join(" ");

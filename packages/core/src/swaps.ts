@@ -15,6 +15,7 @@
 // (site, bot, any machine) gets the same inputs. No calibration = the swaps exactly as the pool reports them.
 import { decodeEventLog, parseAbiItem, toEventSelector, type AbiEvent, type Hex } from "viem";
 import { getSqrtPriceAtTick, MAX_TICK, MIN_TICK } from "./index.ts";
+import type { NftSource } from "./nft.ts";
 
 /**
  * Pool kinds, by Swap event:
@@ -114,11 +115,25 @@ export function calibrator(c: Calibration | undefined): Calibrator | null {
 /** Total tick shift of a calibration (0 without one): what station-probe prints and the tests check. */
 export const calibrationShift = (c: Calibration | undefined): number => calibrator(c)?.shift ?? 0;
 
+/** What a station plays: a pool's swaps (this file) or a collection's sales (nft.ts). */
+export type StationSource = SwapSource | NftSource;
+
 /**
  * Identity of a station's swap stream: chain, source (kind, address, poolId, side, calibration) and genesis block.
- * A checkpoint (checkpoint.ts) is only applied to the stream it was computed from.
+ * A checkpoint (checkpoint.ts) is only applied to the stream it was computed from. An NFT source: the collection, its
+ * supply frame, the compose fallback price and every venue (a venue added later is another stream).
  */
-export function stationFingerprint(chainId: number, src: SwapSource, genesisBlock: number | bigint): string {
+export function stationFingerprint(chainId: number, src: StationSource, genesisBlock: number | bigint): string {
+  if (src.kind === "nft") {
+    const a = (v: Hex | undefined) => v?.toLowerCase() ?? null;
+    return JSON.stringify([
+      chainId, "nft", src.collection.toLowerCase(), src.itemSupply, src.refPrice,
+      (src.seaport ?? []).map((x) => x.toLowerCase()).sort(), a(src.strategy), a(src.core), a(src.statements), src.weth.toLowerCase(),
+      Number(genesisBlock),
+      // BALANCE withdraws are inputs (nft.ts): a source with them is another stream. Absent: the fingerprint as before.
+      ...(src.balance ? [a(src.balance)] : []),
+    ]);
+  }
   const c = src.calibration;
   return JSON.stringify([
     chainId,
@@ -140,6 +155,8 @@ export interface RawLog {
   transactionHash: Hex;
   /** Some RPCs add the block's timestamp to each log; absent (or 0 on Robinhood) = read the block. */
   blockTimestamp?: bigint | null;
+  /** The emitting contract (lowercase or checksummed); NFT sources read logs of several contracts at once (nft.ts). */
+  address?: Hex;
 }
 
 /** One swap as the rules read it, plus where it came from. */
@@ -184,7 +201,7 @@ export function swapLogFilter(src: SwapSource): { address: Hex; topics: (Hex | H
 }
 
 /** An eth_getLogs result entry (hex numbers) as a RawLog. */
-export function rawLog(l: { topics: readonly Hex[] | Hex[]; data: Hex; blockNumber: Hex | bigint | null; logIndex: Hex | number | null; transactionHash: Hex | null; blockTimestamp?: Hex | bigint | null }): RawLog {
+export function rawLog(l: { topics: readonly Hex[] | Hex[]; data: Hex; blockNumber: Hex | bigint | null; logIndex: Hex | number | null; transactionHash: Hex | null; blockTimestamp?: Hex | bigint | null; address?: Hex }): RawLog {
   return {
     topics: [...l.topics],
     data: l.data,
@@ -192,6 +209,7 @@ export function rawLog(l: { topics: readonly Hex[] | Hex[]; data: Hex; blockNumb
     logIndex: Number(l.logIndex),
     transactionHash: l.transactionHash!,
     blockTimestamp: l.blockTimestamp == null ? null : BigInt(l.blockTimestamp),
+    ...(l.address ? { address: l.address } : {}),
   };
 }
 

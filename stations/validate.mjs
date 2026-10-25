@@ -4,7 +4,8 @@
 // pipeline) the same way before merging it over the baked one. Plain JS, no imports: node, tsx and vite all load it.
 
 export const SUPPORTED_CHAINS = ["1", "8453", "42161", "4663", "143"];
-export const KINDS = ["hook", "v4", "v3", "pancake-v3", "v2", "aerodrome-v2"];
+/** Pool kinds (core swaps.ts), the hook, and "nft": an ERC-721 collection's sales (core nft.ts). */
+export const KINDS = ["hook", "v4", "v3", "pancake-v3", "v2", "aerodrome-v2", "nft"];
 /** pending = added, not on air; preview = the pack is in, playable at ?net=<key> but not listed; live = on air. */
 export const STATUSES = ["live", "paused", "pending", "preview"];
 const NATIVE = "0x0000000000000000000000000000000000000000";
@@ -57,6 +58,24 @@ function calibrationProblems(c) {
   return out;
 }
 
+/** Mirrors core nft.ts NFT_RATINGS: the offline rating tables a collection station can name (core credittable.ts). */
+const NFT_RATINGS = ["credits"];
+
+// Mirrors core nft.ts nftConfigProblems: the `nft` block of a collection station.
+function nftProblems(n) {
+  if (!n || typeof n !== "object" || Array.isArray(n)) return ["nft must be an object"];
+  const out = [];
+  const { itemSupply, refPrice, seaport, strategy, core, statements, balance, ratings, ...rest } = n;
+  for (const k of Object.keys(rest)) out.push(`nft.${k}: unknown field`);
+  if (!Number.isSafeInteger(itemSupply) || itemSupply <= 0) out.push("nft.itemSupply must be a positive integer");
+  if (typeof refPrice !== "string" || !DECIMAL.test(refPrice) || !/[1-9]/.test(refPrice)) out.push('nft.refPrice must be a positive decimal string (ETH), e.g. "0.01"');
+  if (seaport !== undefined && (!Array.isArray(seaport) || !seaport.length || !seaport.every((a) => isHex(a, 20)))) out.push("nft.seaport must be a list of addresses");
+  for (const [k, v] of Object.entries({ strategy, core, statements, balance })) if (v !== undefined && !isHex(v, 20)) out.push(`nft.${k} must be an address`);
+  if (ratings !== undefined && !NFT_RATINGS.includes(ratings)) out.push(`nft.ratings must be one of ${NFT_RATINGS.join(", ")}`);
+  if (seaport === undefined && strategy === undefined && core === undefined) out.push("nft needs a venue: seaport, strategy or core");
+  return out;
+}
+
 /**
  * Problems of one station entry against the chains, as plain messages. `packExists(program)` says whether a
  * program other than "idm" has a pack (baked file, or a runtime pack).
@@ -84,6 +103,12 @@ export function stationProblems(s, chains, { packExists = () => true } = {}) {
     else if (chain?.poolManager && !same(s.poolManager, chain.poolManager)) fail(`poolManager is not ${chain.name}'s v4 PoolManager ${chain.poolManager}`);
     if (!isHex(s.poolId, 32)) fail("poolId not bytes32");
     if (s.pool !== undefined) fail(`a ${s.kind} station has poolManager + poolId, not pool`);
+  } else if (s.kind === "nft") {
+    // A collection: `token` is the ERC-721, `nft` its supply frame and venues; priced in ETH (WETH bids included).
+    errors.push(...nftProblems(s.nft));
+    for (const f of ["pool", "poolManager", "poolId", "ethSide", "calibration", "hook"]) if (s[f] !== undefined) fail(`an nft station has no ${f}`);
+    if (!same(s.quote, NATIVE)) fail("an nft station's quote is native ETH (0x0): sales are counted in ETH, WETH bids included");
+    if (s.quoteSymbol !== "ETH") fail("an nft station counts in ETH: quoteSymbol must be ETH");
   } else if (known) {
     if (!isHex(s.pool, 20)) fail(`a ${s.kind} station needs its pool address`);
     if (s.poolManager !== undefined || s.poolId !== undefined) fail(`a ${s.kind} station has pool, not poolManager/poolId`);
@@ -95,7 +120,8 @@ export function stationProblems(s, chains, { packExists = () => true } = {}) {
   // prints it), never guessed at runtime. quoteSymbol stays "ETH": the unit the rules (and the player) read.
   if (s.calibration !== undefined && s.kind === "hook") fail("the hook station is read on chain: no calibration");
   errors.push(...calibrationProblems(s.calibration));
-  if (known && s.kind !== "hook") {
+  if (s.nft !== undefined && s.kind !== "nft") fail("only an nft station has an nft block");
+  if (known && s.kind !== "hook" && s.kind !== "nft") {
     if (s.quoteSymbol !== "ETH") fail("played stations count in ETH: quoteSymbol must be ETH (a calibrated quote is converted)");
     const native = same(s.quote, NATIVE);
     const calibrated = typeof s.calibration?.quotePerEth === "string";
@@ -118,6 +144,12 @@ export function stationProblems(s, chains, { packExists = () => true } = {}) {
   // Station+ end (docs/STATIONS.md "Station+"), same format; paid Station+ renewals push it further at runtime.
   if (s.plusUntil !== undefined && !isDate(s.plusUntil)) fail("plusUntil must be YYYY-MM-DD or an ISO timestamp in UTC");
   if (s.house !== undefined && typeof s.house !== "boolean") fail("house must be a boolean");
+  // A gift (docs/STATIONS.md "Gift stations"): on air without a subscription, never expires, nothing to renew.
+  if (s.gift !== undefined && typeof s.gift !== "boolean") fail("gift must be a boolean");
+  if (s.gift && (s.paidUntil !== undefined || s.plusUntil !== undefined)) fail("a gift station has no paidUntil or plusUntil");
+  if (s.gift && s.house) fail("a house station is not a gift");
+  // Optional skin of the player page (main.ts, stations.ts applyTheme): faceplate and the sell / whale accents.
+  for (const t of ["panel", "sell", "whale"]) if (s.theme?.[t] !== undefined && !isColor(s.theme[t])) fail(`theme.${t} must be #rrggbb`);
   return errors;
 }
 
@@ -136,7 +168,7 @@ export function registryProblems(reg, opts = {}) {
 }
 
 /** The pool a played station hears, "<chainId>:<pool or poolId>" lowercased (two stations never share one). */
-const poolOf = (s) => `${s?.chainId}:${String(s?.poolId ?? s?.pool ?? "").toLowerCase()}`;
+const poolOf = (s) => `${s?.chainId}:${String(s?.kind === "nft" ? `nft:${s?.token}` : (s?.poolId ?? s?.pool ?? "")).toLowerCase()}`;
 
 /**
  * The baked registry with the runtime entries ({ stations: [...] }, the pipeline's file) appended. A runtime entry is
@@ -155,6 +187,7 @@ export function mergeRegistry(baked, runtime, opts = {}) {
     const why = stationProblems(s, baked.chains, opts);
     if (s?.house) why.push("house stations are baked only");
     if (s?.kind === "hook") why.push("hook stations are baked only");
+    if (s?.gift) why.push("gift stations are baked only");
     if (keys.has(key)) why.push(`key "${key}" is taken`);
     else if (pools.has(poolOf(s))) why.push("its pool already has a station");
     if (why.length) {

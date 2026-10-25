@@ -70,13 +70,40 @@ base's values (`SOUND_DEFAULTS` in `engine.ts`); a style that restates them play
 `packages/synth/scripts/engine-trace.ts --ref <ref>` proves a refactor leaves the house schedule untouched;
 `web/scripts/station-ab.mjs <key>` renders house-base-vs-style A/B clips for listening.
 
-Dub techno and electro (opened 2026-10-22, same level). A pack names 2 or more of the opened genres (the apply
-form, the API and the swarm order take the same range). Dub techno opens every table of its three bases
+Dub techno and electro (opened 2026-10-22, same level). A pack names 1 or more of the opened genres (the apply
+form, the API and the swarm order take the same range; one genre plays every epoch, its styles in turn). Dub techno opens every table of its three bases
 (Lucidflow, Ixtlan, The Moment): chords (by name, over the house m9/m11 set) and progressions, the stab figures and
 accents, the sub's bassline, the bell fragments and the percussion figure; the kit (kick, clap or rim, offbeat hat
 and swung shaker, percussion), the sub, the chord stab (wave, detune, filter envelope, resonance, wobble), the pad,
 the bell (FM ratio, index, decay, how often), the filter sweeps (bars per open-close of the stab and the echo loop)
 and the rain; its dub echo is `fx.echo` (now up to 12 taps; feedback < 0.75, feed-forward, so it can never ring).
+The `rumble` (2026-10-25) is the techno rumble: the kick bus into its own dark room (lowpass `lp`, feed-forward taps
+over `decay`), ducked by every kick (`duck`) so it pumps; off unless `level` > 0, so every house style and every
+earlier pack schedules exactly what it did (engine-trace vs 25a20f1: 180/180 identical).
+`stabBars` (2026-10-26) is the stab's bar mask: the figure's level per bar of a 1..16-bar cycle, 0 resting it, so a
+style can play one stab a phrase and let the echo carry the space; left out, every bar plays at 1 (engine-trace vs
+67beb11: 180/180 identical). A pack may now hold up to 6 styles per genre (was 4).
+Dub techno voice upgrades (2026-10-26), every one off unless a style sets it: a second stab oscillator per chord tone
+(`stabTone.wave2` a wave or a pulse of `width`, `mix2`, `octave2`: saw + pulse, a hollow square over a sine, glass two
+octaves up), velocity to cutoff (`stabTone.velLp`: soft figure hits darker), a pad highpass (`padTone.hp`), the echo's
+breath (`sweep.send` / `sweep.fb` dip the level into the echo and its repeats over `sweep.breath` bars, never above
+`fx.echo`), the echo's shape (`echoTone`: stereo `width`, a ping-pong second time `alt`, a tape `wobble` from one slow
+oscillator on the repeats' delay times, bit-exact offline), and a sparse atmospheric `melody` (rare single notes from a
+pool or the chord, in cells of bars, long attack and release into the echo and the room; a whale buy answers).
+engine-trace vs e44c7be: 180/180 identical; the baked packs schedule exactly as before.
+Groove placement (2026-10-26): `claps` (the clap's or rim's two-bar figure, in place of 2 and 4) and `hats` (the hat's
+two-bar figure with an optional decay per hit, a long one an open hat, in place of every offbeat); left out, the house
+placement (engine-trace vs 0fd919a: 212/212 identical, house styles and the infer and credits-dubhouse packs). A pack
+may now hold up to 10 styles per genre (was 6, then 8; the swarm's style job still writes 1..4).
+Two new stab voices (2026-10-26), `stabTone.engine` (default `"osc"`, the detuned oscillator pair, every house style
+and earlier pack unchanged: engine-trace vs adfc10a 244/244 identical): `"fm"` a two-operator FM voice per chord tone
+(`stabTone.fm`: a sine modulator at `ratio` into two detuned sine carriers, its `index` falling to `floor` x index in
+`decay` s, an optional second modulator `ratio2` / `index2` / `decay2` for a clang on the attack, `vel` the hit's level
+to the index) and `"pluck"` a struck resonator bank per chord tone (`stabTone.pluck`: a half-sine mallet click `burst`
+s wide through a lowpass at `tone` Hz strikes one bandpass resonator per `modes` ratio, each ringing `decay` x
+(1 / ratio)^`damp` s; `vel` opens the mallet). Both run under the stab's highpass, lowpass envelope, sweep, velocity
+cutoff, `mix2` layer, sends, whale throws and the attention-layer ornament; both bit-exact offline. Per stab of a
+three-tone chord: the pair 24 nodes, FM 39 (with the second modulator), the pluck 36 (one buffer source, 9 resonators).
 Electro opens Cold 808 (two-bar kick figures, the bass arp, the 808 kit, the bass filter), Client_03 (chords and
 progressions, kicks, ghost-snare funk, the break hats' warp and chops, the bass riffs, the computer voice's words;
 the kit, the grimy bass, the ghost pad, the speak-and-spell voice) and Alien Rave (chords and progressions, kicks,
@@ -201,6 +228,133 @@ The whale scales with sqrt(FDV): a calibrated large cap (PEPE, ARB, AERO: FDV 0.
 ~17 ETH, so whales are rare there and its tracks move by heat; the uncalibrated PEPE pool counted 589 whales in 1,007
 swaps. The IMD/ETH station has no calibration (IMD's supply is 4.17M, so its rules FDV reads ~240x the real one): it
 stays as it is, its history frozen.
+
+### NFT stations
+
+`kind: "nft"` plays an ERC-721 collection's sales instead of a pool (first: `credits`, Credits by Jack Butcher, Ethereum
+0x9763…3043, a gift). On-chain data only (`packages/core/src/nft.ts`, shared by site `data/virtual.ts` and bot
+`station.ts`): `token` is the collection, `quote` native 0x0, and
+
+```
+"nft": { "itemSupply": 77114, "refPrice": "0.01", "seaport": ["0x…68F1…B395"], "strategy": "0x8e60…53d6",
+         "core": "0xcdb1…e0dD", "statements": "0x75Ed…069b", "balance": "0x3620…eA07", "ratings": "credits" }
+```
+
+- **One input per item sold.** Every collection Transfer (not a mint or a burn) is matched to a venue event of the same
+  tx naming that token id: Seaport `OrderFulfilled` with the item in `offer` = a listing taken, BUY at the ETH/WETH
+  consideration / items; in `consideration` = a bid or collection offer hit, SELL at the WETH offer / items (venue
+  "OpenSea" when OpenSea's fee recipient is paid). CreditStrategy `NFTBoughtByProtocol` = someone sold to the protocol,
+  SELL at purchasePrice; `NFTSoldByProtocol` = someone bought its relisting, BUY. Core `CreditBought` = SELL at cost,
+  `CreditSold` / `ListingBought` = BUY. A Transfer two venues claim is one sale (ecosystem over bid over listing). An
+  item that changes hands twice in a tx is ONE input, the first hop: the item leaving its holder (a router buying a
+  floor listing and selling it to the strategy = the OpenSea BUY at the listing price; the strategy's relisting bought
+  and sold on to Core = the strategy BUY). Unclaimed Transfers (gifts, NFTX, wallet moves) are not sales. Order: block,
+  log index, token id.
+- **Compose** (Statements `Composed`, 80 Credits burned into a page): one BUY of 80 x the last item price in the stream
+  (`refPrice` before any sale), never under the whale line, so every compose drops.
+- **Sound** (owner-approved 2026-10-25), all from the stream: the **tick** is the median of the last 127 item prices
+  (`NFT_WINDOW`), tick = floor(log_1.0001(1e27 / (median x itemSupply))), so the whale reads the market cap and a bid/ask
+  flip no longer jumps the bass (bass changes on 8% of notes over 2 days, was 37%). The **size** (quoteAmt) is 0.0125 ETH x
+  (price / median before it)^8 under half the whale line, and the rules' size EMA is held (core `holdSizeEma`): under
+  0.957x the median is a hat, over 1.055x a snare, over 1.145x a kick. The **tempo** moves once per block of sales (core
+  `holdTempo` on every later item of the block), so a 50-item sweep is one beat of tempo (BPM p50 106, was 117). Both
+  flags are set by nothing but this decoder; without them `mutate` is the hook's rules (every pool, every vector). The
+  feed shows the price (`nft.price` in the tag), not the size.
+- **Carry**: the last price and the median's window, in the bot's cache and the checkpoint (`nft: { lastPrice, recent
+  }`); the site refuses an nft checkpoint without it. A single item is a whale only far above the market. `itemSupply`
+  is fixed at registration (77,114 live Credits on 2026-10-25), frozen like a calibration; the fingerprint covers the
+  collection, supply, refPrice and every venue.
+- **Reads** (`readNftLogs`): Transfers and the ecosystem events over the range (2 requests per chunk), then Seaport only
+  at the sale blocks (neighbours within 2 blocks merged, at most 16 per range), since OrderFulfilled cannot be filtered
+  by collection. Two days of Credits from genesis: ~410 Seaport ranges, ~6 MB, ~50 s in a browser (JSON-RPC batches of
+  5); a live poll: 2-3 requests. The bot's checkpoint makes the first replay short.
+- **Player**: feed lines "BUY Credit #1234 · 0.0092 ETH · OpenSea", "COMPOSE · 80 Credits → page #563"; the NFT screen
+  (`site/src/nftscreen.ts`) shows the item's on-chain SVG (tokenURI -> data:image/svg+xml only, as an `<img>`, cached,
+  2 fetches at a time) on the next beat, and walks the last few items when idle. Optional skin in the theme (`panel`,
+  `sell`, `whale`), player page only.
+
+#### Credit rating and plates (`nft.ratings`, owner-approved 2026-10-26)
+
+A Credit's score (CreditScore, 80-800, the one jack.art/credits/rating shows) is not in tokenURI and is a pure function
+of its seed and payment second, so it is precomputed once for the sealed edition: `packages/core/data/credit-scores.bin.gz`
+(format CRS2, `core/src/credittable.ts`; 122,154 Credits, 366 KB raw, 231 KB gzipped). Built by
+`npx tsx packages/core/scripts/build-credit-scores.ts` from every `Credits.Distributed(tokenId, to, seed, paidAt)` log
+(read-only getLogs, ranges halved when the gateway refuses 20k+ results) through a TS port of CreditScore
+(`scripts/credit-score.ts`), checked before writing against eth_call `scoreOf(seed, paidAt)` on the contract
+(0x817a…b7b7) and `seedOf` / `timestampOf` for 24+ random Credits and Credit #1 (1,324,012). Per Credit: the CMYK
+plates (`paidAt % 15 + 1`, bit0 C … bit3 K) and the score in tenths; the percentile (0..255, Credits scoring strictly
+lower / edition) is ranked when the table is read.
+
+- **Tags only.** With the table (`decodeNftLogs(…, { ratings })`) every Credit sale's tag carries `score` (percentile),
+  `mask` (plates) and `rating` (tenths). The rules input is the same with or without it: state, tracks and checkpoints
+  do not depend on the table, and a station without `ratings` (or a failed load) plays exactly as before.
+- **Loading**: the bot reads the file once (`station.ts ratingsFor`, the image copies `packages/core/data`); the site
+  imports it as a hashed asset URL (`site/src/data/ratings.ts`), fetched only by a station that names it, before its
+  first read, and gunzipped with DecompressionStream. The main bundle does not grow.
+- **Sound** (dub techno only; `engine.ts creditSale`): a rated sale is a plate stab on the bar's chord, landing on the
+  next 8th (`clock.ts CueQueue`, at most 4 waiting: a sweep is a short run). Percentile -> level and cutoff (and a
+  longer release); plates -> voice: as many chord tones as plates, from the top of the voicing; C pans left, M right, Y
+  lifts it an octave, K adds a soft sub on the chord root. The top ~5% (pct >= 243) go into the echo and also sing one
+  note of the sparse melody (the style's, or a fixed triangle voice). The price-based size (the rules' tiers) is as
+  before.
+- **NFT screen**: a rated sale wears "RATING 132 · CK" on the glass; the feed line ends "· RATING 132 · CK".
+
+#### BALANCE withdraws (`nft.balance`)
+
+BALANCE (the Statements' ERC-20, 0x3620…eA07) pays a Statement's holder its credit score in tokens when the page is
+locked (`withdraw`): `Withdrawn(statementId, holder, amount)`, amount = score x 1e14, i.e. **points = amount / 1e18**
+(whole tokens = the page's score in points; median ~40k, 13.5k..190k over the first 73). In the same tx, before it,
+`InkMoved(BALANCE, holder, ink[4])` is the release's CMYK split (every other BALANCE transfer moves ink too, ~12k a
+day, so the read names BALANCE as the sender: one more request per range, `nftInkFilter`).
+
+- **Input**: one SELL of the usual size (`NFT_SIZE_REF`, never a whale) at the current median's tick, the price window
+  untouched; tag `{ via: "withdraw", venue: "BALANCE", id: statementId, points, ink: [c, m, y, k] (whole percent,
+  floor), holder, price: "0" }`. Core locking a page emits its own `StatementRedeemed` beside BALANCE's `Withdrawn`:
+  only `Withdrawn` is read, so it is one input. `WithdrawnOverprinted` (bookkeeping) is not an input. Ordered by the
+  Withdrawn's log index with the sales. The fingerprint names `balance` (a source with withdraws is another stream);
+  the carry is unchanged, so old checkpoints and caches read as before.
+- **Sound** (`engine.ts creditLock`, on the next downbeat): the torn tag. Two short band-passed rips into the echo, a
+  sub falling an octave to the floor, a low rumble swelling over a bar or two, and the bar's whole chord thrown long
+  into the echo only. Depth and length scale with points against 40k (x0.4 .. x2); the ink tints the throw: yellow
+  opens its filter, black closes it, cyan pulls it left, magenta right. Distinct from the whale (a compose).
+- **NFT screen**: two beats: the locked page (Statements tokenURI, now in its WITHDRAWN format; label "WITHDRAWN",
+  caption "LOCK PAGE #144 · 29,958 BALANCE"), then the holder's Balance artwork (BALANCE `artwork()` ->
+  LineageArtwork `tokenIdOf(holder)` -> tokenURI: the wallet's CMYK mixture; caption the release's "C24 M23 Y24 K27").
+  Same art rules (data SVG only, as an `<img>`, cached, 2 fetches at a time). Feed: "LOCK · page #144 → 29,958 BALANCE
+  · C24 M23 Y24 K27".
+- Cues reach every scheduler the same way (`TimelinePoint.sale / lock`, `LivePlayer.noteSale / noteLock`, the bot
+  render page); no other station emits them, so the house (FROZEN_SHA256) and every pack schedule exactly as before
+  (`engine-trace.ts --packs infer,credits-dubhouse,credits` IDENTICAL; `--cues` shows what they add).
+
+### Gift stations
+
+`"gift": true`: on air without a subscription. No paidUntil (the rules refuse one), never "expired", never Station+,
+no reminders, `/renew` and `/upgrade` refuse it, and `station-add.ts --set-status <key> live` adds no first month. Baked
+only (the runtime registry drops a gift). `credits` is one, pending until the owner turns it live.
+Its pack is `credits.ts`, "Credits Techno": dark dub techno in ten styles (Void, Watermark, Null, Signature,
+Provenance, Escrow, Clearing, Redacted, Foil, Letterpress; one cold chord held 16..32 bars, a half-step or b6 the only movement, straight
+groove, a solid techno kick over Void's sub tone, a rare resonant stab (`stabBars`) into a narrow echo, the kick rumble
+under the kick). Signature (a saw + pulse stab with velocity to cutoff, a breathing echo), Clearing (a wide quarter /
+dotted-eighth ping-pong echo with a tape wobble) and Provenance (a sparse melody over a minimal groove) came from the
+"Credits Lab" pack, now folded in. Every style has its own groove (sub rhythm, hats, rim, percussion): Void the held
+offbeat sub on 2 / 10, Watermark a 16th roll with a rim and a shaker on each beat's last 16th, Null one long sub note a
+bar under two hats a bar, Signature driving offbeat 8ths with an open hat closing every second bar and a low rim,
+Provenance long offbeat notes over a soft straight 16th shaker, Escrow a syncopated sub with ghost 16ths and a perc on
+7 / 15, Clearing a dotted (3/16) sub and a perc against the dotted-eighth echo with the rim on the 4 only, Redacted a
+16th roll accented 3+3+2. The first two styles, Debit and Margin (busier stab loops), are in the commit history. The
+first pack, "Credits Dub House" (Ledger, Statement, Composed, Overprint), came out warm and sunny; it is kept baked as
+`credits-dubhouse.ts`, on no station. Foil and Letterpress came from a second "Credits Lab" round (now folded in too) on the new stab voices in
+the Void world, each with its own groove: Foil (126, the FM stab with a 7:1 ping on the attack, the sub held from
+the "a" of 1 and 3, closed hat pairs on the offbeats, a rim on the 4 and the "a" of 3, a dotted-eighth echo) and
+Letterpress (123, the struck resonator on a marimba's two whole modes 1 and 4, a quartal sus for its turn, a
+syncopated sub, a wooden perc on the "e" of 2 and 4, a wide dotted-quarter echo). Retuned 2026-10-26 after the owner
+heard both off the key: the stabs' fundamentals were exact (within 5 cents of the chord), but Foil's turn was the
+minor triad a half step up over the sub's root (Bb minor over A: 41% of the stab's partial power off the key's scale,
+now the b6 move, 0.1%), its 3.5:1 clang put partials at x4.55 / x5.45 (a quarter tone off) that the echo's highpass
+lifted to -8 dB under the second harmonic (now a whole 7:1 ping, -17 dB, carrier detune 6 -> 3 cents), and
+Letterpress's 9.83 marimba mode rang +52..56 cents off the scale at -5 dB in the echo of a low chord (now modes 1, 4
+and the highpass 180 -> 110 Hz so the fundamental carries the pitch). Whole ratios keep every partial on the tone's
+harmonic series.
 
 ### Onboarding
 
@@ -648,6 +802,66 @@ amountIn, what the trader paid into the pool (the explorer's WMON transfer in), 
 Activity is thin (2026-10-21: CHOG ~180 swaps / day, emo ~170, JAMES ~110 per 1.7 days, MOLANDAK ~60 per 3.5 days),
 so a Monad station plays slowly; a 1k-block log chunk is 5 minutes of chain, ~290 requests per day of history.
 None of these is in the public registry.
+
+## Attention layer (prototype)
+
+A station keeps playing its swaps; mentions of its token on X (Moni social data) add two things on top: "weather"
+(elsewhere) and one quiet **ornament per mention**, played by the engine through the playing genre's **own** voice, so it
+sounds like that genre's material and a pack's tables restyle it with the rest of the style. Nothing reads mentions
+yet: the engine input is ready, the data feed is not wired.
+
+- Input: `renderTimelineToBuffer(points, seconds, sr, { ..., ornaments: [{ time, smart? }] })` (render seconds), and
+  `LivePlayer.noteMention(smart?)` live (the context's clock). Omitted or empty: the render is bit-identical to the
+  synth without the layer (`engine-trace.ts --ref`: 180/180 identical).
+- Scheduling (`OrnamentQueue`, player.ts): a mention plays on the first step at or after its time that is one of the
+  playing base's slots (`ORNAMENT_PLAN`, engine.ts), at the step's own time (swing and micro included), never closer
+  than an 8th to the previous ornament; one still waiting a bar later is let go (a dense wave thins out instead of
+  trailing on). Deterministic: same inputs, same output. Successive mentions walk the voice's material (a word's
+  syllables, the chord's tones, vowels), pitched from the bar's chord or the instance key.
+- Level: about 18-23 dB RMS under the track (house styles, full section, showcase below). **Smart** mentions are the
+  clearer version: louder and said in the voice's own terms (the whole word, a longer call, a second tone, an octave,
+  a retrigger, a harder throw).
+
+**Packs (electro first).** A style restyles its mention voice with `data.ornament` (styledata.ts `RobotWordSpec`, merged over
+its base's preset `ROBOT_WORDS`): `vowels` (1..4 syllables `[F1, F2]`), `wave`, `steps` (crush, fewer = rougher), `octave`,
+`syllable` (16ths), `ring` (ring-modulation ratio), `lowpass`, `echo` (`{ steps, feedback < 0.7 }` or null), `level`
+(<= 0.1: a quiet answer, never over the track), `slots` (16ths of the bar). Silent without mentions: a style's
+`ornament` never changes its track. Future garage next (styledata.ts `GarageOrnamentSpec`, over `GARAGE_ORNAMENTS`):
+`voices` (1..4 of `reverse`, `foley`, `groove`, `yeah`, all played on every mention), `smart` (1..4, a smart mention's
+set), `foley` (1..3 of `lighter`, `drop`, `vinyl`, in turn), `level` (0..1.6, 1 = the owner's preset) and `slots`. Then
+liquid (styledata.ts `LiquidOrnamentSpec`, over `LIQUID_ORNAMENTS`): `voices` (1..3 of `nature`, `amen`, `keys`, all
+played on every mention), `smart` (1..3), `nature` (1..3 of `bird`, `gust`, `drop`, in turn), `level` (0..1.6) and
+`slots`. The other genres' voices already read their style's tables (stabs, 303, vowels, glints, lead patches); their own
+`ornament` fields come next, genre by genre.
+
+| Genre | Base | Voice (engine method) | Slots (16ths) | Smart |
+|---|---|---|---|---|
+| electro | all | the robot word (`robotWord`, owner-chosen): formant syllables, crushed, per base (Cold 808 a dark dry "oh-oo" an octave down; Client_03 "ah-ee"; Alien Rave a ring-modulated three-syllable call, echoed); style data `ornament` restyles it | offbeats 2 6 10 14 (style `ornament.slots`) | louder, an octave up, echoed |
+| acid | all | a 303 chirp (`acid303Voice`) an octave over the line's last note | off-8ths and their 16ths the line leaves free | accent + slide up an octave |
+| ambientidm | Tape Keys | one warm-keys note (`motifNote`, the style's patch) an octave over the ostinato | beats 0 4 8 12 | two notes a 16th apart |
+| ambientidm | Tape Haze | the glitch row's tape-slip blip (`ambientHazeBlip`) | offbeats | louder |
+| ambientidm | Crystal | a glass FM bell (`ambientBell`) on the chord's top, into the echo | beats | louder, with its octave |
+| drone | Wall / Dark Low / Overtone Pulse | the base's glint (`droneGlint`): bell tones / distant bowls / a glass partial of the series | every 8th | louder |
+| dubtechno | all | the bar's chord stab (`dubStab`) thrown into the echo | off-8ths and 16ths the stab figure leaves free | harder throw + a bell on the chord's top |
+| liquid | Keys | the owner's mention voices (`liquidMention`): nature far away, in turn a bird (two sine chirps 2600 -> 4200 -> 3000 Hz, 0.12 s apart), a gust (bandpass noise 400 -> 1400 -> 500 Hz over 0.9 s), a water drop (a sine 1100 -> 2100 Hz in 20 ms), dry and a little into the room; style data `ornament` restyles it | off-8ths 2 10 (style `ornament.slots`) | two birds answering, the second pair a beat later, detuned x0.95 / x1.05 |
+| liquid | Soulful | an amen ghost snare (bandpass noise 2.4 kHz + a triangle 240 -> 180 Hz), dry | shuffled 16ths 3 7 11 15 | a quick four-hit roll on 32nds, rising, + the two birds answering |
+| liquid | Atmospheric | one note of the style's keys (`motifNote`) on the chord's top, an octave over the stabs, its attack capped at 8 ms so a slow patch (the tape flute, 70 ms) speaks on its step | offbeats 2 6 10 14 | a dyad |
+| futuregarage | Vocal Chops | the owner's mention voices (`garageMention`): the same vocal "yeah" (a saw on the tonic, formant glide, a small fall, 3 16ths), dry and into the room; style data `ornament` restyles it | off-8ths 6 14, a beat before 1 and 3 (style `ornament.slots`) | the "yeah" x1.5 + a rising three-hit ghost snare roll into the kick |
+| futuregarage | Dark Sub | ghost groove (a ghost rim + a shuffled closed hat 1.15 16ths later) and a foley object (lighter click / vinyl crack in turn) | shuffled 16ths 3 11 | a reverse breath ("aah" + noise wash) swelling from the step and cut on the next strong beat (8 / 0) + the lighter with its flame |
+| futuregarage | Rain Atmos | a water drop (a sine chirping 900 -> 1900 Hz) among the rain | shuffled 16ths 3 11 | the reverse breath into 8 / 0 |
+| triphop | all | the platter scratch (`tripHopScratch`) | after the snare 5 7 13 15 | louder |
+| lofihouse | Dusty Keys | a house-keys stab of the chord's top two tones (`motifNote`) | offbeats | three tones |
+| lofihouse | Sample Chop | a slice of the sample's top, an octave up (`lofiChopVoice`) | offbeats | a 32nd retrigger |
+| lofihouse | Raw Rave | the crushed rave power-chord hit (`lofiRaveHit`) | odd 16ths 3 7 11 15 | louder |
+| wonky | Dilla Swing | a soul chop of the chord's top (`wonkySoul`), late like the style's chops | offbeats | the whole voicing |
+| wonky | Brainfeeder | a glass glint (`wonkyGlint`) on the chord | offbeats | louder, its octave a 16th later |
+| wonky | Glitch-hop | a pitched vocal chop (`wonkyVox`), vowels in turn | odd 16ths | a 32nd stutter |
+
+Listening: `node web/scripts/attention-showcase.mjs` renders all 30 house styles, 9 s each, on swaps 40..69 of
+`imd-eth-7d` with the same mention wave (2.0, 3.1, 3.9, 4.4, 4.8, 5.1, 5.45 smart, 5.9, 6.6, 7.5 s) into
+`sim/stations/attention/all-styles.wav`, the same without mentions (`all-styles-no-ornaments.wav`, A/B) and an index
+with each segment's start, voice and measured ornament level (`all-styles.txt`). `--only <genre|genre/style,...>` for
+a subset.
 
 ## Phases
 

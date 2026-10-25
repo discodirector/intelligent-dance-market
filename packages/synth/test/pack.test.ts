@@ -40,10 +40,10 @@ describe("validatePack", () => {
     ["a house style id", (p) => (p.styles.liquid[0].id = "soulful"), /house style id/],
     ["a duplicate id", (p) => (p.styles.acid[1].id = p.styles.acid[0].id), /used twice/],
     ["a base of another genre", (p) => (p.styles.acid[0].base = "soulful"), /styles\.acid\[0\]\.base/],
-    ["one genre", (p) => (p.genres = ["acid"]), /expected 2\.\.\d+ genres/],
+    ["no genre", (p) => (p.genres = []), /expected 1\.\.\d+ genres/],
     ["a genre not opened to data", (p) => (p.genres = ["acid", "wonky"]), /genres\[1\]/],
     ["styles for a genre outside genres", (p) => (p.genres = ["acid", "triphop"]), /styles\.liquid: not in genres/],
-    ["five styles", (p) => p.styles.acid.push(...p.styles.acid.map((s: any, i: number) => ({ ...s, id: `x${i}` })), { ...p.styles.acid[0], id: "x9" }), /1\.\.4 styles/],
+    ["eleven styles", (p) => p.styles.acid.push(...Array.from({ length: 11 - p.styles.acid.length }, (_, i) => ({ ...p.styles.acid[0], id: `x${i}` }))), /expected 1\.\.10 styles, got 11/],
     ["a table the base does not read", (p) => (p.styles.liquid[0].data.walks = []), /does not read it/],
     ["an unknown table", (p) => (p.styles.liquid[0].data.vibes = 1), /unknown liquid table/],
     ["an out-of-range value", (p) => (p.styles.liquid[0].data.answers[0][0].s = 16), /answers\[0\]\[0\]\.s/],
@@ -94,6 +94,19 @@ describe("programFromPack", () => {
     const seq = Array.from({ length: 1024 }, (_, e) => eraOf(e, program).id);
     expect(seq.slice(0, 3)).toEqual(example.genres);
     expect(new Set(seq)).toEqual(new Set(example.genres));
+  });
+
+  it("plays a one-genre pack every epoch, walking its styles in order", () => {
+    const acid = copy().styles.acid;
+    const solo = { key: "solo", name: "Solo", genres: ["acid"], styles: { acid } } as StationPack;
+    expect(validatePack(solo)).toEqual([]);
+    const p = programFromPack(solo);
+    const era = eraById("acid");
+    const ids = acid.map((s: { id: string }) => s.id);
+    for (let e = 0; e < 64; e++) {
+      expect(eraOf(e, p).id).toBe("acid");
+      expect(styleOf(era, e, p).style.id).toBe(ids[e % ids.length]);
+    }
   });
 
   it("walks the pack's styles in order, each resolved over its base", () => {
@@ -254,12 +267,13 @@ describe("override path", () => {
   }
 
   it("SOUND_DEFAULTS covers every sound field each base reads", () => {
-    const notes = new Set(["vamps", "stabs", "answers", "contours", "phrases", "fills", "sub", "progressions", "walks", "comps", "chords", "skips", "foley", "kicks", "choirs", "pans", "statements", "turns", "space", "pedal", "calls", "voicings", "cuts", "chops", "organ", "lines", "figures", "accents", "bassline", "bells", "percs", "arps", "ghosts", "warps", "riffs", "words", "opens", "arpCells"]);
+    const notes = new Set(["vamps", "stabs", "answers", "contours", "phrases", "fills", "sub", "progressions", "walks", "comps", "chords", "skips", "foley", "kicks", "choirs", "pans", "statements", "turns", "space", "pedal", "calls", "voicings", "cuts", "chops", "organ", "lines", "figures", "accents", "stabBars", "bassline", "bells", "percs", "claps", "hats", "arps", "ghosts", "warps", "riffs", "words", "opens", "arpCells"]);
     for (const f of ["tiers", "notes", "bars", "voicing", "colours", "busy", "glints", "partials"]) notes.add(f); // ambientidm, drone
     for (const genre of DATA_GENRES) {
       for (const [base, fields] of Object.entries(DATA_FIELDS[genre])) {
         // Trip-hop `strings` is Bristol's string chord (notes); liquid's is the Soulful string voice.
-        const sound = (fields as string[]).filter((f) => !notes.has(f) && !(genre === "triphop" && f === "strings"));
+        // `ornament` (electro) is the attention layer's voice: silent without mentions, tested in attention.test.ts.
+        const sound = (fields as string[]).filter((f) => !notes.has(f) && !(genre === "triphop" && f === "strings") && f !== "ornament");
         expect(Object.keys(SOUND_DEFAULTS[genre][base]).sort(), `${genre}/${base}`).toEqual(sound.sort());
       }
     }
@@ -352,7 +366,7 @@ describe("dub techno and electro", () => {
   it("a pack may name every opened genre, not one more", () => {
     const all = { key: "all", name: "All", genres: [...DATA_GENRES], styles: Object.fromEntries(DATA_GENRES.map((g) => [g, [{ id: `s-${g}`, name: g, base: "classic" }]])) };
     expect(validatePack(all)).toEqual([]);
-    expect(validatePack({ ...all, genres: [...DATA_GENRES, "acid"] }).join("\n")).toMatch(new RegExp(`2\\.\\.${DATA_GENRES.length} genres`));
+    expect(validatePack({ ...all, genres: [...DATA_GENRES, "acid"] }).join("\n")).toMatch(new RegExp(`1\\.\\.${DATA_GENRES.length} genres`));
   });
 
   const bad: [string, (p: any) => void, RegExp][] = [
@@ -371,6 +385,34 @@ describe("dub techno and electro", () => {
     ["a sub drive of 0", (p) => (p.styles.dubtechno[0].data.subTone.drive = 0), /subTone\.drive: expected a number in 0\.1\.\.4/],
     ["a shaker shuffle of three", (p) => (p.styles.dubtechno[0].data.kit.hat.shuffle = [1, 1, 1]), /kit\.hat\.shuffle: expected \[4 values\]/],
     ["a filter sweep of 1 bar", (p) => (p.styles.dubtechno[0].data.sweep.stab = 1), /sweep\.stab: expected a number in 2\.\.64/],
+    ["a rumble lowpass of 800 Hz", (p) => (p.styles.dubtechno[0].data.rumble = { level: 0.5, lp: 800 }), /rumble\.lp: expected a number in 60\.\.400/],
+    ["a rumble duck over 1", (p) => (p.styles.dubtechno[0].data.rumble = { duck: 1.2 }), /rumble\.duck: expected a number in 0\.\.1/],
+    ["an unknown rumble field", (p) => (p.styles.dubtechno[0].data.rumble = { size: 2 }), /rumble\.size: unknown field/],
+    ["an empty stab bar mask", (p) => (p.styles.dubtechno[0].data.stabBars = []), /stabBars: expected 1\.\.16 entries/],
+    ["a stab layer wave of noise", (p) => (p.styles.dubtechno[0].data.stabTone.wave2 = "noise"), /stabTone\.wave2: expected one of/],
+    ["a stab layer over 1.5", (p) => (p.styles.dubtechno[0].data.stabTone.mix2 = 2), /stabTone\.mix2: expected a number in 0\.\.1\.5/],
+    ["a pulse width of 0.7", (p) => (p.styles.dubtechno[0].data.stabTone.width = 0.7), /stabTone\.width: expected a number in 0\.05\.\.0\.5/],
+    ["a velocity cutoff depth of 2", (p) => (p.styles.dubtechno[0].data.stabTone.velLp = 2), /stabTone\.velLp: expected a number in 0\.\.1/],
+    ["a stab engine of wavetable", (p) => (p.styles.dubtechno[0].data.stabTone.engine = "wavetable"), /stabTone\.engine: expected one of/],
+    ["an FM ratio of 20", (p) => (p.styles.dubtechno[0].data.stabTone.fm = { ratio: 20 }), /stabTone\.fm\.ratio: expected a number in 0\.5\.\.12/],
+    ["an FM index of 30", (p) => (p.styles.dubtechno[0].data.stabTone.fm = { index2: 30 }), /stabTone\.fm\.index2: expected a number in 0\.\.12/],
+    ["an unknown FM field", (p) => (p.styles.dubtechno[0].data.stabTone.fm = { feedback: 1 }), /stabTone\.fm\.feedback: unknown field/],
+    ["five pluck modes", (p) => (p.styles.dubtechno[0].data.stabTone.pluck = { modes: [1, 2, 3, 4, 5] }), /stabTone\.pluck\.modes: expected 1\.\.4 entries/],
+    ["a pluck ring of 10 s", (p) => (p.styles.dubtechno[0].data.stabTone.pluck = { decay: 10 }), /stabTone\.pluck\.decay: expected a number in 0\.05\.\.4/],
+    ["a 20 ms mallet", (p) => (p.styles.dubtechno[0].data.stabTone.pluck = { burst: 0.02 }), /stabTone\.pluck\.burst: expected a number in 0\.0002\.\.0\.005/],
+    ["a pad highpass of 2 kHz", (p) => (p.styles.dubtechno[0].data.padTone.hp = 2000), /padTone\.hp: expected a number in 20\.\.1000/],
+    ["an echo breath deeper than 1", (p) => (p.styles.dubtechno[0].data.sweep.fb = 1.2), /sweep\.fb: expected a number in 0\.\.1/],
+    ["a ping-pong time of 9 16ths", (p) => (p.styles.dubtechno[0].data.echoTone = { alt: 9 }), /echoTone\.alt: expected an integer in 0\.\.8/],
+    ["a tape wobble of 3", (p) => (p.styles.dubtechno[0].data.echoTone = { wobble: 3 }), /echoTone\.wobble: expected a number in 0\.\.1/],
+    ["a melody of five notes a cell", (p) => (p.styles.dubtechno[0].data.melody = { level: 1, count: 5 }), /melody\.count: expected an integer in 1\.\.4/],
+    ["a melody pool of nine notes", (p) => (p.styles.dubtechno[0].data.melody = { notes: [0, 3, 7, 10, 12, 15, 19, 22, 24] }), /melody\.notes: expected 1\.\.8 entries/],
+    ["an unknown melody field", (p) => (p.styles.dubtechno[0].data.melody = { scale: "minor" }), /melody\.scale: unknown field/],
+    ["a stab bar level of 2", (p) => (p.styles.dubtechno[0].data.stabBars = [1, 2]), /stabBars\[1\]: expected a number in 0\.\.1\.5/],
+    ["a clap past two bars", (p) => (p.styles.dubtechno[0].data.claps = [[32, 1]]), /claps\[0\]\[0\]: expected an integer in 0\.\.31/],
+    ["a clap level of 2", (p) => (p.styles.dubtechno[0].data.claps = [[12, 2]]), /claps\[0\]\[1\]: expected a number in 0\.\.1\.5/],
+    ["a hat without a level", (p) => (p.styles.dubtechno[0].data.hats = [[2]]), /hats\[0\]: expected \[16th, level\] or \[16th, level, decay\]/],
+    ["a hat decay of 1 s", (p) => (p.styles.dubtechno[0].data.hats = [[2, 1, 1]]), /hats\[0\]\[2\]: expected a number in 0\.005\.\.0\.5/],
+    ["seventeen hats", (p) => (p.styles.dubtechno[0].data.hats = Array.from({ length: 17 }, (_, i) => [i, 1])), /hats: expected 1\.\.16 entries/],
     ["a kick figure onset of 32", (p) => p.styles.electro[0].data.kicks.lo[0].push(32), /kicks\.lo\[0\]\[5\]: expected an integer in 0\.\.31/],
     ["kicks without the half tier", (p) => delete p.styles.electro[0].data.kicks.half, /kicks\.half: missing/],
     ["an arp of four notes", (p) => (p.styles.electro[0].data.arps[0] = [0, 7, 10, 12]), /arps\[0\]: expected 1\.\.3 entries/],
@@ -419,9 +461,12 @@ describe("dub techno and electro", () => {
       progressions: [{ bars: 1, seq: ["v7", "VI9"] }],
       figures: [[0, 4, 8, 12]],
       accents: [0.3],
+      stabBars: [1, 0],
       bassline: [[0, 4, 1]],
       bells: [[[0, 0, 1], [16, 1, 1], [32, 2, 1], [48, 0, 1]]],
       percs: [[0, 1, 1], [8, 1.5, 1], [16, 1, 1], [24, 1.5, 1]],
+      claps: [[12, 1], [28, 1]],
+      hats: [[2, 1], [6, 0.5], [14, 1, 0.2], [18, 1], [30, 0.7]],
     },
     electro: {
       kicks: { half: [[0]], lo: [[0, 8]], mid: [[0, 8, 16, 24]], hi: [[0, 4, 8, 12, 16, 20, 24, 28]] },
@@ -453,6 +498,117 @@ describe("dub techno and electro", () => {
       });
     }
   }
+
+  it("a stab bar mask of all ones schedules what no mask does; a rest or a level changes it", () => {
+    for (const base of ["classic", "ixtlan", "moment"]) {
+      const house = schedule("dubtechno", at("dubtechno", base, {}).epoch, HOUSE_PROGRAM, 40);
+      const ones = at("dubtechno", base, { stabBars: [1, 1, 1] });
+      expect(schedule("dubtechno", ones.epoch, ones.station, 40), base).toBe(house);
+      for (const mask of [[1, 0], [1, 1, 1, 0.5], [0]]) {
+        const { epoch, station } = at("dubtechno", base, { stabBars: mask });
+        expect(schedule("dubtechno", epoch, station, 40), `${base} ${mask}`).not.toBe(house);
+      }
+    }
+  });
+
+  it("clap and hat figures restating 2 and 4 and the offbeats schedule what none does; a move changes it", () => {
+    const claps = [[4, 0.88], [12, 1], [20, 0.88], [28, 1]];
+    const hats = [2, 6, 10, 14, 18, 22, 26, 30].map((s) => [s, 1]);
+    for (const base of ["classic", "ixtlan", "moment"]) {
+      const house = schedule("dubtechno", at("dubtechno", base, {}).epoch, HOUSE_PROGRAM, 40);
+      const same = at("dubtechno", base, { claps, hats });
+      expect(schedule("dubtechno", same.epoch, same.station, 40), base).toBe(house);
+      for (const data of [{ claps: [[12, 1], [28, 1]] }, { hats: [...hats.slice(0, 7), [30, 1, 0.2]] }, { hats: hats.slice(0, 4) }]) {
+        const { epoch, station } = at("dubtechno", base, data);
+        expect(schedule("dubtechno", epoch, station, 40), `${base} ${JSON.stringify(data)}`).not.toBe(house);
+      }
+    }
+  });
+
+  it("the rumble is off unless its level is raised; on, every rumble field changes what is scheduled", () => {
+    for (const base of ["classic", "ixtlan", "moment"]) {
+      const house = schedule("dubtechno", at("dubtechno", base, {}).epoch, HOUSE_PROGRAM, 40);
+      // Level 0 builds nothing, whatever the other fields say.
+      const off = at("dubtechno", base, { rumble: { level: 0, lp: 300, decay: 2, duck: 0.3 } });
+      expect(schedule("dubtechno", off.epoch, off.station, 40), base).toBe(house);
+      const on = { level: 0.6, lp: 180, decay: 1.2, duck: 0.8 };
+      const ref = at("dubtechno", base, { rumble: on });
+      const heard = schedule("dubtechno", ref.epoch, ref.station, 40);
+      expect(heard, base).not.toBe(house);
+      for (const [field, value] of [["level", 0.9], ["lp", 220], ["decay", 1.6], ["duck", 0.5]] as const) {
+        const { epoch, station } = at("dubtechno", base, { rumble: { ...on, [field]: value } });
+        expect(schedule("dubtechno", epoch, station, 40), `${base} rumble.${field}`).not.toBe(heard);
+      }
+    }
+  });
+});
+
+describe("dub techno voice upgrades (all off by default)", () => {
+  const at = (base: string, data: object) => {
+    const era = eraById("dubtechno");
+    let epoch = 0;
+    while (!(eraOf(epoch).id === "dubtechno" && styleOf(era, epoch).style.id === base)) epoch++;
+    const pack = { key: "up", name: "Up", genres: ["dubtechno"], styles: { dubtechno: [{ id: `u-${base}`, name: "U", base, data }] } } as unknown as StationPack;
+    expect(validatePack(pack)).toEqual([]);
+    return schedule("dubtechno", epoch, programFromPack(pack), 40);
+  };
+  const BASES = ["classic", "ixtlan", "moment"];
+
+  it("absent or at their off values, the stab layer, velocity cutoff, pad highpass, echo breath, echo shape and melody schedule what the base does", () => {
+    for (const base of BASES) {
+      const house = at(base, {});
+      const off = {
+        stabTone: { wave2: "pulse", mix2: 0, width: 0.2, octave2: 12, velLp: 0, engine: "osc", fm: { ratio: 3, index: 6 }, pluck: { modes: [1, 4] } },
+        sweep: { send: 0, fb: 0, breath: 8 },
+        echoTone: { width: 0.55, alt: 0, wobble: 0, rate: 1 },
+        melody: { level: 0, notes: [0, 3, 7], every: 1, count: 4, chance: 1 },
+      };
+      expect(at(base, off), base).toBe(house);
+    }
+  });
+
+  // Each field, on, against the same style without it (or with the field moved).
+  const ON: [string, object, object][] = [
+    ["stabTone.mix2", { stabTone: {} }, { stabTone: { mix2: 0.6 } }],
+    ["stabTone.wave2", { stabTone: { mix2: 0.6, wave2: "sawtooth" } }, { stabTone: { mix2: 0.6, wave2: "pulse" } }],
+    ["stabTone.width", { stabTone: { mix2: 0.6, wave2: "pulse", width: 0.3 } }, { stabTone: { mix2: 0.6, wave2: "pulse", width: 0.15 } }],
+    ["stabTone.octave2", { stabTone: { mix2: 0.6 } }, { stabTone: { mix2: 0.6, octave2: -12 } }],
+    ["stabTone.velLp", { stabTone: {} }, { stabTone: { velLp: 0.8 } }],
+    ["stabTone.engine fm", { stabTone: {} }, { stabTone: { engine: "fm" } }],
+    ["stabTone.engine pluck", { stabTone: {} }, { stabTone: { engine: "pluck" } }],
+    ["stabTone.engine fm / pluck", { stabTone: { engine: "fm" } }, { stabTone: { engine: "pluck" } }],
+    ["stabTone fm + mix2 layer", { stabTone: { engine: "fm" } }, { stabTone: { engine: "fm", mix2: 0.5 } }],
+    ["stabTone pluck + mix2 layer", { stabTone: { engine: "pluck" } }, { stabTone: { engine: "pluck", mix2: 0.5 } }],
+    ["padTone.hp", { padTone: {} }, { padTone: { hp: 180 } }],
+    ["sweep.send", { sweep: {} }, { sweep: { send: 0.5 } }],
+    ["sweep.fb", { sweep: {} }, { sweep: { fb: 0.5 } }],
+    ["sweep.breath", { sweep: { send: 0.5, fb: 0.5 } }, { sweep: { send: 0.5, fb: 0.5, breath: 4 } }],
+    ["echoTone.width", { echoTone: {} }, { echoTone: { width: 0.9 } }],
+    ["echoTone.alt", { echoTone: {} }, { echoTone: { alt: 4 } }],
+    ["echoTone.wobble", { echoTone: {} }, { echoTone: { wobble: 0.5 } }],
+    ["echoTone.rate", { echoTone: { wobble: 0.5 } }, { echoTone: { wobble: 0.5, rate: 1.2 } }],
+  ];
+  for (const [field, value] of [["ratio", 3.5], ["index", 6], ["floor", 0.6], ["decay", 0.8], ["vel", 0]] as const) {
+    ON.push([`stabTone.fm.${field}`, { stabTone: { engine: "fm" } }, { stabTone: { engine: "fm", fm: { [field]: value } } }]);
+  }
+  for (const [field, value] of [["ratio2", 5], ["decay2", 0.2]] as const) {
+    ON.push([`stabTone.fm.${field}`, { stabTone: { engine: "fm", fm: { index2: 2 } } }, { stabTone: { engine: "fm", fm: { index2: 2, [field]: value } } }]);
+  }
+  ON.push(["stabTone.fm.index2", { stabTone: { engine: "fm" } }, { stabTone: { engine: "fm", fm: { index2: 2 } } }]);
+  for (const [field, value] of [["modes", [1, 3.99, 9.83]], ["decay", 2.5], ["damp", 0.2], ["tone", 6000], ["burst", 0.003], ["vel", 0]] as const) {
+    ON.push([`stabTone.pluck.${field}`, { stabTone: { engine: "pluck" } }, { stabTone: { engine: "pluck", pluck: { [field]: value } } }]);
+  }
+  const MELODY = { level: 1, every: 2, chance: 1, count: 2 };
+  for (const [field, value] of [["level", 1.5], ["wave", "sawtooth"], ["detune", 12], ["octave", 0], ["notes", [0, 3, 7, 10]], ["every", 1], ["count", 3], ["chance", 0.4], ["attack", 1], ["hold", 8], ["release", 4], ["lp", 900], ["echo", 0.7], ["space", 0.7]] as const) {
+    ON.push([`melody.${field}`, { melody: MELODY }, { melody: { ...MELODY, [field]: value } }]);
+  }
+  ON.push(["melody (on)", {}, { melody: { level: 1 } }]);
+
+  it("on, every field changes what is scheduled", () => {
+    for (const base of BASES) {
+      for (const [field, a, b] of ON) expect(at(base, b), `${base} ${field}`).not.toBe(at(base, a));
+    }
+  });
 });
 
 describe("chords the house progressions need", () => {
