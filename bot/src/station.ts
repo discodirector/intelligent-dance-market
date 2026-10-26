@@ -85,7 +85,8 @@ export interface RegistryEntry {
   /** What it plays: "idm" (house schedules) or a pack key (baked, or a runtime pack). */
   program: string;
   quoteSymbol?: string;
-  theme?: { phos: string; phosDim: string; ghost: string; lcd: string };
+  /** LCD colours; panel / sell / whale: the faceplate skin of a station that has one (Credits). */
+  theme?: { phos: string; phosDim: string; ghost: string; lcd: string; panel?: string; sell?: string; whale?: string };
   /**
    * "pending": added, not on air; "preview": its pack is in, playable at ?net=<key>, not listed; "live": on air (the
    * only status replayed for checkpoints); "paused": off.

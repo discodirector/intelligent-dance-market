@@ -83,6 +83,8 @@ COPY stations/registry.json stations/validate.mjs stations/validate.d.mts statio
 # The owner's application tool (docs/STATIONS.md "Applications and payment"): `docker compose exec api npx tsx
 # scripts/station-apps.ts list` reads OUT_DIR/applications where the API writes it.
 COPY bot/scripts/station-apps.ts bot/scripts/station-apps.ts
+# Dry render of a station's track post from its cache: `docker exec swarm-sequencer-bot npx tsx scripts/station-release.ts credits`.
+COPY bot/scripts/station-release.ts bot/scripts/station-release.ts
 # bot/src/lib/release.ts imports web/src/trackSelect.ts (import-free) at runtime; the scheduler loads it too.
 COPY web/src/trackSelect.ts web/src/trackSelect.ts
 # Default tape of the release CLI and `pipeline.ts release` (synthetic, three completed v2 tracks).

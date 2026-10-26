@@ -53,7 +53,8 @@ export interface RenderOpts {
   quote?: ShownQuote;
 }
 
-export interface StationTheme { phos: string; phosDim: string; ghost: string; lcd: string }
+/** Registry theme; panel / sell / whale: a station's faceplate skin (Credits), worn by its releases (ReleaseOpts.skin). */
+export interface StationTheme { phos: string; phosDim: string; ghost: string; lcd: string; panel?: string; sell?: string; whale?: string }
 export interface ShownQuote { symbol: string; perEth: number }
 
 export interface RenderResult {

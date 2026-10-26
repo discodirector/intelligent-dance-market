@@ -19,6 +19,7 @@ site/scripts
 bot/test
 bot/scripts
 !bot/scripts/station-apps.ts
+!bot/scripts/station-release.ts
 web/scripts
 !web/scripts/station-gate-windows.json
 web/public/stress

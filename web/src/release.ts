@@ -20,7 +20,32 @@ import {
 import { normalizeTimeline, type RawTimelineEvent } from "./timeline";
 import { selectTrack, type TrackEntry, type TrackSelection } from "./trackSelect";
 
-export type ReleaseEntry = RawTimelineEvent & TrackEntry & { ts?: number; blockNumber?: number; txHash?: string };
+/** An NFT station input's tag (core nft.ts NftTag), the fields its sound cues read. */
+export interface NftCueTag {
+  via: string;
+  kind?: string;
+  score?: number;
+  mask?: number;
+  points?: number;
+  ink?: [number, number, number, number];
+  rel?: number;
+  overprints?: number;
+}
+
+/**
+ * An NFT station input's sound cues, as live playback plays them (site data/types.ts noteNftCues): a withdraw's lock,
+ * an overprint's double strike, a Statement sale's page stab, a rated sale's plate stab; nothing for anything else.
+ */
+export function nftCuesOf(n: NftCueTag | undefined): Pick<ReleaseSwap, "sale" | "lock" | "page" | "overprint"> {
+  if (!n) return {};
+  if (n.via === "withdraw") return { lock: { points: n.points ?? 0, ...(n.ink ? { ink: n.ink } : {}) } };
+  if (n.via === "overprint") return { overprint: n.overprints !== undefined ? { count: n.overprints } : {} };
+  if (n.kind === "statement") return { page: { rel: n.rel ?? 100, ...(n.points !== undefined ? { points: n.points } : {}) } };
+  if (n.score !== undefined && n.mask) return { sale: { pct: n.score, mask: n.mask } };
+  return {};
+}
+
+export type ReleaseEntry = RawTimelineEvent & TrackEntry & { ts?: number; blockNumber?: number; txHash?: string; nft?: NftCueTag };
 
 export interface ReleaseRequest extends ReleaseOptions {
   /** trackNo of a TrackComplete (default: the latest completed track). */
@@ -65,6 +90,7 @@ export function buildRelease(raw: readonly ReleaseEntry[], req: ReleaseRequest =
       state: finished ? dec(finished.slot0, finished.slot1) : dec(e.slot0, e.slot1),
       ...(cues?.[i].drop ? { drop: cues[i].drop } : {}),
       ...(cues?.[i].flash ? { flash: cues[i].flash } : {}),
+      ...nftCuesOf(e.nft),
     };
   });
   let seed: SequencerState;

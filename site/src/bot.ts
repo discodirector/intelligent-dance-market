@@ -6,7 +6,7 @@
 /// <reference path="../../web/src/build.d.ts" />
 import "./style.css";
 import "./bot.css";
-import { DEFAULT_DROP_RULES } from "@swarm-sequencer/core";
+import { DEFAULT_DROP_RULES, plateLetters } from "@swarm-sequencer/core";
 import {
   audioBufferToWavBase64,
   decode,
@@ -27,7 +27,7 @@ import {
   type StepHit,
   type TimelinePoint,
 } from "@swarm-sequencer/synth";
-import { barAt, buildRelease, programOfPack, sectionOfBar, type BuiltRelease, type ReleaseEntry, type ReleaseRequest } from "../../web/src/release";
+import { barAt, buildRelease, nftCuesOf, programOfPack, sectionOfBar, type BuiltRelease, type ReleaseEntry, type ReleaseRequest } from "../../web/src/release";
 import { formatQuote, normalizeTimeline, quoteOf, quoteSymbolOf, type RawTimelineEvent } from "../../web/src/timeline";
 import { sevenSeg } from "./sevenseg";
 import { drawGrid, drawScope, drawSpectrum, Surface, type Flash } from "./visuals";
@@ -40,7 +40,11 @@ interface Entry extends RawTimelineEvent {
   /** v2: this swap finished a track; slots = the finished track before the reset. */
   trackComplete?: { trackNo: number; swaps?: number; slot0: string; slot1: string };
   /** NFT stations (core nft.ts tag): a rated sale or a BALANCE withdraw cues the engine (synth SaleCue / LockCue). */
-  nft?: { via: string; kind?: string; score?: number; mask?: number; points?: number; ink?: [number, number, number, number]; rel?: number; overprints?: number };
+  nft?: {
+    via: string; kind?: string; score?: number; mask?: number; points?: number; ink?: [number, number, number, number]; rel?: number; overprints?: number;
+    /** The item (a page for compose, withdraw, overprint and a Statement sale), the venue, a compose's items, the rating (tenths), an overprint's top page. */
+    id?: string; venue?: string; items?: number; rating?: number; top?: string;
+  };
 }
 
 interface SetupOptions {
@@ -130,15 +134,8 @@ function spread(raw: Entry[], seconds: number): TimelinePoint[] {
   return base.map((p, i) => ({ ...p, time: i === 0 ? 0 : 0.25 + (i / n) * span, now: keepIdle ? p.now : undefined }));
 }
 
-/** An NFT station entry's cues: a withdraw's lock, a rated sale's plate stab; nothing for any other entry. */
-function nftCues(e: Entry): Pick<TimelinePoint, "sale" | "lock" | "page" | "overprint"> {
-  const n = e.nft;
-  if (n?.via === "withdraw") return { lock: { points: n.points ?? 0, ...(n.ink ? { ink: n.ink } : {}) } };
-  if (n?.via === "overprint") return { overprint: n.overprints !== undefined ? { count: n.overprints } : {} };
-  if (n?.kind === "statement") return { page: { rel: n.rel ?? 100, ...(n.points !== undefined ? { points: n.points } : {}) } };
-  if (n?.score !== undefined && n.mask) return { sale: { pct: n.score, mask: n.mask } };
-  return {};
-}
+/** An NFT station entry's cues (web release.ts nftCuesOf, shared with the release WAV); nothing for any other entry. */
+const nftCues = (e: Entry): Pick<TimelinePoint, "sale" | "lock" | "page" | "overprint"> => nftCuesOf(e.nft);
 
 /** v2: states carry heat (normalised by heatMax) and trackNo; a track complete holds the finished track, then drops. */
 function withHeat(pts: TimelinePoint[], raw: Entry[]): TimelinePoint[] {
@@ -363,16 +360,59 @@ window.__audio = async () => {
 
 // ---------------------------------------------------------------- release mode (SPEC §4.6)
 
-interface StationTheme { phos: string; phosDim: string; ghost: string; lcd: string }
+/** Registry theme; panel, sell and whale: the station's faceplate skin (site stations.ts applySkin), when it has one. */
+interface StationTheme { phos: string; phosDim: string; ghost: string; lcd: string; panel?: string; sell?: string; whale?: string }
 interface ShownQuote { symbol: string; perEth: number }
 let shownQuote: ShownQuote | null = null;
-/** A station's own colours over html.station-alt's blue (the canvases read the CSS variables). */
-function stationTheme(t?: StationTheme) {
+/** a mixed toward black by `k` (site stations.ts shade). */
+const shade = (hex: string, k: number) => "#" + [1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * (1 - k)).toString(16).padStart(2, "0")).join("");
+/**
+ * A station's own colours over html.station-alt's blue (the canvases read the CSS variables); a theme with a skin
+ * (panel / sell / whale) also wears it, with body.skin-<key> for the station's CSS, as on its site page.
+ */
+function stationTheme(t?: StationTheme, key?: string) {
   const st = document.documentElement.style;
   if (!t) { for (const v of ["--phos", "--phos-rgb", "--phos-dim", "--phos-ghost", "--lcd-bg"]) st.removeProperty(v); return; }
   const rgb = [1, 3, 5].map((i) => parseInt(t.phos.slice(i, i + 2), 16)).join(", ");
   st.setProperty("--phos", t.phos); st.setProperty("--phos-rgb", rgb); st.setProperty("--phos-dim", t.phosDim);
   st.setProperty("--phos-ghost", t.ghost); st.setProperty("--lcd-bg", t.lcd);
+  if (t.panel) {
+    st.setProperty("--bone", t.panel);
+    st.setProperty("--bone-2", shade(t.panel, 0.05));
+    st.setProperty("--bone-3", shade(t.panel, 0.12));
+  }
+  if (t.sell) st.setProperty("--sell", t.sell);
+  if (t.whale) st.setProperty("--amber", t.whale);
+  if (key && (t.panel || t.sell || t.whale)) document.body.classList.add(`skin-${key}`);
+}
+
+/** A collection station's release (ReleaseSetup.nft): the item's name ("Credit"), else null (a pool: swaps). */
+let nftItem: string | null = null;
+/** What an input is on the release tape: a swap, or (a collection station) a sale. */
+const unit = () => (nftItem ? "SALE" : "SWAP");
+
+/**
+ * A collection station's input on the tape, as its site feed says it (site main.ts nftWhat), upper case to match the
+ * module: "BUY CREDIT #1234 · 0.0092 ETH · OPENSEA · R132 CK". Digits, plate letters and a fixed venue name only.
+ */
+function nftWhat(e: Entry): string {
+  const n = e.nft!;
+  const amt = `${formatQuote(quoteOf(e))} ETH`;
+  const item = nftItem!.toUpperCase();
+  const venue = (n.venue ?? "").toUpperCase();
+  if (n.via === "compose") return `<span class="sd">COMP</span> ${n.items ?? 80} ${item}S → PAGE #${n.id} · ${amt}`;
+  if (n.via === "withdraw") return `<span class="sd">LOCK</span> PAGE #${n.id} → ${(n.points ?? 0).toLocaleString("en-US")} ${venue}`;
+  if (n.via === "overprint") return `<span class="sd">OVPR</span> PAGE #${n.top} → #${n.id}`;
+  if (n.kind === "statement") return `<span class="sd">${e.isBuy ? "BUY " : "SELL"}</span> PAGE #${n.id} · ${amt} · ${venue}`;
+  const rating = n.rating !== undefined && n.mask ? ` · R${Math.floor(n.rating / 10)} ${plateLetters(n.mask)}` : "";
+  return `<span class="sd">${e.isBuy ? "BUY " : "SELL"}</span> ${item} #${n.id} · ${amt} · ${venue}${rating}`;
+}
+
+/** The module's words for a collection station: sales, not swaps; "every sale is a note". Pools keep the page's own. */
+function nftLabels(name: string) {
+  $("c-swaps-label").textContent = "sales";
+  $("swap-silk").textContent = "SALE #";
+  $("foot-left").textContent = `EVERY SALE IS A NOTE · ${name.toUpperCase()}`;
 }
 
 interface ReleaseSetup extends ReleaseRequest {
@@ -393,6 +433,13 @@ interface ReleaseSetup extends ReleaseRequest {
    *  not this name: IMD/ETH plays the house program; a station passes its own, and the plan carries it (plan.program),
    *  so web/render.html must be given the same one for the WAV. */
   station?: string;
+  /** The station's key: body.skin-<key> when its theme has a skin (Credits' faceplate). */
+  skin?: string;
+  /**
+   * A collection station (registry kind "nft"): the item's name ("Credit") and the collection's ("CREDITS", no
+   * cashtag); the tape and the module name sales, not swaps.
+   */
+  nft?: { item: string; name: string };
 }
 
 interface ReleaseInfo {
@@ -473,13 +520,14 @@ function releaseTape(r: BuiltRelease, n: number, dropped: boolean) {
     const amt = formatQuote(quoteOf(e) * (shownQuote?.perEth ?? 1)).padStart(8, " ");
     const tag = whale ? ` <span class="tag">${e.isBuy ? "FILL" : "DROP"}</span>` : "";
     const trk = TRACKS[(e.track ?? 0) & 3].padEnd(6, " ");
+    const what = nftItem && (e as Entry).nft ? nftWhat(e as Entry) : `<span class="sd">${e.isBuy ? "BUY " : "SELL"}</span> ${amt} ${shownQuote?.symbol ?? quoteSymbolOf(e)}`;
     rows.push(
-      `<li class="${cls}"><span class="p">&gt;</span> <span class="t">${hhmm(e.ts ?? 0)}</span>  <span class="sd">${e.isBuy ? "BUY " : "SELL"}</span> ${amt} ${shownQuote?.symbol ?? quoteSymbolOf(e)}  ` +
+      `<li class="${cls}"><span class="p">&gt;</span> <span class="t">${hhmm(e.ts ?? 0)}</span>  ${what}  ` +
         `<span class="trk">${trk}</span> s${String((e.step ?? 0) + 1).padStart(2, "0")}${tag}</li>`,
     );
   }
   const tc = r.entries.at(-1)?.trackComplete;
-  if (dropped && tc) rows.push(`<li class="sys track"><span class="p">#</span> TRACK #${tc.trackNo} COMPLETE · ${r.entries.length} SWAPS</li>`);
+  if (dropped && tc) rows.push(`<li class="sys track"><span class="p">#</span> TRACK #${tc.trackNo} COMPLETE · ${r.entries.length} ${unit()}S</li>`);
   $("log").innerHTML = rows.join("");
   $("c-swaps").textContent = String(n);
   $("c-buys").textContent = String(buys);
@@ -557,36 +605,39 @@ function paintRelease(r: BuiltRelease, t: number) {
 
 function paceText(r: BuiltRelease): string {
   const slot = r.plan.pace.slotSteps;
-  if (Math.abs(slot - 16) < 1e-9) return "ONE SWAP PER BAR";
+  const u = unit();
+  if (Math.abs(slot - 16) < 1e-9) return `ONE ${u} PER BAR`;
   if (slot > 16) {
     const bars = slot / 16;
-    return Number.isInteger(bars) ? `ONE SWAP EVERY ${bars} BARS` : `ONE SWAP EVERY ${Math.round(slot / 4)} BEATS`;
+    return Number.isInteger(bars) ? `ONE ${u} EVERY ${bars} BARS` : `ONE ${u} EVERY ${Math.round(slot / 4)} BEATS`;
   }
-  return `${(16 / slot).toFixed(1).replace(/\.0$/, "")} SWAPS PER BAR`;
+  return `${(16 / slot).toFixed(1).replace(/\.0$/, "")} ${u}S PER BAR`;
 }
 
 window.__setupRelease = async (o) => {
-  const { timeline, width, height, fps, wavUrl, title, subtitle, station, theme, quote, ...req } = o;
+  const { timeline, width, height, fps, wavUrl, title, subtitle, station, theme, quote, skin, nft, ...req } = o;
   rel = buildRelease(timeline, cleanRequest(req));
   const r = rel;
   const no = r.selection.trackNo;
+  nftItem = nft?.item ?? null;
   opts = {
     width: width ?? 1080,
     height: height ?? 1080,
     fps: fps ?? 30,
     seconds: r.plan.seconds,
-    title: title ?? `${station ? `${station.toUpperCase()} · ETHEREUM` : "$IDM · ROBINHOOD CHAIN"} · TRACK #${no} · ${r.entries.length} SWAPS IN ORDER`,
+    title: title ?? `${station ? `${station.toUpperCase()} · ETHEREUM` : "$IDM · ROBINHOOD CHAIN"} · TRACK #${no} · ${r.entries.length} ${unit()}S IN ORDER`,
     subtitle: subtitle ?? `${paceText(r)} · ${r.plan.dropTime != null ? `DROP AT ${mmss(r.plan.dropTime)}` : "UNFINISHED"}`,
   };
   v2 = true;
   document.body.classList.add("rules-v2", "release");
   // The canvases read their colours from the CSS variables, so the theme class recolours every LCD.
   document.documentElement.classList.toggle("station-alt", !!station);
-  stationTheme(theme);
+  stationTheme(theme, skin);
   shownQuote = quote ?? null;
   if (station) {
     $("model-sub").textContent = station;
     $("foot-left").textContent = `EVERY TRADE IS A NOTE · ${station.toUpperCase()}`;
+    if (nft) nftLabels(nft.name);
   }
   $("title").textContent = opts.title;
   $("subtitle").textContent = opts.subtitle;

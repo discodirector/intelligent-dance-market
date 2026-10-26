@@ -12,7 +12,7 @@ import { toTimelineState, type TimelineEntry } from "./lib/timeline.ts";
 import { decodeFor } from "./lib/hookRules.ts";
 import type { Program } from "@swarm-sequencer/synth";
 import { replay } from "./replay/index.ts";
-import { renderRelease } from "./release/index.ts";
+import { renderRelease, type ReleaseNft } from "./release/index.ts";
 import { postCut, releaseHeadline, selectTrack, X_VIDEO_MAX_SECONDS } from "./lib/release.ts";
 
 const log = (...a: unknown[]) => console.error("[pipeline]", ...a);
@@ -29,12 +29,17 @@ export interface StationPostOpts {
   /** A calibrated quote: the clip's feed shows amounts in it (registry calibration, pool label). */
   quote?: ShownQuote;
   program?: Program;
-  caption?: (facts: Facts) => string;
+  /** A release's caption also gets its genre and style (the one the whole release plays). */
+  caption?: (facts: Facts, release?: { genre: string; style: string }) => string;
+  /** Releases: the station's key, for its skin (a theme with panel / sell / whale). */
+  skin?: string;
+  /** Releases of a collection station (kind "nft"): sales, not swaps, on screen and in the headline. */
+  nft?: ReleaseNft;
 }
 
 /** The caption: the station's own when given (source "station"), else the model's with the template fallback. */
-async function captionFor(facts: Facts, own?: (facts: Facts) => string): Promise<{ text: string; source: string }> {
-  if (own) return { text: own(facts), source: "station" };
+async function captionFor(facts: Facts, own?: StationPostOpts["caption"], release?: { genre: string; style: string }): Promise<{ text: string; source: string }> {
+  if (own) return { text: own(facts, release), source: "station" };
   const cap = await caption(facts);
   if (cap.errors?.length) log("caption fell back to template:", cap.errors.join("; "));
   return cap;
@@ -94,7 +99,7 @@ export async function produceRelease(
   const work = mkdtempSync(join(tmpdir(), "seq-release-"));
   try {
     const sel = selectTrack(entries, o.track);
-    const r = await renderRelease({ timeline: entries, track: sel.trackNo, initial: o.initial, outDir: work, mp4: true, station: o.station, pack: o.pack, theme: o.theme, quote: o.quote, title: o.title });
+    const r = await renderRelease({ timeline: entries, track: sel.trackNo, initial: o.initial, outDir: work, mp4: true, station: o.station, pack: o.pack, theme: o.theme, quote: o.quote, title: o.title, skin: o.skin, nft: o.nft });
     const sum = r.summary as any;
     const max = o.maxPostSeconds ?? Number(process.env.X_VIDEO_MAX_SECONDS ?? X_VIDEO_MAX_SECONDS);
     const cut = postCut(r.seconds, sum.dropTime ?? null, max);
@@ -110,7 +115,7 @@ export async function produceRelease(
     // The release plays one genre and style, the ones the track finished in (SPEC §4.6); posts name the genre only.
     const genre = sum.genre.eraName as string;
     // A station's track numbers are its own: the headline names the station so they never read as $IDM tracks.
-    facts.headline = (o.station ? `${o.station} · ` : "") + releaseHeadline(sel.trackNo, facts.track?.swaps ?? track.length, genre);
+    facts.headline = (o.station ? `${o.station} · ` : "") + releaseHeadline(sel.trackNo, facts.track?.swaps ?? track.length, genre, o.nft ? "sales" : "swaps");
     facts.release = {
       seconds: Math.round(r.seconds),
       bars: sum.bars,
@@ -121,7 +126,7 @@ export async function produceRelease(
       clip: cut ? { from: Math.round(cut.start), seconds: Math.round(cut.seconds) } : null,
       ...(o.partial ? { partial: true } : {}),
     };
-    const cap = await captionFor(facts, o.caption);
+    const cap = await captionFor(facts, o.caption, { genre, style: sum.genre.styleName as string });
     const res = await publish({
       caption: cap.text,
       captionSource: cap.source,

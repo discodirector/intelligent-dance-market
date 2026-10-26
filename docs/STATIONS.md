@@ -856,10 +856,35 @@ the manual fallback.
 
 ## Bot
 
-Posts each station's launch and a weekly digest on @theidmfun; per-track posts only for the house stations; one post
-a week per Station+ station ("Station+" above).
-Station timelines are cached per key and published as checkpoints (`updateStations`, `STATION_CHECKPOINTS=1`);
-`IMD_STATION=1` still queues the IMD/ETH station's finished tracks while the hook is live.
+Posts each station's launch and a weekly digest on @theidmfun; one post a week per Station+ station ("Station+"
+above); per-track posts for the stations listed in `STATION_TRACKS`.
+Station timelines are cached per key and published as checkpoints (`updateStations`, `STATION_CHECKPOINTS=1`).
+
+### Station track posts
+
+`STATION_TRACKS=imd-eth,credits` (registry keys; `IMD_STATION=1`, the old switch, still adds `imd-eth`): while the
+hook is live, each listed station's finished tracks join the scheduler's track queue (`bot/src/stations/trackPosts.ts`)
+with its key, once each (`stationTracks` in the scheduler state, per station; the old `stationLastTrackNo` moves to
+`imd-eth`). A station listed for the first time starts from its newest finished track on its cached tape: its backlog
+is never posted, only tracks finished after it was listed. Taking a key off the list drops its queued tracks.
+
+- **Look and sound.** IMD/ETH as before (house program, the blue station theme, the model's caption). Any other
+  station as its Station+ release (`bot/src/stations/look.ts`): its pack, its registry theme (and skin: Credits'
+  faceplate), its quote; a collection (kind `nft`) counts sales, not swaps: title `CREDITS · ETHEREUM · TRACK #9 · 214
+  SALES IN ORDER`, the tape names each sale as the site's feed does (`BUY CREDIT #1234 · 0.0092 ETH · OPENSEA · R132
+  CK`), `SALE #`, `EVERY SALE IS A NOTE · CREDITS`, and the release plays its sale, lock, page and overprint cues
+  where live playback plays them. The release video has no NFT screen (its art is a tokenURI call per item).
+- **Caption** (fixed, no model): a collection's names the station, the sales, genre · style and the station link,
+  `$IDM` as the only cashtag, no handles (the collection's owner is never tagged automatically):
+  `track #9 finished on the credits station: 214 sales, dub techno · void.` /
+  `every credits sale is a note, played through the $IDM rules.` / `https://theidm.fun/?net=credits`.
+  A pool station's is the Station+ release caption (its own ticker only).
+- **Cadence.** One track post per tick, oldest first, inside the daily cap (24) like the hook's. A house station
+  (imd-eth) posts every track; any other at most `STATION_TRACKS_PER_DAY` (3) per rolling 24 h and
+  `STATION_TRACKS_GAP_HOURS` (2) apart. Its other tracks wait in the queue without holding up the hook's (a capped
+  track is not "ready"); one whose start has left the station's cached tape (2,000 inputs) is skipped.
+- **Dry render.** `DRY_RUN=true npx tsx scripts/station-release.ts credits [trackNo]` (in `bot/`, or `docker exec
+  swarm-sequencer-bot …` on the server) renders a track from `OUT_DIR/stations/<key>.json` into `OUT_DIR/queue`.
 
 ## Monad
 

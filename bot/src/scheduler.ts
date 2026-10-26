@@ -6,24 +6,28 @@
 //    stations expiring within 3 days are logged and written to applications/reminders.json (stations/subscription.ts)
 //  - Station+ (docs/STATIONS.md "Station+"): one post a week per Station+ station, the release of a track finished
 //    that week or a now-playing clip, at most one per tick and 3 h apart (stations/plusPosts.ts), inside the daily cap
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+//  - STATION_TRACKS=imd-eth,credits (IMD_STATION=1 = imd-eth): those stations' finished tracks join the track queue,
+//    each in its station's look and sound; a non-house station at most 3 a day, 2 h apart (stations/trackPosts.ts)
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { packFor, programFromPack, type StationPack } from "@swarm-sequencer/synth";
-import { decide, DEFAULT_RULES, H, prune, readyTracks, type PostKind, type SchedState } from "./rules.ts";
+import { decide, DEFAULT_RULES, H, prune, type PostKind, type QueuedTrack, type SchedState } from "./rules.ts";
 import { producePost, produceRelease, teaser } from "./pipeline.ts";
 import { fetchMutated, liveClient, liveConfigFromEnv } from "./live.ts";
 import { isDryRun } from "./post/index.ts";
 import { Store } from "./api/store.ts";
-import { IMD_STATION, stationFromEntry, updateStations, type Registry } from "./station.ts";
+import { IMD_STATION, updateStations, type Registry } from "./station.ts";
+import { releaseTitle, stationLook, stationTrackRelease } from "./stations/look.ts";
+import {
+  IMD_ETH, migrateStationTracks, postableTracks, queueStationTracks, STATION_TRACK_RULES, stationTrackKeys, type StationTrackRules,
+} from "./stations/trackPosts.ts";
 import {
   duePlusPost, failedPlus, plusCaption, PLUS_POST_RULES, plusTrack, postedPlus, trackSwaps, xHandle,
   type PlusPostRules, type PlusPostStates,
 } from "./stations/plusPosts.ts";
-import { loadMergedRegistry, packJsonPath } from "./stations/runtime.ts";
+import { loadMergedRegistry } from "./stations/runtime.ts";
 import { expiring, publishStatus, writeJsonAtomic, type StatusFile } from "./stations/subscription.ts";
-import type { TimelineEntry } from "./lib/timeline.ts";
 import { movementWindow, trackSubtitle, trackWindow } from "./lib/track.ts";
-import { withTrackStart } from "./lib/release.ts";
+import { trackStartKnown, withTrackStart } from "./lib/release.ts";
 
 const OUT = process.env.OUT_DIR ?? "out";
 const STATE = join(OUT, "scheduler-state.json");
@@ -38,8 +42,16 @@ const TRACK_LOOKBACK_STEPS = Number(process.env.TRACK_LOOKBACK_STEPS ?? 24);
 const POOL_LABEL = process.env.POOL_LABEL ?? "IDM/ETH";
 const LIVE_TITLE = `${POOL_LABEL} · ROBINHOOD CHAIN · LIVE HOOK STATE`;
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[scheduler]", ...a);
-/** IMD_STATION=1: also post the IMD/ETH station's finished tracks (station.ts). */
-const STATION = process.env.IMD_STATION === "1";
+/**
+ * Stations whose finished tracks are posted (stations/trackPosts.ts): STATION_TRACKS (registry keys, comma list),
+ * plus imd-eth when IMD_STATION=1 (the old switch, still honoured).
+ */
+const TRACK_STATIONS = stationTrackKeys();
+/** A non-house station's track posts: STATION_TRACKS_PER_DAY per rolling 24 h, STATION_TRACKS_GAP_HOURS apart. */
+const TRACK_RULES: StationTrackRules = {
+  perDay: Number(process.env.STATION_TRACKS_PER_DAY ?? STATION_TRACK_RULES.perDay),
+  gapMs: Number(process.env.STATION_TRACKS_GAP_HOURS ?? STATION_TRACK_RULES.gapMs / H) * H,
+};
 /** STATION_CHECKPOINTS=1: keep every live registry station and publish its checkpoint for the site. */
 const CHECKPOINTS = process.env.STATION_CHECKPOINTS === "1";
 /** Where the checkpoints go; the web server serves this directory as /stations-data/ (docs/STATIONS.md). */
@@ -89,15 +101,6 @@ const plusKeys = (status: StatusFile) => Object.entries(status).flatMap(([k, v])
 /** Dry runs keep their own Station+ state: a dry run never delays the first real post. */
 const plusStates = (s: SchedState): PlusPostStates => (isDryRun() ? (s.plusPostsDry ??= {}) : (s.plusPosts ??= {}));
 
-/** A station's pack as data: baked (synth PACKS) or the pipeline's runtime JSON; undefined for the house program. */
-function packOf(program: string): unknown {
-  if (program === "idm") return undefined;
-  const baked = packFor(program);
-  if (baked) return baked;
-  const p = packJsonPath(STATIONS_DATA, program);
-  return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : undefined;
-}
-
 /** The client's X handle from the station's paid setup application (pipeline stations); null for others. */
 function handleOf(key: string): string | null {
   try {
@@ -129,19 +132,14 @@ async function plusPost(s: SchedState, key: string, reg: Registry, stations: Awa
       postedPlus(states, key, now, "skipped");
       return;
     }
-    const st = stationFromEntry(e, reg);
-    const chain = reg.chains[String(e.chainId)]?.name ?? String(e.chainId);
-    const pack = packOf(e.program);
-    const program = pack ? programFromPack(pack as StationPack) : undefined;
+    const { chain, opts } = stationLook(e, reg, STATIONS_DATA);
+    const { station, pack, program, theme, quote } = opts;
     const base = { label: e.label, ticker: e.ticker, key, handle: handleOf(key), site: SITE };
-    // A calibrated quote (not ETH): the feed shows the pool's own currency, named by its label (CHOG/MON: MON).
-    const perEth = Number(e.calibration?.quotePerEth ?? 1);
-    const quote = perEth !== 1 ? { symbol: e.label.split("/")[1] ?? "ETH", perEth } : undefined;
     const trackNo = plusTrack(entries, states[key], now);
     if (trackNo != null) {
       await produceRelease(entries, {
-        chain: chain.toLowerCase(), pool: e.label, track: trackNo, station: st.label, pack, program, theme: e.theme, quote,
-        title: `${e.label.toUpperCase()} · ${chain.toUpperCase()} · TRACK #${trackNo} · ${trackSwaps(entries, trackNo)} SWAPS IN ORDER`,
+        chain: chain.toLowerCase(), pool: e.label, track: trackNo, ...opts,
+        title: releaseTitle(e, chain, trackNo, trackSwaps(entries, trackNo)),
         caption: (f) => plusCaption({ ...base, kind: "release", trackNo, swaps: f.release?.swaps ?? trackSwaps(entries, trackNo), genre: f.release?.genre }),
       });
     } else {
@@ -150,7 +148,7 @@ async function plusPost(s: SchedState, key: string, reg: Registry, stations: Awa
         kind: "snapshot", chain: chain.toLowerCase(), pool: e.label,
         title: `${e.label.toUpperCase()} · ${chain.toUpperCase()} · NOW PLAYING`,
         subtitle: `${recent.length} RECENT SWAPS · THEIDM.FUN/?NET=${key.toUpperCase()}`,
-        station: st.label, pack, program, theme: e.theme, quote, sizes: [[1080, 1080]],
+        station, pack, program, theme, quote, sizes: [[1080, 1080]],
         caption: (f) => plusCaption({ ...base, kind: "clip", swaps: f.swaps, genre: f.playing }),
       });
     }
@@ -162,6 +160,28 @@ async function plusPost(s: SchedState, key: string, reg: Registry, stations: Awa
     const gaveUp = failedPlus(states, key, now, PLUS_RULES);
     log(`station+ ${key}: weekly post failed${gaveUp ? " again; this week is skipped" : ", retrying in an hour"}:`, (err as Error).stack ?? err);
   }
+}
+
+/**
+ * A station's finished track (stations/trackPosts.ts), whole, from the station's cached timeline. IMD/ETH as before
+ * (the house program, the blue station theme, the model's caption); any other station in its own look and sound with
+ * a fixed caption (stations/look.ts stationTrackRelease).
+ */
+async function stationRelease(item: QueuedTrack, stations: Awaited<ReturnType<typeof updateStations>>, reg: Registry | undefined) {
+  const key = item.station!;
+  const cache = stations.get(key);
+  if (!cache || cache instanceof Error) throw cache ?? new Error("station timeline not loaded");
+  const entries = cache.entries;
+  if (!entries.some((e) => e.trackComplete?.trackNo === item.trackNo)) throw new Error("track not on the station's cached timeline");
+  if (key === IMD_STATION.key) {
+    await produceRelease(entries, { chain: "ethereum", pool: IMD_STATION.pool, station: IMD_STATION.label, track: item.trackNo });
+    return;
+  }
+  const e = reg?.stations.find((x) => x.key === key);
+  if (!e || e.kind === "hook") throw new Error("not a played registry station");
+  // A non-house station keeps its last 2,000 inputs: a track that waited too long may have lost its start.
+  if (!trackStartKnown(entries, item.trackNo)) throw new Error("the track's start is no longer on the cached tape");
+  await stationTrackRelease(entries, e, reg!, item.trackNo, { site: SITE, stationsData: STATIONS_DATA });
 }
 
 function load(): SchedState {
@@ -178,18 +198,24 @@ async function tick() {
   let newMovements = 0;
   let newTracks = 0;
   let recent: Awaited<ReturnType<typeof fetchMutated>> = [];
-  let stationEntries: TimelineEntry[] = [];
   let head = 0n;
+  migrateStationTracks(s);
   const client = live ? liveClient(live) : null;
   let reg: Registry | undefined;
   // Baked + the pipeline's runtime stations (stations/runtime.ts): a runtime station gets checkpoints and expiry too.
   try { reg = loadMergedRegistry(STATIONS_DATA); } catch (e) { log("station registry unreadable:", (e as Error).message); }
   const status = reg ? subscriptions(reg) : {};
   const expired = new Set(Object.entries(status).flatMap(([k, v]) => (v.status === "expired" ? [k] : [])));
-  // Stations: all of them for the checkpoints, or only IMD/ETH for its track posts (live only, as before).
-  const stations = CHECKPOINTS || (STATION && live)
-    ? await updateStations(OUT, STATIONS_DATA, { keys: CHECKPOINTS ? undefined : [IMD_STATION.key], reg, expired })
+  // Stations: all of them for the checkpoints, or only the posted ones for their track posts (live only, as before).
+  const stations = CHECKPOINTS || (TRACK_STATIONS.length && live)
+    ? await updateStations(OUT, STATIONS_DATA, { keys: CHECKPOINTS ? undefined : TRACK_STATIONS, reg, expired })
     : new Map<string, never>();
+  // House stations (imd-eth) post every track; any other posted station is capped (TRACK_RULES).
+  const uncapped = new Set(reg ? reg.stations.filter((e) => e.house).map((e) => e.key) : [IMD_ETH]);
+  // A station's track waits (it is not dropped) while its timeline failed to load this tick (RPC down).
+  const loaded = (key: string) => { const c = stations.get(key); return !!c && !(c instanceof Error); };
+  const postable = (): QueuedTrack[] =>
+    postableTracks(s.trackQueue, s.posts, Date.now(), uncapped, TRACK_RULES).filter((t) => !t.station || loaded(t.station));
   for (const [key, r] of stations) if (r instanceof Error) log(`${key} station update failed:`, r.message);
   if (live && client) {
     head = await client.getBlockNumber();
@@ -205,17 +231,18 @@ async function tick() {
         s.lastTrackNo = no;
       }
     }
-    const st = stations.get(IMD_STATION.key);
-    if (STATION && st && !(st instanceof Error)) {
-      stationEntries = st.entries;
-      for (const f of st.finished) {
-        if (f.trackNo > (s.stationLastTrackNo ?? 0)) {
-          s.trackQueue.push({ trackNo: f.trackNo, block: f.block, station: IMD_STATION.key });
-          s.stationLastTrackNo = f.trackNo;
-        }
-      }
+    // Each posted station's tracks finished since its last queued one (a newly listed station: none, no backlog).
+    for (const key of TRACK_STATIONS) {
+      const st = stations.get(key);
+      if (!st || st instanceof Error) continue;
+      const fresh = s.stationTracks?.[key] == null;
+      const n = queueStationTracks(s, key, st.entries);
+      if (fresh) log(`${key}: track posts on; tracks finished after #${s.stationTracks![key]} will be posted`);
+      else if (n) log(`${key}: ${n} finished track(s) queued`);
     }
-    newTracks = readyTracks(s.trackQueue, Date.now()).length;
+    // A station taken off the list: its queued tracks are not posted.
+    s.trackQueue = s.trackQueue.filter((t) => !t.station || TRACK_STATIONS.includes(t.station));
+    newTracks = postable().length;
     // context for rendering: last 24h of events (bounded)
     const ctxFrom = head > 30_000n ? head - 30_000n : 0n;
     recent = (await fetchMutated(client, live.hook, ctxFrom, head, live.rules, live.treasury)).slice(-2000);
@@ -241,20 +268,20 @@ async function tick() {
   }
   if (!kind) return save(s);
 
+  /** The station of the track posted this tick (its own cap counts it). */
+  let trackStation: string | undefined;
   if (kind === "teaser") {
     const n = s.posts.filter((p) => p.kind === "teaser").length;
     await teaser(TEASER_WINDOWS[n % TEASER_WINDOWS.length]);
-  } else if (kind === "track" && TRACK_POST === "release" && live && client && readyTracks(s.trackQueue, Date.now()).length) {
-    // The oldest queued track, whole: read up to its TrackComplete, then back until its start (the previous
+  } else if (kind === "track" && TRACK_POST === "release" && live && client && postable().length) {
+    // The oldest postable queued track, whole: read up to its TrackComplete, then back until its start (the previous
     // TrackComplete or the hook's first swap).
-    const item = readyTracks(s.trackQueue, Date.now())[0];
+    const item = postable()[0];
+    trackStation = item.station;
     let posted = false;
     try {
-      if (item.station) {
-        // A station track: its whole history is in the station's cached timeline.
-        if (!stationEntries.some((e) => e.trackComplete?.trackNo === item.trackNo)) throw new Error("station timeline not loaded");
-        await produceRelease(stationEntries, { chain: "ethereum", pool: IMD_STATION.pool, station: IMD_STATION.label, track: item.trackNo });
-      } else {
+      if (item.station) await stationRelease(item, stations, reg);
+      else {
         const floor = live.startBlock ?? 0n;
         const earlier = async (before: number | bigint) => {
           const to = BigInt(before);
@@ -306,7 +333,7 @@ async function tick() {
     return save(s);
   }
   // Dry runs post nothing, so they must not use up the daily cap or the gaps.
-  if (!isDryRun()) s.posts.push({ at: Date.now(), kind });
+  if (!isDryRun()) s.posts.push({ at: Date.now(), kind, ...(trackStation ? { station: trackStation } : {}) });
   save(s);
 }
 

@@ -15,11 +15,15 @@ export const DEFAULT_RULES: Rules = { snapshotEveryMs: 6 * H, trackMinGapMs: 0, 
 
 /** "station": a Station+ weekly post (stations/plusPosts.ts); it counts in the daily cap only. */
 export type PostKind = "snapshot" | "movement" | "track" | "teaser" | "station";
-export interface PostRecord { at: number; kind: PostKind }
+export interface PostRecord {
+  at: number; kind: PostKind;
+  /** A station's track post (stations/trackPosts.ts): its key, for the station's own daily cap. */
+  station?: string;
+}
 /** A finished track waiting for its release post: its number and the block of its TrackComplete. */
 export interface QueuedTrack {
   trackNo: number; block: number;
-  /** A station's track (station.ts, e.g. "imd-eth"); absent = the $IDM hook. */
+  /** A station's track (registry key, e.g. "imd-eth", "credits"); absent = the $IDM hook. */
   station?: string;
   /** Optional hold (unix ms): the track waits in the queue until then (set by hand to time a post). */
   notBefore?: number;
@@ -33,8 +37,10 @@ export interface SchedState {
   trackQueue?: QueuedTrack[];
   /** Highest trackNo ever queued: a TrackComplete is queued once. */
   lastTrackNo?: number;
-  /** Highest trackNo queued from the IMD/ETH station. */
+  /** Legacy: highest trackNo queued from the IMD/ETH station; moved to stationTracks["imd-eth"] (stations/trackPosts.ts). */
   stationLastTrackNo?: number;
+  /** Per posted station (STATION_TRACKS): the highest trackNo queued, so a TrackComplete is queued once. */
+  stationTracks?: Record<string, number>;
   /** Legacy count before the queue (2026-10-21); ignored. */
   pendingTracks?: number;
   /** Station+ weekly posts per station (stations/plusPosts.ts); dry runs keep their own, so they never delay real ones. */

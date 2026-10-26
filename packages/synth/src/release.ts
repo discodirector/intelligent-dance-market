@@ -7,7 +7,7 @@
 // Genre: a release plays ONE genre instance from start to end (releaseGenre): the genre, style and tonic of the epoch
 // the track finished in. Live playback follows the epochs; a release does not.
 import { FORM_BARS, sectionAt, type SectionName } from "./arrange.ts";
-import { genreStep, stepCharacter, type DropCue, type StepHit } from "./clock.ts";
+import { CueQueue, genreStep, stepCharacter, type DropCue, type LockCue, type OverprintCue, type PageCue, type SaleCue, type StepHit } from "./clock.ts";
 import { epochOf, eraOf, type GenreId } from "./eras.ts";
 import { HOUSE_PROGRAM, type Program } from "./program.ts";
 import type { SequencerState } from "./state.ts";
@@ -20,6 +20,14 @@ export interface ReleaseSwap {
   drop?: DropCue;
   /** Visual only. */
   flash?: { track: number; step: number; bass?: boolean; row?: boolean };
+  /**
+   * NFT stations (core nft.ts tags, as on a timeline point): a rated sale, a withdraw, a page sale, an overprint. They
+   * land as live playback lands them (CueQueue: the next 8th, downbeat or beat from the step the swap lands on).
+   */
+  sale?: SaleCue;
+  lock?: LockCue;
+  page?: PageCue;
+  overprint?: OverprintCue;
 }
 
 export interface ReleaseInput {
@@ -293,6 +301,8 @@ function planAt(
   let cursor = 0;
   let state = input.seed;
   let pending: DropCue | null = null;
+  // NFT cues only when a swap carries one: every other release's hits stay exactly as they were.
+  const cues = swaps.some((sw) => sw.sale || sw.lock || sw.page || sw.overprint) ? new CueQueue() : null;
   for (let g = 0; g < totalSteps; g++) {
     const bar = Math.floor(g / 16);
     const step = g % 16;
@@ -304,6 +314,12 @@ function planAt(
         const sw = swaps[cursor];
         state = sw.state;
         if (sw.drop) pending = sw.drop;
+        if (cues) {
+          if (sw.sale) cues.pushSale(sw.sale);
+          if (sw.lock) cues.pushLock(sw.lock);
+          if (sw.page) cues.pushPage(sw.page);
+          if (sw.overprint) cues.pushOverprint(sw.overprint);
+        }
         swapTimes[cursor] = grid;
         cursor += 1;
       }
@@ -333,6 +349,7 @@ function planAt(
       idle: null,
       drop,
       ...(trackDrop ? { trackDrop: true } : {}),
+      ...(cues ? cues.take(step) : {}),
       ...character,
     });
     grid += duration;

@@ -75,3 +75,23 @@ describe("release plan", () => {
     }
   });
 });
+
+describe("release NFT cues", () => {
+  it("a collection's cues land as live lands them; no cue, no change", () => {
+    const plain = planRelease(track(40), { minSeconds: 0 });
+    expect(plain.hits.some((h) => h.sale || h.lock || h.page || h.overprint)).toBe(false);
+    const t = track(40);
+    (t.swaps[3] as any).sale = { pct: 200, mask: 5 };
+    (t.swaps[7] as any).lock = { points: 1200 };
+    (t.swaps[9] as any).page = { rel: 140 };
+    const plan = planRelease(t, { minSeconds: 0 });
+    // One swap per bar: each lands on a downbeat, so every cue plays on that downbeat.
+    const at = (k: number) => plan.hits[(plan.introBars + k) * 16];
+    expect(at(3).sale).toEqual({ pct: 200, mask: 5 });
+    expect(at(7).lock).toEqual({ points: 1200 });
+    expect(at(9).page).toEqual({ rel: 140 });
+    expect(plan.hits.filter((h) => h.sale || h.lock || h.page).length).toBe(3);
+    // Everything else is the plain plan's.
+    expect(plan.hits.map((h) => [h.time, h.state])).toEqual(plain.hits.map((h) => [h.time, h.state]));
+  });
+});

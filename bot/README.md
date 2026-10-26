@@ -70,7 +70,9 @@ ssh root@138.201.92.157 'docker logs -f swarm-sequencer-bot'
 `TEASER_WINDOWS`, `TICK_MINUTES`, `VIDEO_SECONDS`; live: `HOOK_ADDRESS`, `HOOK_START_BLOCK`, `LIVE_RPC_URL`,
 `LIVE_CHAIN_ID` (4663), `HOOK_RULES` (`v1` default | `v2` at launch), `PULSE_TREASURY` (pulse labels only);
 track posts: `TRACK_POST` (`release` default | `clip`), `X_VIDEO_MAX_SECONDS` (140), `TRACK_LOOKBACK_BLOCKS`,
-`TRACK_LOOKBACK_STEPS`; render pages: `RENDER_SITE_DIR`, `RENDER_WEB_DIR` (set in the image, override only to test
+`TRACK_LOOKBACK_STEPS`; station track posts (docs/STATIONS.md "Station track posts"): `STATION_TRACKS` (registry
+keys, e.g. `imd-eth,credits`; `IMD_STATION=1` = `imd-eth`), `STATION_TRACKS_PER_DAY` (3), `STATION_TRACKS_GAP_HOURS`
+(2); render pages: `RENDER_SITE_DIR`, `RENDER_WEB_DIR` (set in the image, override only to test
 another build). Never put `PULSE_KEY` here.
 **Env (`pulse.env`, keeper).** `PULSE_TREASURY`, `LIVE_RPC_URL`, `LIVE_CHAIN_ID`, `PULSE_TICK_SEC`, `PULSE_SEND`
 (false), `PULSE_KEY` (only read when `PULSE_SEND=true`); fee harvest: `FEE_FACTORY`, `LAUNCH_NUMBER`, `HARVEST_HOURS`,

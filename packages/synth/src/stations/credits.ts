@@ -4,7 +4,8 @@ import type { StationPack } from "../pack.ts";
 // One cold chord held 16..32 bars: a low minor triad (the fifth under the root), the only movement a half step
 // (i -> bII, phrygian) or an added b6. No major chord, no maj7/9 colour. A straight groove (swing 0.5, closed offbeat
 // hats, a dry rim or none), a solid techno kick in front (a short pitch drop, a 1.5 kHz knock, the body at 45..55 Hz),
-// Void's sub tone on the root under it, ducked around every kick, a resonant stab under a dark lowpass that plays
+// Void's sub tone on the root under it, ducked around every kick and soft at the front (a 70 ms attack; the 16th
+// rolls a quieter 30 ms one) so a sub note never reads as a second kick in the kick's own register, a resonant stab under a dark lowpass that plays
 // rarely (`stabBars` rests it most bars) so the narrow echo (~450..1500 Hz, long tail) carries the space, a low drone
 // kept down, and the kick's rumble room under the kick, not over it.
 // Styles deep and hard in turn, each with its own groove (the sub's rhythm, `hats`, `claps`, `percs`): no two
@@ -49,7 +50,7 @@ export default {
             hat: { off: 0.38, decay: 0.04, hp: 8400, metal: 0.1, shaker: 0 },
             perc: { level: 0 },
           },
-          subTone: { level: 0.64, octave: 0.03, lp: 150, attack: 0.02, release: 0.2, drive: 1 },
+          subTone: { level: 0.64, octave: 0.03, lp: 150, attack: 0.07, release: 0.2, drive: 1 },
           stabTone: { wave: "sawtooth", detune: 5, lp: 460, env: 1.8, envTime: 0.2, q: 2.6, hp: 200, attack: 0.012, release: 0.4, gain: 0.75, pan: -0.08, move: 0.1, octave: 0 },
           padTone: { level: 0.9, wave: "sawtooth", detune: 7, octave: -12, lp: 280, attack: 6, release: 6 },
           bellTone: { level: 0.3, every: 8, ratio: 3.5, index: 0.6, decay: 1.4 },
@@ -101,7 +102,7 @@ export default {
             hat: { off: 0.55, decay: 0.03, hp: 9000, metal: 0.32, shaker: 0.14, shakerDecay: 0.02, shuffle: [0, 0, 0, 1] },
             perc: { level: 0 },
           },
-          subTone: { level: 0.66, octave: 0.05, lp: 180, attack: 0.005, release: 0.04, drive: 1.3 },
+          subTone: { level: 0.4, octave: 0.05, lp: 180, attack: 0.03, release: 0.04, drive: 1.3 },
           stabTone: { wave: "square", detune: 3, lp: 640, env: 2.4, envTime: 0.09, q: 3.4, hp: 260, attack: 0.003, release: 0.18, gain: 0.8, pan: 0.06, move: 0.4, octave: 0 },
           padTone: { level: 0 },
           bellTone: { level: 0 },
@@ -153,7 +154,7 @@ export default {
             hat: { off: 0.26, decay: 0.04, hp: 8600, metal: 0.08, shaker: 0 },
             perc: { level: 0 },
           },
-          subTone: { level: 0.64, octave: 0.03, lp: 150, attack: 0.02, release: 0.2, drive: 1 },
+          subTone: { level: 0.64, octave: 0.03, lp: 150, attack: 0.07, release: 0.2, drive: 1 },
           stabTone: { wave: "sawtooth", detune: 5, lp: 420, env: 1.8, envTime: 0.25, q: 2.8, hp: 200, attack: 0.015, release: 0.5, gain: 0.8, pan: -0.1, move: 0.1, octave: 0 },
           padTone: { level: 0.7, wave: "sawtooth", detune: 7, octave: -12, lp: 260, attack: 7, release: 6 },
           bellTone: { level: 0 },
@@ -206,7 +207,7 @@ export default {
             hat: { off: 0.4, decay: 0.035, hp: 8600, metal: 0.12, shaker: 0 },
             perc: { level: 0 },
           },
-          subTone: { level: 0.64, octave: 0.03, lp: 150, attack: 0.02, release: 0.2, drive: 1 },
+          subTone: { level: 0.64, octave: 0.03, lp: 150, attack: 0.07, release: 0.2, drive: 1 },
           stabTone: {
             wave: "sawtooth", detune: 7, lp: 620, env: 2.6, envTime: 0.13, q: 2.4, hp: 210, attack: 0.006, release: 0.34, gain: 0.7, pan: -0.06, move: 0.15, octave: 0,
             wave2: "pulse", width: 0.2, mix2: 0.8, octave2: 0, velLp: 0.85,
@@ -263,7 +264,7 @@ export default {
             hat: { off: 0.24, decay: 0.035, hp: 8800, metal: 0.08, shaker: 0.16, shakerDecay: 0.03, shuffle: [0.55, 0.8, 0.65, 1] },
             perc: { level: 0.25, decay: 0.2 },
           },
-          subTone: { level: 0.64, octave: 0.03, lp: 150, attack: 0.02, release: 0.2, drive: 1 },
+          subTone: { level: 0.64, octave: 0.03, lp: 150, attack: 0.07, release: 0.2, drive: 1 },
           stabTone: { wave: "sawtooth", detune: 5, lp: 420, env: 1.8, envTime: 0.25, q: 2.6, hp: 200, attack: 0.015, release: 0.5, gain: 0.7, pan: -0.1, move: 0.1, octave: 0 },
           padTone: { level: 0.8, wave: "sawtooth", detune: 7, octave: -12, lp: 300, attack: 7, release: 6, hp: 140 },
           bellTone: { level: 0 },
@@ -320,7 +321,7 @@ export default {
             hat: { off: 0.45, decay: 0.032, hp: 8800, metal: 0.15, shaker: 0 },
             perc: { level: 0.3, decay: 0.08 },
           },
-          subTone: { level: 0.64, octave: 0.03, lp: 150, attack: 0.02, release: 0.2, drive: 1 },
+          subTone: { level: 0.64, octave: 0.03, lp: 150, attack: 0.07, release: 0.2, drive: 1 },
           stabTone: { wave: "sawtooth", detune: 4, lp: 540, env: 2.2, envTime: 0.12, q: 3.2, hp: 230, attack: 0.006, release: 0.3, gain: 0.8, pan: 0.06, move: 0.3, octave: 0 },
           padTone: { level: 0.6, wave: "sawtooth", detune: 6, octave: -12, lp: 300, attack: 5, release: 5 },
           bellTone: { level: 0 },
@@ -374,7 +375,7 @@ export default {
             hat: { off: 0.4, decay: 0.035, hp: 8800, metal: 0.12, shaker: 0 },
             perc: { level: 0.28, decay: 0.1 },
           },
-          subTone: { level: 0.64, octave: 0.03, lp: 150, attack: 0.02, release: 0.2, drive: 1 },
+          subTone: { level: 0.64, octave: 0.03, lp: 150, attack: 0.07, release: 0.2, drive: 1 },
           stabTone: { wave: "sawtooth", detune: 5, lp: 520, env: 2.2, envTime: 0.12, q: 2.8, hp: 230, attack: 0.005, release: 0.22, gain: 0.85, pan: 0, move: 0.15, octave: 0 },
           padTone: { level: 0.55, wave: "sawtooth", detune: 6, octave: -12, lp: 300, attack: 6, release: 6, hp: 150 },
           bellTone: { level: 0 },
@@ -430,7 +431,7 @@ export default {
             hat: { off: 0.42, decay: 0.035, hp: 8800, metal: 0.12, shaker: 0 },
             perc: { level: 0 },
           },
-          subTone: { level: 0.64, octave: 0.03, lp: 150, attack: 0.008, release: 0.05, drive: 1 },
+          subTone: { level: 0.5, octave: 0.03, lp: 150, attack: 0.03, release: 0.05, drive: 1 },
           stabTone: { wave: "sawtooth", detune: 5, lp: 480, env: 2, envTime: 0.15, q: 3, hp: 220, attack: 0.008, release: 0.35, gain: 0.8, pan: 0.1, move: 0.2, octave: 0 },
           padTone: { level: 0 },
           bellTone: { level: 0 },
@@ -485,7 +486,7 @@ export default {
             hat: { off: 0.4, decay: 0.03, hp: 8800, metal: 0.2, shaker: 0 },
             perc: { level: 0 },
           },
-          subTone: { level: 0.64, octave: 0.03, lp: 150, attack: 0.02, release: 0.2, drive: 1 },
+          subTone: { level: 0.64, octave: 0.03, lp: 150, attack: 0.07, release: 0.2, drive: 1 },
           stabTone: {
             engine: "fm", wave: "sine", detune: 3, lp: 1300, env: 1.6, envTime: 0.12, q: 1.2, hp: 200, attack: 0.003, release: 0.45, gain: 0.75,
             pan: -0.05, move: 0.2, octave: 0, velLp: 0.4,
@@ -546,7 +547,7 @@ export default {
             hat: { off: 0.36, decay: 0.035, hp: 8600, metal: 0.08, shaker: 0 },
             perc: { level: 0.28, decay: 0.07 },
           },
-          subTone: { level: 0.64, octave: 0.03, lp: 150, attack: 0.02, release: 0.2, drive: 1 },
+          subTone: { level: 0.64, octave: 0.03, lp: 150, attack: 0.07, release: 0.2, drive: 1 },
           stabTone: {
             engine: "pluck", wave: "sine", detune: 0, lp: 1600, env: 1.2, envTime: 0.1, q: 0.8, hp: 110, attack: 0.002, release: 1.2, gain: 0.8,
             pan: 0.06, move: 0.15, octave: 0, velLp: 0.3,
