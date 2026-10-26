@@ -145,7 +145,9 @@ describe("BALANCE withdraws", () => {
 
   it("the fingerprint names BALANCE only when the source has it", () => {
     expect(stationFingerprint(1, src, 1)).not.toBe(stationFingerprint(1, sales.j.source, 1));
-    expect(JSON.parse(stationFingerprint(1, sales.j.source, 1)).length).toBe(11);
+    // 11 fields, + "pages" (the fixture source has the Statements: page sales and overprints are inputs).
+    expect(JSON.parse(stationFingerprint(1, sales.j.source, 1))).toHaveLength(12);
+    expect(JSON.parse(stationFingerprint(1, { ...sales.j.source, statements: undefined }, 1))).toHaveLength(11);
     expect(stationFingerprint(1, { ...src, ratings: undefined }, 1)).toBe(stationFingerprint(1, src, 1));
   });
 });

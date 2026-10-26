@@ -8,7 +8,7 @@ import { Audio } from "./audio";
 import { startLive } from "./data/live";
 import { startVirtual } from "./data/virtual";
 import { startReplay } from "./data/replay";
-import { noteNftCues, type Feed } from "./data/types";
+import { inkCueOf, noteNftCues, type Feed } from "./data/types";
 import { chainOf, stationFor } from "./stations";
 
 type TapSink = (b64: string) => void;
@@ -45,6 +45,9 @@ const feed: Feed = {
       if (tc) audio.player!.noteTrackDrop(asSynth(tc.held));
       noteNftCues(audio.player!, e);
     }
+  },
+  onOrnament(o, backfill) {
+    if (!backfill && audio.running) audio.player!.noteInk(inkCueOf(o));
   },
   onState(s) {
     if (s.swapCount >= state.swapCount) state = s;

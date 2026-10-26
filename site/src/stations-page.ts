@@ -1,4 +1,4 @@
-// stations.html: every station on air (stations/registry.json), house stations first, then Station+ (status.json).
+// stations.html: every station on air (stations/registry.json), house stations first, then gifts, then Station+ (status.json).
 // Each card is a small LCD in the station's own colours with what it plays now. No audio here: LISTEN opens the player
 // on that station, so only one station plays at a time.
 import "./style.css";
@@ -10,7 +10,7 @@ import { NETWORKS } from "./config";
 import { startVirtual } from "./data/virtual";
 import { decodeSlots, RULES, toSynth } from "./rules";
 import { WaveSky, type SkyAudio } from "./sky";
-import { API_BASE, APPLY_OPEN, applyTheme, chainOf, isPlus, loadStatus, onAir, playerHref, rpcUrlsOf, STATIONS, type Station } from "./stations";
+import { API_BASE, APPLY_OPEN, applyTheme, chainOf, isPlus, loadStatus, onAir, playerHref, rpcUrlsOf, stationName, STATIONS, type Station } from "./stations";
 import { mountApply } from "./stations-apply";
 
 const HOOK_POLL_MS = 15_000;
@@ -18,6 +18,8 @@ const raw = parseAbi(["function raw() view returns (uint256 slot0, uint256 slot1
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
 interface Card {
+  /** "SALES" for a collection, "SWAPS" for a pool. */
+  unit: string;
   /** What this station plays (its registry program): names the genre · style on the card. */
   program: Program;
   el: HTMLElement;
@@ -37,19 +39,19 @@ function card(s: Station, i: number, plus: boolean): Card {
   el.innerHTML = `
     <div class="st-top"><span class="silk">STATION ${String(i + 1).padStart(2, "0")}${s.house ? " · HOUSE" : plus ? " · STATION+" : ""}</span><span class="led"></span></div>
     <div class="st-lcd">
-      <div class="st-name">$${esc(s.ticker)}</div>
+      <div class="st-name">${esc(stationName(s))}</div>
       <div class="st-cells" aria-hidden="true">${"<i></i>".repeat(64)}</div>
       <div class="st-now">TUNING…</div>
       <div class="st-meta">&nbsp;</div>
     </div>
     <dl>
       <dt>CHAIN</dt><dd>${esc(chain.name)}</dd>
-      <dt>TOKEN</dt><dd><a href="${chain.explorer}/token/${s.token}" target="_blank" rel="noopener">$${esc(s.ticker)} ↗</a></dd>
-      <dt>POOL</dt><dd>${esc(pool)}</dd>
+      <dt>${s.kind === "nft" ? "COLLECTION" : "TOKEN"}</dt><dd><a href="${chain.explorer}/token/${s.token}" target="_blank" rel="noopener">${esc(stationName(s))} ↗</a></dd>
+      <dt>${s.kind === "nft" ? "MARKET" : "POOL"}</dt><dd>${esc(pool)}</dd>
     </dl>
     <div class="st-foot"><span class="st-air"><span class="dot" aria-hidden="true"></span>ON AIR</span><a class="btn-sq" href="${playerHref(s)}">LISTEN ▸</a></div>`;
   const q = (sel: string) => el.querySelector<HTMLElement>(sel)!;
-  return { el, program: programFor(s.program), now: q(".st-now"), meta: q(".st-meta"), cells: [...el.querySelectorAll<HTMLElement>(".st-cells i")], dot: q(".dot") };
+  return { el, unit: s.kind === "nft" ? "SALES" : "SWAPS", program: programFor(s.program), now: q(".st-now"), meta: q(".st-meta"), cells: [...el.querySelectorAll<HTMLElement>(".st-cells i")], dot: q(".dot") };
 }
 
 /** Genre · style the player picks for this state (the station's program), the track in progress and the pattern. */
@@ -57,7 +59,7 @@ function show(c: Card, s: State) {
   const epoch = epochOf(s);
   const era = eraOf(epoch, c.program);
   c.now.textContent = `${era.name} · ${styleOf(era, epoch, c.program).style.name}`.toUpperCase();
-  c.meta.textContent = `TRACK #${(s.trackNo ?? 0) + 1} · ${s.swapCount} SWAPS`;
+  c.meta.textContent = `TRACK #${(s.trackNo ?? 0) + 1} · ${s.swapCount} ${c.unit}`;
   // 4 x 16 cells, track by track (kick, snare, hat, glitch): the raw pattern bits (the player grid's dots, not its
   // arranged bar), so no bar clock is needed here.
   c.cells.forEach((cell, k) => cell.classList.toggle("on", isOn(s.pattern, k >> 4, k & 15)));
@@ -103,13 +105,13 @@ function tuneVirtual(c: Card, s: Station) {
   let state: State | null = null;
   let live = false;
   let n = 0;
-  c.meta.textContent = "REPLAYING THE POOL…";
+  c.meta.textContent = c.unit === "SALES" ? "REPLAYING THE SALES…" : "REPLAYING THE POOL…";
   startVirtual(net, {
     onSwap(e) {
       state = e.state;
       n++;
       if (live) show(c, state);
-      else if (n % 20 === 0) c.meta.textContent = `${n} SWAPS REPLAYED…`;
+      else if (n % 20 === 0) c.meta.textContent = `${n} ${c.unit} REPLAYED…`;
     },
     onState(st) {
       if (live || n === 0) state = st;
@@ -131,7 +133,7 @@ function tuneVirtual(c: Card, s: Station) {
 const status = await loadStatus();
 const stations = onAir(status);
 const grid = document.getElementById("st-grid")!;
-document.getElementById("st-count")!.textContent = `${stations.length} station${stations.length === 1 ? "" : "s"} · house first, then station+`;
+document.getElementById("st-count")!.textContent = `${stations.length} station${stations.length === 1 ? "" : "s"} · house first`;
 if (APPLY_OPEN) mountApply(document.getElementById("st-apply-form")!, STATIONS.filter((s) => !s.house && !s.gift && s.kind !== "hook"), status);
 const seen = new IntersectionObserver((entries) => {
   for (const e of entries) {

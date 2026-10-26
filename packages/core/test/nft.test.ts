@@ -151,10 +151,13 @@ describe("decodeNftLogs on real Credits sales", () => {
 });
 
 describe("NFT source plumbing", () => {
-  it("filters: Transfers by collection, the ecosystem by its events, Seaport by OrderFulfilled", () => {
-    expect(nftTransferFilter(src)).toEqual({ address: src.collection, topics: ["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"] });
+  it("filters: Transfers by collection (and the Statements' pages), the ecosystem by its events, Seaport by OrderFulfilled", () => {
+    expect(nftTransferFilter(src)).toEqual({ address: [src.collection, src.statements], topics: ["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"] });
+    expect(nftTransferFilter({ ...src, statements: undefined })).toEqual({ address: src.collection, topics: ["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"] });
     expect(nftEcoFilter(src)!.address).toEqual([src.strategy, src.core, src.statements]);
-    expect(nftEcoFilter(src)!.topics[0]).toHaveLength(6);
+    // strategy 2, Core 3 + StatementSoldTo, Statements Composed + Overprinted.
+    expect(nftEcoFilter(src)!.topics[0]).toHaveLength(8);
+    expect(nftEcoFilter({ ...src, statements: undefined })!.topics[0]).toHaveLength(5);
     expect(nftEcoFilter({ ...src, strategy: undefined, core: undefined, statements: undefined })).toBeNull();
     expect(nftSeaportFilter(src)).toEqual({ address: src.seaport![0], topics: ["0x9d9af8e38d66c62e2c12f0225249fd9d721c54b83f48d9352c97c6cacdcb6f31"] });
   });
@@ -171,8 +174,8 @@ describe("NFT source plumbing", () => {
   it("readNftLogs: Transfers and the ecosystem over the range, Seaport only at the sale blocks", async () => {
     const asked: string[] = [];
     const got = await readNftLogs(src, 26247700n, 26247900n, async (f, from, to) => {
-      asked.push(`${Array.isArray(f.address) ? "eco" : f.address === src.collection ? "transfers" : "seaport"} ${from}-${to}`);
-      return logs.filter((l) => l.blockNumber >= from && l.blockNumber <= to && (f.topics[0] as string[]).concat(f.topics[0] as string).includes(l.topics[0]!) && [f.address].flat().map((a) => a.toLowerCase()).includes(l.address!.toLowerCase()));
+      asked.push(`${f.topics[0] === NFT_TOPICS.Transfer ? "transfers" : Array.isArray(f.address) ? "eco" : "seaport"} ${from}-${to}`);
+      return logs.filter((l) => l.blockNumber >= from && l.blockNumber <= to && ([] as string[]).concat(f.topics[0] as string).includes(l.topics[0]!) && [f.address].flat().map((a) => a.toLowerCase()).includes(l.address!.toLowerCase()));
     });
     expect(asked.slice(0, 2).sort()).toEqual(["eco 26247700-26247900", "transfers 26247700-26247900"]);
     expect(asked.slice(2).sort()).toEqual(["seaport 26247721-26247721", "seaport 26247763-26247763", "seaport 26247844-26247844"]);

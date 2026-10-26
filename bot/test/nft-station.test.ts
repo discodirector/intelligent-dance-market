@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import type { PublicClient } from "viem";
 import { describe, expect, it } from "vitest";
-import { checkpointProblem, stationFingerprint, type NftSource } from "@swarm-sequencer/core";
+import { checkpointProblem, NFT_TOPICS, stationFingerprint, type NftSource } from "@swarm-sequencer/core";
 import { registryProblems } from "../../stations/validate.mjs";
 import { svgOfTokenUri } from "../../site/src/tokenuri.ts";
 import { firstPaidUntil } from "../src/stations/onboard.ts";
@@ -34,7 +34,8 @@ function fakeClient(calls: string[], logs: any[] = rpcLogs): PublicClient {
       const addrs = [f.address].flat().map((a) => a.toLowerCase());
       const t0 = [f.topics[0]].flat();
       const t1 = f.topics[1] ? [f.topics[1]].flat() : null;
-      calls.push(`${addrs.length > 1 ? "eco" : addrs[0].slice(0, 8)} ${Number(f.fromBlock)}-${Number(f.toBlock)}`);
+      const transfers = t0.length === 1 && t0[0] === NFT_TOPICS.Transfer;
+      calls.push(`${transfers ? "transfers" : addrs.length > 1 ? "eco" : addrs[0].slice(0, 8)} ${Number(f.fromBlock)}-${Number(f.toBlock)}`);
       return logs.filter((l: any) => addrs.includes(l.address.toLowerCase()) && t0.includes(l.topics[0]) && (!t1 || t1.includes(l.topics[1])) && BigInt(l.blockNumber) >= BigInt(f.fromBlock) && BigInt(l.blockNumber) <= BigInt(f.toBlock));
     },
   } as unknown as PublicClient;
@@ -48,7 +49,7 @@ describe("the Credits registry entry", () => {
     expect(src).toEqual({ kind: "nft", collection: entry.token, ...entry.nft, weth: reg.chains["1"].weth });
     expect(src.itemSupply).toBe(77114);
     expect(JSON.parse(stationFingerprint(1, src, entry.genesisBlock))[1]).toBe("nft");
-    expect(entry.status).toBe("pending");
+    expect(entry.status).toBe("live");
     expect(entry.gift).toBe(true);
     expect(entry.paidUntil).toBeUndefined();
   });
@@ -87,8 +88,8 @@ describe("the Credits station in the bot cache", () => {
     expect(swaps.length).toBe(19);
     expect(swaps.filter((s) => s.nft!.via === "compose").length).toBe(2);
     expect(swaps.every((s) => s.timestamp > 1_790_000_000 && s.poolId === undefined)).toBe(true);
-    // Transfers and the ecosystem once over the range, then Seaport at the sale blocks only.
-    expect(calls.filter((c) => c.startsWith("0x97630a")).length).toBe(1);
+    // Transfers (Credits and Statements) and the ecosystem once over the range, then Seaport at the sale blocks only.
+    expect(calls.filter((c) => c.startsWith("transfers")).length).toBe(1);
     expect(calls.filter((c) => c.startsWith("eco")).length).toBe(1);
     // BALANCE's releases (InkMoved from BALANCE): one more request over the range.
     expect(calls.filter((c) => c.startsWith("0x362054")).length).toBe(1);
@@ -142,6 +143,42 @@ describe("BALANCE withdraws in the bot cache", () => {
   });
 });
 
+describe("Statement sales, overprints and the BALANCE pool in the bot cache", () => {
+  // Real logs (core test fixture credits-eco.json): Statement #211 sold to a bid, page #123's seventh overprint, the
+  // pages' history, seven BALANCE pool swaps.
+  const eco = JSON.parse(readFileSync(new URL("../../packages/core/test/fixtures/nft/credits-eco.json", import.meta.url), "utf8"));
+  // One chain: each log once (the page history repeats the overprint's own log).
+  const seen = new Set<string>();
+  const all = toRpc([...eco.sale.logs, ...eco.sale.pages, ...eco.overprint7.logs, ...eco.overprint7.pages, ...eco.swaps.logs].filter((l: any) => !seen.has(`${l.transactionHash}:${l.logIndex}`) && !!seen.add(`${l.transactionHash}:${l.logIndex}`)));
+  const st = { ...stationFromEntry(entry, reg), genesisBlock: 26_115_800n };
+
+  it("the registry's page history start and pool reach the source", () => {
+    const src = st.source as NftSource;
+    expect(src.statementsFrom).toBe(26_100_993);
+    expect(src.balancePool).toEqual({ poolManager: "0x000000000004444c5dc75cB358380D2e3dE08A90", poolId: "0xd262227cd6ad883b3d85c5138f017f90aaac0ff3ce69136c36a7280dbd009a03" });
+  });
+
+  it("a page sale and an overprint are entries with their tags; the pool's swaps are never read (ornaments are the site's)", async () => {
+    const calls: string[] = [];
+    const carry = { lastPrice: null, recent: [] as string[] };
+    const swaps = await readStationSwaps(st, st.genesisBlock, 26_271_700n, [fakeClient(calls, all)], carry);
+    // Page #211's own compose (26188579) is in the range too: a whale before its sale.
+    expect(swaps.map((s) => [s.nft!.via, s.nft!.id, s.nft!.overprints])).toEqual([["overprint", "123", 7], ["compose", "211", undefined], ["statement-bid", "211", 0]]);
+    expect(swaps[2].nft!.points).toBeGreaterThan(14_940);
+    expect(calls.some((c) => c.startsWith("0x000000000004"))).toBe(false);
+    // The pages' history: one request from the Statements' first block (not chunked by the chain's logChunk).
+    expect(calls.filter((c) => c.startsWith("0x75edd9") && c.startsWith(`0x75edd9 ${26_100_993}-`)).length).toBeGreaterThanOrEqual(1);
+    expect(carry).toMatchObject({ pages: ["502000000000000000"] });
+    const c = emptyCache(st);
+    c.nft = carry;
+    extendCache(c, swaps, 26_271_700);
+    const cp = JSON.parse(JSON.stringify(checkpointOf(st, c)));
+    expect(cp.nft.pages).toEqual(["502000000000000000"]);
+    expect(cp.recent.map((r: any) => r.nft.via)).toEqual(["overprint", "compose", "statement-bid"]);
+    expect(checkpointProblem(cp, { key: "credits", fingerprint: stationFingerprint(1, st.source, st.genesisBlock), genesisBlock: Number(st.genesisBlock), nft: true })).toBeNull();
+  });
+});
+
 describe("the NFT screen's art (site tokenuri.ts): only a data:image/svg+xml image is taken from a tokenURI", () => {
   const b64 = (s: string) => Buffer.from(s).toString("base64");
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" shape-rendering="crispEdges"><rect width="320" height="320" fill="#ffffff"/><rect x="080" y="080" width="020" height="020" fill="#e4007c"/></svg>`;
@@ -158,7 +195,7 @@ describe("the NFT screen's art (site tokenuri.ts): only a data:image/svg+xml ima
       expect(svgOfTokenUri(uri({ image })), String(image)).toBeNull();
     expect(svgOfTokenUri("ipfs://Qm")).toBeNull();
     expect(svgOfTokenUri("data:application/json;base64,!!!")).toBeNull();
-    expect(svgOfTokenUri(uri({ image: `data:image/svg+xml;base64,${"A".repeat(100_000)}` }))).toBeNull();
+    expect(svgOfTokenUri(uri({ image: `data:image/svg+xml;base64,${"A".repeat(520_000)}` }))).toBeNull();
   });
 });
 

@@ -237,7 +237,8 @@ stays as it is, its history frozen.
 
 ```
 "nft": { "itemSupply": 77114, "refPrice": "0.01", "seaport": ["0x…68F1…B395"], "strategy": "0x8e60…53d6",
-         "core": "0xcdb1…e0dD", "statements": "0x75Ed…069b", "balance": "0x3620…eA07", "ratings": "credits" }
+         "core": "0xcdb1…e0dD", "statements": "0x75Ed…069b", "balance": "0x3620…eA07", "ratings": "credits",
+         "statementsFrom": 26100993, "balancePool": { "poolManager": "0x0000…8A90", "poolId": "0xd262…9a03" } }
 ```
 
 - **One input per item sold.** Every collection Transfer (not a mint or a burn) is matched to a venue event of the same
@@ -270,7 +271,7 @@ stays as it is, its history frozen.
   5); a live poll: 2-3 requests. The bot's checkpoint makes the first replay short.
 - **Player**: feed lines "BUY Credit #1234 · 0.0092 ETH · OpenSea", "COMPOSE · 80 Credits → page #563"; the NFT screen
   (`site/src/nftscreen.ts`) shows the item's on-chain SVG (tokenURI -> data:image/svg+xml only, as an `<img>`, cached,
-  2 fetches at a time) on the next beat, and walks the last few items when idle. Optional skin in the theme (`panel`,
+  2 fetches at a time) on the next beat; with no new sale the last one stays on the glass. Optional skin in the theme (`panel`,
   `sell`, `whale`), player page only.
 
 #### Credit rating and plates (`nft.ratings`, owner-approved 2026-10-26)
@@ -325,6 +326,79 @@ day, so the read names BALANCE as the sender: one more request per range, `nftIn
 - Cues reach every scheduler the same way (`TimelinePoint.sale / lock`, `LivePlayer.noteSale / noteLock`, the bot
   render page); no other station emits them, so the house (FROZEN_SHA256) and every pack schedule exactly as before
   (`engine-trace.ts --packs infer,credits-dubhouse,credits` IDENTICAL; `--cues` shows what they add).
+
+#### Statement sales, overprints, BALANCE swaps (`nft.statementsFrom`, `nft.balancePool`)
+
+```
+"statementsFrom": 26100993,
+"balancePool": { "poolManager": "0x0000…4444…8A90", "poolId": "0xd262…9a03" }
+```
+
+- **Statement sales** (a page changing hands): the Statements' Transfers are read with the Credits' (one request, both
+  addresses) and matched like a Credit's: Seaport `OrderFulfilled` with a page in it (`statement-listing` BUY /
+  `statement-bid` SELL, `seaportClaims` takes the set of collections; an order with tracked items on both sides is a
+  swap: none) or Core `StatementSoldTo(sid, buyer, price, …)` (`core-statement`, Core selling a page it holds, BUY).
+  Not sales: a page sent to Core or to BALANCE (a lock: BALANCE's `Withdrawn` tells it), a mint or burn, a move no venue
+  prices (a gift, OpenSea's TransferHelper). Tag `kind: "statement"`, `rel` and, from the page history, `overprints`
+  and `points`. **Size**: (price / 80) against the Credits median, the item formula, but never under a kick
+  (`NFT_PAGE_FLOOR` = 3 x 0.0125 ETH, over the 2^(25/16) kick tier) and never a whale (capped under half the whale line):
+  a page is 80 Credits that already traded, the harmony moves on a compose, not on a resale. Measured against the
+  Credits rather than its own median because pages trade a few times a week (1 sale in the first 2.4 days): their own
+  median would take weeks to mean anything, while 80 x the Credits median is a fair price from the first sale. The
+  page price also enters its own window (`NFT_PAGE_WINDOW` 31, carry `pages`, written only once a page has sold, so
+  old JSON reads and writes as before): `rel` = price / that window's median in percent (80 x the Credits median while
+  it is empty), what the sound reads. The Credits' window and last price are untouched.
+- **Overprints** (`Statements.Overprinted(baseId, topId, by)`, read with the ecosystem events): one BUY of the usual size
+  (like a withdraw), tag `{ via: "overprint", id: base, top, overprints, points }`. BALANCE's `overprintWithdrawn` emits
+  its own `WithdrawnOverprinted` beside it: not read, one input.
+- **Points and counts, deterministic**: `creditScoreOf` / `overprintsOf` change with every overprint, so the decoder
+  never calls them. `readNftPageLogs` reads, for every page that may have sold in the batch (moved in a tx with a
+  Seaport fill or a Core event) and both pages of every overprint, the page's `Composed` (its 80 Credit ids) and the
+  `Overprinted` events onto it, from `statementsFrom` (the first compose) to the batch's end, one request per round
+  (topic1 = the ids), then the same for the pages those overprints burned until none is new. The count at a point of
+  the chain is the contract's rule (base += 1 + the top's own) over the events before it; the points are the rating
+  table's scores of every Credit in those pages (truncated tenths summed: up to ~1 point under per 10 Credits; #211:
+  14,949 vs creditScoreOf 14,952.9; #123: 7 overprints, 264,3xx vs 264,387.8). Tags only, like the rating: inputs,
+  state and checkpoints are the same with or without them. 32 overprints happened before the station's genesis (none
+  in its first 2.4 days), which is why the history is read from the Statements' start, not counted in the carry.
+- **BALANCE swaps** (`balancePool`, the official BALANCE/ETH pool: Initialize at block 26241566 names native ETH and
+  BALANCE, fee 3000, tick spacing 30, hook 0x2eef…a000; clone pools are other ids): the PoolManager's `Swap` with topic1
+  = poolId, and the `InkMoved` out of the PoolManager (a buy: same request as the withdraw releases, topic1 = [BALANCE,
+  PoolManager]) and into it (a sell: one more request, topic2 = PoolManager). `decodeNftLogs` returns them apart as
+  `ornaments` (block, log index order; amount, ETH, the ink of the tx's InkMoved nearest the Swap, `plate`): **never
+  rules inputs**, never in the carry, the bot cache or the checkpoint. The plate is the ink's leading plate only when
+  it leads the next by 2 points (`NFT_INK_LEAD`): BALANCE's ink mixes as it trades, and 99% of the pool's swaps over
+  the first 2.4 days moved ink within a point of [24, 24, 25, 26] (an argmax would say K every time); a mixed ink has
+  no plate. The bot never reads the pool (`readNftLogs(…, { ornaments: false })`): ornaments are the site's.
+- **Sound** (dub techno only, `clock.ts CueQueue`, `engine.ts`): a **page sale** (`creditPage`, next beat) is the
+  bar's whole chord with its bottom tone doubled an octave down, one stab bigger and longer than a plate stab (level
+  0.8..1.3 of the stab gain, about twice a plate stab, release ~3x the stab's plus a quarter bar or more), half of it into the echo, a soft sub
+  on the root; `rel` opens it (level, cutoff, tail: 50% of the median shut, 200% wide open). An **overprint**
+  (`creditOverprint`, next beat): a double strike, the chord twice a 16th apart (a little left, then right: the
+  misregistered second pass), the second thrown long into the echo; from the 7th overprint (`INVERTED_AT`, black
+  paper) both strikes drop an octave, the lowpass closes to 0.45x the stab's and a sub holds the root. A **swap**
+  (`creditInk`): a quiet ornament, one chord tone (a buy the top, a sell the bottom) an octave over the stabs, a short
+  sine ping into the echo bus; plate C pans left, M right, Y lifts it an octave (a triangle), K drops it two octaves;
+  the ETH it moved (`inkSize`, < 0.02 · < 0.1 · < 0.5 · more) nudges the level. Cap: ornaments land only on the
+  off-16ths (never where a sale's 8th or a beat cue lands), at most one an 8th; at most 8 wait (a bar's worth: a
+  burst drops its oldest) and one waiting over a bar is let go (`CueQueue.dropped`, `planSteps(…, inks, stats)`).
+- **Feed and screen**: "SELL page #211 · 0.5020 ETH · OpenSea · 14,949 PTS"; "OVERPRINT · page #117 → #123 · 7
+  OVERPRINTS · 264,3xx PTS"; a swap is one muted LAST SWAP line ("12:04 BALANCE BUY 1,234 · C", the plate only when
+  there is one), never a log line, never a step, never the NFT screen. The NFT screen shows a sold page's art
+  (Statements tokenURI, utf8 JSON) with "PAGE #211 · 14,949", an overprint the base page after it with "OVERPRINT
+  #123 ← #117" (read afresh: the overprint changed the art).
+- **Fingerprint**: a source with the Statements adds `"pages"` (page sales and overprints are inputs: another stream
+  than before them); `statementsFrom` and `balancePool` only tag and ornament and are not in it.
+- **Load** (the station's first 2.4 days, genesis 26255150 -> 26272292: 1,855 Credit sales, 1 Statement sale, 2
+  withdraws, 0 overprints, 9,073 pool swaps): the bot's replay is 549 getLogs (the one page lookup included) + 1
+  blockNumber, ~61 s, the pool never read; the site's full replay with ornaments is 860 getLogs in 173 HTTP batches,
+  ~100 s, the extra ~310 being the pool's launch day (8,556 swaps that day, mostly 20-a-block micro buys of ~5e-6 ETH:
+  ranges halved under Tenderly's 20k results and viem's 10 MB response limit, which the site's getLogs now also
+  halves on). A live poll with a checkpoint: 2 more requests a poll. The cap over the window (every swap pushed at its
+  block, a 124 BPM 16th): 8,645 ornaments played, 428 dropped, 427 of them on the launch day, 1 since.
+- **"how" section** (`site/src/how.ts`): an nft station replaces the house text of `#how` (the pitch and the
+  `cat spec/…` table) with its own: Credits a dedicated text and table, any other collection a generic one. The house
+  page is untouched.
 
 ### Gift stations
 

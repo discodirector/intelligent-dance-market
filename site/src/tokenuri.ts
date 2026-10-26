@@ -1,7 +1,7 @@
 // An NFT's on-chain art for the NFT screen (nftscreen.ts), from its tokenURI. No imports: the bot's tests run it too.
 
-/** Larger is not an on-chain SVG token (Credits: ~5-7.5 KB): refused. */
-const MAX_URI = 96_000;
+/** Larger is not an on-chain SVG token (Credits: ~5-7.5 KB; a Statement page ~70 KB, ~195 KB after seven overprints): refused. */
+const MAX_URI = 512_000;
 
 /**
  * The image of a tokenURI: a data:image/svg+xml URL, or null. Only a data:application/json URI is read, and only an

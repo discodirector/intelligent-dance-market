@@ -1,4 +1,4 @@
-import type { StepHit } from "./clock.ts";
+import { INVERTED_AT, type StepHit } from "./clock.ts";
 import { eraById, eraByIndex, epochOf, genreKey, type Era, type GenreId } from "./eras.ts";
 import { HOUSE_PROGRAM, type Program } from "./program.ts";
 import { styleOf, type GenreStyle } from "./styles.ts";
@@ -1094,7 +1094,7 @@ export class VoiceEngine {
     }
     const played = ornament != null && primary && this.ornament(c, ornament);
     // NFT station cues (clock.ts SaleCue / LockCue): no other station has them, so nothing more is scheduled there.
-    if (primary && (hit.sale || hit.lock)) this.creditCues(c);
+    if (primary && (hit.sale || hit.lock || hit.page || hit.overprint || hit.ink)) this.creditCues(c);
     if (c.step === 0) {
       const bed = hit.idle?.drone ?? 0;
       if (bed > 0.01) this.droneTone(c, bed);
@@ -7588,6 +7588,127 @@ export class VoiceEngine {
     if (this.era.id !== "dubtechno") return;
     if (c.hit.lock) this.creditLock(c, c.hit.lock);
     if (c.hit.sale) this.creditSale(c, c.hit.sale);
+    if (c.hit.page) this.creditPage(c, c.hit.page);
+    if (c.hit.overprint) this.creditOverprint(c, c.hit.overprint);
+    if (c.hit.ink) this.creditInk(c, c.hit.ink);
+  }
+
+  /**
+   * The Statements cues' chord: every tone of `semis` over `base`, two detuned voices each (the stab's wave and
+   * detune), through one lowpass with the stab's envelope, to the dry bus and/or the echo (`echo`: send level).
+   */
+  private creditChord(
+    t: number,
+    semis: readonly number[],
+    base: number,
+    o: { wave: OscillatorType; detune: number; level: number; cutoff: number; env: number; envTime: number; q: number; attack: number; release: number; pan: number; dry: MixChain | null; echo: number },
+  ) {
+    const f = this.ctx.createBiquadFilter();
+    f.type = "lowpass";
+    f.Q.value = o.q;
+    f.frequency.setValueAtTime(o.cutoff * o.env, t);
+    f.frequency.exponentialRampToValueAtTime(o.cutoff, t + o.envTime);
+    const amp = this.ctx.createGain();
+    pulse(amp.gain, t, o.attack, o.level, o.release);
+    f.connect(amp);
+    const rest: AudioNode[] = [f, amp];
+    if (o.dry) {
+      const out = this.panNode(o.pan, o.dry);
+      out.add(amp);
+      rest.push(out.dest);
+    }
+    if (o.echo > 0) {
+      const send = this.ctx.createGain();
+      send.gain.value = o.echo;
+      amp.connect(send);
+      const wet = this.panNode(o.pan, this.sends.echoSum);
+      wet.add(send);
+      rest.push(send, wet.dest);
+    }
+    let chain: AudioNode | null = null;
+    const oscs: OscillatorNode[] = [];
+    for (const semi of semis) {
+      for (const cents of [-o.detune, o.detune]) {
+        const osc = this.ctx.createOscillator();
+        osc.type = o.wave;
+        osc.frequency.setValueAtTime(midiToFreq(base + semi), t);
+        osc.detune.setValueAtTime(cents, t);
+        const g = this.ctx.createGain();
+        g.gain.value = 0.3;
+        osc.connect(g);
+        rest.push(g);
+        chain = this.pairSum(chain, g, rest);
+        oscs.push(osc);
+      }
+    }
+    chain!.connect(f);
+    for (const osc of oscs) osc.start(t);
+    oscs.forEach((osc, i) => this.end(osc, i === 0 ? rest : [], t + o.attack + o.release + 0.05));
+  }
+
+  /**
+   * A Statement sold (a page changing hands): the bar's whole chord, its bottom tone doubled an octave down, as one
+   * stab bigger and longer than a Credit's plate stab, half of it into the echo, a soft sub on the root under it. The
+   * price against the recent page median (`rel`, 100 = the median) opens it: level, cutoff and tail grow with it.
+   */
+  private creditPage(c: Ctx, cue: { rel: number; points?: number }) {
+    const d = this.dubStyle(c);
+    const s = d.stab;
+    const u = clamp(0.5 + Math.log2(Math.max(1, cue.rel) / 100) / 2, 0, 1);
+    const chord = this.dubChordAt(c, d);
+    const bar = c.dur * 16;
+    const semis = [chord.upper[0] - 12, ...chord.upper];
+    this.creditChord(c.t, semis, this.dubBase(c) + s.octave, {
+      wave: s.wave, detune: s.detune, q: s.q, env: s.env, envTime: s.envTime * 1.5, attack: s.attack,
+      level: s.gain * (0.8 + 0.5 * u) * c.vel,
+      cutoff: clamp(s.lp * (0.9 + 1.4 * u) * (1 + 0.3 * c.heat), 250, 9000),
+      release: clamp(s.release * 3 + bar * 0.25 * (0.5 + u), 0.6, 4),
+      pan: 0, dry: this.busIn.harm, echo: 0.45,
+    });
+    this.toneHit(c.t, (0.13 + 0.08 * u) * c.vel, { type: "sine", freq: midiToFreq(this.dubBassRoot(c, chord)), decay: bar * 0.6, attack: 0.015, pan: 0, bus: this.busIn.bass });
+  }
+
+  /**
+   * An overprint: a double strike, the bar's whole chord twice a 16th apart (a little left, then a little right: the
+   * misregistered second pass), the second thrown long into the echo. From the INVERTED_AT-th overprint on the page is
+   * black paper: the strikes drop an octave, the lowpass closes and a sub holds the root under them.
+   */
+  private creditOverprint(c: Ctx, cue: { count?: number }) {
+    const d = this.dubStyle(c);
+    const s = d.stab;
+    const black = (cue.count ?? 0) >= INVERTED_AT;
+    const chord = this.dubChordAt(c, d);
+    const base = this.dubBase(c) + s.octave + (black ? -12 : 0);
+    const cutoff = clamp(s.lp * (black ? 0.45 : 1.3), 200, 7000);
+    const strikes = [
+      { at: 0, level: 0.75, pan: -0.25, echo: 0.3, release: s.release * 1.2 },
+      { at: c.dur, level: 0.62, pan: 0.25, echo: 0.95, release: s.release * 2.2 },
+    ];
+    for (const k of strikes) {
+      this.creditChord(c.t + k.at, chord.upper, base, {
+        wave: s.wave, detune: s.detune, q: s.q, env: black ? 1.2 : s.env, envTime: s.envTime, attack: s.attack,
+        level: s.gain * k.level * c.vel, cutoff, release: k.release, pan: k.pan, dry: this.busIn.harm, echo: k.echo,
+      });
+    }
+    if (black) this.toneHit(c.t, 0.14 * c.vel, { type: "sine", freq: midiToFreq(this.dubBassRoot(c, chord)), decay: c.dur * 16 * 0.75, attack: 0.01, pan: 0, bus: this.busIn.bass });
+  }
+
+  /**
+   * A swap in BALANCE's pool: a quiet ornament, one chord tone pinged into the echo (a buy the top tone, a sell the
+   * bottom one), an octave over the stabs. The ink's strongest plate colours it as on the plate stab: C pans left,
+   * M right, Y lifts it an octave (a brighter triangle), K drops it two octaves (longer, a little louder). The ETH it
+   * moved (size 0..3) nudges the level; it stays under the stabs.
+   */
+  private creditInk(c: Ctx, cue: { plate?: number; isBuy: boolean; size: number }) {
+    const d = this.dubStyle(c);
+    const up = this.dubChordAt(c, d).upper;
+    const plate = cue.plate;
+    let midi = this.dubBase(c) + 12 + (cue.isBuy ? up[up.length - 1] : up[0]);
+    if (plate === 2) midi += 12;
+    if (plate === 3) midi -= 24;
+    const pan = plate === 0 ? -0.6 : plate === 1 ? 0.6 : 0;
+    const level = (0.08 + 0.02 * clamp(cue.size, 0, 3)) * c.vel * (plate === 3 ? 1.3 : 1);
+    this.toneHit(c.t, level, { type: plate === 2 ? "triangle" : "sine", freq: midiToFreq(midi), decay: plate === 3 ? 0.35 : 0.18, attack: 0.003, pan, bus: this.busIn.fx });
   }
 
   /**

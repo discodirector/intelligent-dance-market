@@ -31,6 +31,10 @@ export interface StationNft {
   balance?: `0x${string}`;
   /** The offline rating table its sales are tagged with (core credittable.ts), loaded only by this station. */
   ratings?: "credits";
+  /** The Statements' first block: a sold or overprinted page's history is read from here (core readNftPageLogs). */
+  statementsFrom?: number;
+  /** BALANCE's official pool (Uniswap v4): its swaps are quiet ornaments, never notes of the groove (core nft.ts). */
+  balancePool?: { poolManager: `0x${string}`; poolId: `0x${string}` };
 }
 
 export interface Station {
@@ -148,12 +152,15 @@ export async function loadStatus(timeoutMs = 2500): Promise<StatusMap | null> {
 /** A station's status now: the runtime file's when it names the station, else the registry's. */
 export const statusOf = (s: Station, status: StatusMap | null): RuntimeStatus => status?.[s.key]?.status ?? s.status;
 
-/** Station+ now (status.json; without it, none): listed right after the house stations. */
+/** A station's name on screen: a token's cashtag ($IDM), a collection's own name (CREDITS: an NFT has no cashtag). */
+export const stationName = (s: Station): string => (s.kind === "nft" ? s.label : `$${s.ticker}`);
+
+/** Station+ now (status.json; without it, none): listed right after the house and gift stations. */
 export const isPlus = (s: Station, status: StatusMap | null): boolean => !s.house && status?.[s.key]?.plus === true;
 
-/** Stations on air: house stations first, then Station+, registry order otherwise; an expired subscription is off air. */
+/** Stations on air: house stations first, then gifts, then Station+, registry order otherwise; an expired subscription is off air. */
 export const onAir = (status: StatusMap | null = null): Station[] => {
-  const rank = (s: Station) => (s.house ? 0 : isPlus(s, status) ? 1 : 2);
+  const rank = (s: Station) => (s.house ? 0 : s.gift ? 1 : isPlus(s, status) ? 2 : 3);
   return STATIONS.filter((s) => s.status === "live" && statusOf(s, status) === "live").sort((a, b) => rank(a) - rank(b));
 };
 
@@ -222,7 +229,7 @@ export function stationNetwork(s: Station): Network {
       genesisBlock: s.genesisBlock,
       logChunk: chain.logChunk,
       token: s.token,
-      tokenSymbol: s.ticker,
+      tokenSymbol: s.kind === "nft" ? s.label : s.ticker,
       checkpoint: { url: `${CHECKPOINT_BASE}/${s.key}.checkpoint.json`, key: s.key, fingerprint: stationFingerprint(s.chainId, swapSourceOf(s), s.genesisBlock) },
     },
   };

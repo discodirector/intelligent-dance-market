@@ -65,7 +65,7 @@ const NFT_RATINGS = ["credits"];
 function nftProblems(n) {
   if (!n || typeof n !== "object" || Array.isArray(n)) return ["nft must be an object"];
   const out = [];
-  const { itemSupply, refPrice, seaport, strategy, core, statements, balance, ratings, ...rest } = n;
+  const { itemSupply, refPrice, seaport, strategy, core, statements, balance, ratings, statementsFrom, balancePool, ...rest } = n;
   for (const k of Object.keys(rest)) out.push(`nft.${k}: unknown field`);
   if (!Number.isSafeInteger(itemSupply) || itemSupply <= 0) out.push("nft.itemSupply must be a positive integer");
   if (typeof refPrice !== "string" || !DECIMAL.test(refPrice) || !/[1-9]/.test(refPrice)) out.push('nft.refPrice must be a positive decimal string (ETH), e.g. "0.01"');
@@ -73,6 +73,18 @@ function nftProblems(n) {
   for (const [k, v] of Object.entries({ strategy, core, statements, balance })) if (v !== undefined && !isHex(v, 20)) out.push(`nft.${k} must be an address`);
   if (ratings !== undefined && !NFT_RATINGS.includes(ratings)) out.push(`nft.ratings must be one of ${NFT_RATINGS.join(", ")}`);
   if (seaport === undefined && strategy === undefined && core === undefined) out.push("nft needs a venue: seaport, strategy or core");
+  if (statementsFrom !== undefined && (!Number.isSafeInteger(statementsFrom) || statementsFrom <= 0)) out.push("nft.statementsFrom must be a positive block number");
+  if (statementsFrom !== undefined && statements === undefined) out.push("nft.statementsFrom needs statements");
+  if (balancePool !== undefined) {
+    if (!balancePool || typeof balancePool !== "object" || Array.isArray(balancePool)) out.push("nft.balancePool must be an object { poolManager, poolId }");
+    else {
+      const { poolManager, poolId, ...more } = balancePool;
+      for (const k of Object.keys(more)) out.push(`nft.balancePool.${k}: unknown field`);
+      if (!isHex(poolManager, 20)) out.push("nft.balancePool.poolManager must be an address");
+      if (!isHex(poolId, 32)) out.push("nft.balancePool.poolId must be a bytes32 hex");
+      if (balance === undefined) out.push("nft.balancePool needs balance");
+    }
+  }
   return out;
 }
 

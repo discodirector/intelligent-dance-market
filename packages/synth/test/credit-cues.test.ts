@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { VoiceEngine } from "../src/engine.ts";
-import { CueQueue, eraById, initialState, PACKS, planSteps, programFromPack, SALE_QUEUE, type GenreId, type Program, type TimelinePoint } from "../src/index.ts";
+import { CueQueue, eraById, INK_PATIENCE, INK_QUEUE, inkSize, initialState, INVERTED_AT, PACKS, planSteps, programFromPack, SALE_QUEUE, type GenreId, type InkCue, type Program, type TimelinePoint } from "../src/index.ts";
 
 // NFT station cues (clock.ts SaleCue / LockCue; engine.ts creditSale / creditLock): a rated Credit sale and a BALANCE
 // withdraw. Off by default: a timeline without them plans and schedules exactly as before (engine-trace --packs
@@ -124,5 +124,97 @@ describe("NFT cues: what the engine plays", () => {
 
   it("deterministic: the same cues schedule the same", () => {
     expect(schedule("dubtechno", credits, points(true))).toEqual(schedule("dubtechno", credits, points(true)));
+  });
+});
+
+// Statements and BALANCE (clock.ts PageCue / OverprintCue / InkCue; engine.ts creditPage / creditOverprint / creditInk).
+const ecoPoints = (black: boolean): TimelinePoint[] =>
+  Array.from({ length: 10 }, (_, k) => ({
+    time: k * 2,
+    state: busy(k),
+    ...(k === 2 ? { page: { rel: 140, points: 14_949 } } : {}),
+    ...(k === 5 ? { overprint: { count: black ? INVERTED_AT : 3 } } : {}),
+  }));
+const inks = Array.from({ length: 30 }, (_, i) => ({ time: 1 + i * 0.5, cue: { plate: i % 5 === 4 ? undefined : i % 4, isBuy: i % 3 !== 0, size: i % 4 } }));
+
+function scheduleInks(pts: TimelinePoint[], ink: { time: number; cue: InkCue }[]) {
+  const { ctx, log } = recordingContext();
+  const engine = new VoiceEngine(ctx, eraById("dubtechno").index, 0, credits);
+  for (const hit of planSteps(pts, 20, "dubtechno", 16, credits, ink)) engine.trigger(hit);
+  return log;
+}
+
+describe("Statements and BALANCE cues: where they land", () => {
+  it("a page sale and an overprint on the next beat; a BALANCE ornament on an off-16th, at most one an 8th", () => {
+    const q = new CueQueue();
+    q.pushPage({ rel: 100 });
+    q.pushOverprint({ count: 2 });
+    q.pushInk({ isBuy: true, size: 0 });
+    q.pushInk({ isBuy: false, size: 1 });
+    expect(q.take(1)).toEqual({ ink: { isBuy: true, size: 0 } });
+    expect(q.take(2)).toEqual({});
+    expect(q.take(3)).toEqual({ ink: { isBuy: false, size: 1 } });
+    expect(q.take(4)).toEqual({ page: { rel: 100 }, overprint: { count: 2 } });
+    const hits = planSteps(ecoPoints(false), 20, "dubtechno", 16, credits, inks);
+    expect(hits.filter((h) => h.page || h.overprint).every((h) => h.step % 4 === 0)).toBe(true);
+    expect(hits.filter((h) => h.page).length).toBe(1);
+    expect(hits.filter((h) => h.overprint).length).toBe(1);
+    const at = hits.filter((h) => h.ink);
+    expect(at.every((h) => h.step % 2 === 1)).toBe(true);
+    expect(at.length).toBe(30);
+  });
+
+  it("the cap: a burst over INK_QUEUE drops its oldest, one waiting over a bar is let go; dropped counts both", () => {
+    const q = new CueQueue();
+    for (let i = 0; i < INK_QUEUE + 5; i++) q.pushInk({ isBuy: true, size: i });
+    expect(q.dropped).toBe(5);
+    const got: number[] = [];
+    for (let s = 0; s < 40; s++) {
+      const t = q.take(s % 16);
+      if (t.ink) got.push(t.ink.size);
+    }
+    // One an 8th (every off-16th): the 8 the queue kept, in the bar after the burst.
+    expect(got).toEqual([5, 6, 7, 8, 9, 10, 11, 12]);
+    const late = new CueQueue();
+    late.pushInk({ isBuy: true, size: 0 });
+    for (let s = 0; s <= INK_PATIENCE; s++) late.take(0);
+    expect(late.take(1)).toEqual({});
+    expect(late.dropped).toBe(1);
+    const stats = { inksDropped: 0 };
+    const burst = Array.from({ length: 40 }, () => ({ time: 2, cue: { isBuy: true, size: 0 } }));
+    planSteps(ecoPoints(false), 20, "dubtechno", 16, credits, burst, stats);
+    expect(stats.inksDropped).toBe(40 - INK_QUEUE);
+  });
+
+  it("inkSize: the ETH a swap moved, four tiers", () => {
+    expect([0n, 19_999_999_999_999_999n, 20_000_000_000_000_000n, 10n ** 17n, 5n * 10n ** 17n].map(inkSize)).toEqual([0, 0, 1, 2, 3]);
+  });
+});
+
+describe("Statements and BALANCE cues: what the engine plays", () => {
+  it("no new cues: the schedule is the one without them (no ornaments, no pages, no overprints)", () => {
+    expect(scheduleInks(points(false), [])).toEqual(schedule("dubtechno", credits, points(false)));
+  });
+
+  it("a page sale, an overprint and the ornaments each schedule voices; a black-paper overprint sounds lower", () => {
+    const plain = schedule("dubtechno", credits, points(false));
+    expect(scheduleInks(ecoPoints(false), []).length).toBeGreaterThan(plain.length);
+    expect(scheduleInks(points(false), inks).length).toBeGreaterThan(plain.length);
+    const freqs = (log: string[]) => log.filter((l) => /\.frequency\.setValueAtTime\(/.test(l)).map((l) => Number(/\(([\d.e+-]+),/.exec(l)![1]));
+    const white = freqs(scheduleInks(ecoPoints(false), []));
+    const black = freqs(scheduleInks(ecoPoints(true), []));
+    expect(black).not.toEqual(white);
+    const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+    expect(sum(black)).toBeLessThan(sum(white));
+  });
+
+  it("another genre ignores them", () => {
+    const { ctx: c1, log: a } = recordingContext();
+    const { ctx: c2, log: b } = recordingContext();
+    const e1 = new VoiceEngine(c1, eraById("acid").index, 0);
+    const e2 = new VoiceEngine(c2, eraById("acid").index, 0);
+    for (const hit of planSteps(ecoPoints(true), 20, "acid", 16, undefined, inks)) e1.trigger(hit);
+    for (const hit of planSteps(points(false), 20, "acid", 16)) e2.trigger(hit);
+    expect(a).toEqual(b);
   });
 });

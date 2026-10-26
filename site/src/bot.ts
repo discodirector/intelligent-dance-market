@@ -40,7 +40,7 @@ interface Entry extends RawTimelineEvent {
   /** v2: this swap finished a track; slots = the finished track before the reset. */
   trackComplete?: { trackNo: number; swaps?: number; slot0: string; slot1: string };
   /** NFT stations (core nft.ts tag): a rated sale or a BALANCE withdraw cues the engine (synth SaleCue / LockCue). */
-  nft?: { via: string; score?: number; mask?: number; points?: number; ink?: [number, number, number, number] };
+  nft?: { via: string; kind?: string; score?: number; mask?: number; points?: number; ink?: [number, number, number, number]; rel?: number; overprints?: number };
 }
 
 interface SetupOptions {
@@ -131,9 +131,11 @@ function spread(raw: Entry[], seconds: number): TimelinePoint[] {
 }
 
 /** An NFT station entry's cues: a withdraw's lock, a rated sale's plate stab; nothing for any other entry. */
-function nftCues(e: Entry): Pick<TimelinePoint, "sale" | "lock"> {
+function nftCues(e: Entry): Pick<TimelinePoint, "sale" | "lock" | "page" | "overprint"> {
   const n = e.nft;
   if (n?.via === "withdraw") return { lock: { points: n.points ?? 0, ...(n.ink ? { ink: n.ink } : {}) } };
+  if (n?.via === "overprint") return { overprint: n.overprints !== undefined ? { count: n.overprints } : {} };
+  if (n?.kind === "statement") return { page: { rel: n.rel ?? 100, ...(n.points !== undefined ? { points: n.points } : {}) } };
   if (n?.score !== undefined && n.mask) return { sale: { pct: n.score, mask: n.mask } };
   return {};
 }

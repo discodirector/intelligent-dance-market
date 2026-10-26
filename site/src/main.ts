@@ -10,11 +10,12 @@ import { WaveSky } from "./sky";
 import { drawGrid, drawScope, drawSpectrum, Surface, type Flash } from "./visuals";
 import { startLive } from "./data/live";
 import { startVirtual } from "./data/virtual";
-import { applySkin, applyTheme, chainOf, loadStatus, stationFor } from "./stations";
+import { applySkin, applyTheme, chainOf, loadStatus, stationFor, stationName } from "./stations";
 import { NftScreen } from "./nftscreen";
+import { applyNftHow } from "./how";
 import { playerMode, type PlayerMode } from "./runtime";
 import { EPOCH_PLAY, startReplay } from "./data/replay";
-import { formatQuote, inkText, noteNftCues, type Feed, type SwapEvent } from "./data/types";
+import { formatQuote, inkCueOf, inkText, noteNftCues, type Feed, type OrnamentEvent, type SwapEvent } from "./data/types";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const TRACKS = ["KICK", "SNARE", "HAT", "GLITCH"];
@@ -29,6 +30,7 @@ const station = stationFor(net);
 if (station && source.kind === "live") {
   applyTheme(station.theme);
   applySkin(station);
+  applyNftHow(station);
 }
 /**
  * An nft station (kind "nft", core nft.ts): every input is one item sold, named on the feed ("BUY Credit #1234 ·
@@ -112,6 +114,8 @@ function nftWhat(e: SwapEvent): string {
   const amt = formatQuote(e.quote);
   if (n.via === "compose") return `<span class="sd">COMPOSE</span> · ${n.items ?? 80} ${nftItem}s → page #${n.id} · ${amt} ETH`;
   if (n.via === "withdraw") return `<span class="sd">LOCK</span> · page #${n.id} → ${(n.points ?? 0).toLocaleString("en-US")} ${n.venue}${n.ink ? ` · ${inkText(n.ink)}` : ""}`;
+  if (n.via === "overprint") return `<span class="sd">OVERPRINT</span> · page #${n.top} → #${n.id}${n.overprints !== undefined ? ` · ${n.overprints} OVERPRINT${n.overprints === 1 ? "" : "S"}` : ""}${n.points !== undefined ? ` · ${n.points.toLocaleString("en-US")} PTS` : ""}`;
+  if (n.kind === "statement") return `<span class="sd">${e.isBuy ? "BUY " : "SELL"}</span> page #${n.id} · ${amt} ETH · ${n.venue}${n.points !== undefined ? ` · ${n.points.toLocaleString("en-US")} PTS` : ""}`;
   const rating = n.rating !== undefined && n.mask ? ` · RATING ${Math.floor(n.rating / 10)} · ${plateLetters(n.mask)}` : "";
   return `<span class="sd">${e.isBuy ? "BUY " : "SELL"}</span> ${nftItem} #${n.id} · ${amt} ETH · ${n.venue}${rating}`;
 }
@@ -153,6 +157,16 @@ function tapeSwap(e: SwapEvent) {
       `<span class="trk">${TRACKS[e.track].padEnd(7, " ")}</span>s${String(e.step + 1).padStart(2, "0")} <span class="pm">${e.on ? "+" : "−"}</span>${tag}${tx}`,
     e.whale ? "whale" : e.isBuy ? "buy" : "sell",
   );
+}
+
+/**
+ * A swap in the station's token pool (Credits: BALANCE/ETH): an ornament, muted on the tape ("BALANCE BUY 1,234 · C"),
+ * never on the log's swap count, the grid or the NFT screen. Digits and plate letters only.
+ */
+function ornamentLine(o: OrnamentEvent) {
+  const tx = ` <a href="${explorer}/tx/${o.tx}" target="_blank" rel="noopener">${short(o.tx)}</a>`;
+  const plate = o.plate !== undefined ? ` · ${"CMYK"[o.plate]}` : "";
+  tapeLine(`<span class="t">${hhmm(o.ts)}</span> ${o.token} ${o.isBuy ? "BUY" : "SELL"} ${Math.round(o.amount).toLocaleString("en-US")}${plate}${tx}`, "sys ornament");
 }
 
 function systemLine(text: string, cls = "sys") {
@@ -209,6 +223,10 @@ const feed: Feed = {
       }
     }
     updateCounts();
+  },
+  onOrnament(o, backfill) {
+    ornamentLine(o);
+    if (!backfill && audio.running) audio.player!.noteInk(inkCueOf(o));
   },
   onState(s) {
     if (s.swapCount >= state.swapCount) state = s;
@@ -396,15 +414,18 @@ $("oc-grid").innerHTML = [
   net.virtual
     ? ocRow("HOOK", `none on this ${net.virtual.source.kind === "nft" ? "collection" : "pool"} · the $IDM rules run in your browser`)
     : ocRow("HOOK", net.hook ?? "pending launch", [...addr(net.hook), ...src(net.hook)]),
-  ocRow(`${net.virtual?.source.kind === "nft" ? "COLLECTION" : "TOKEN"} $${net.virtual?.tokenSymbol ?? "IDM"}`, net.token ?? "pending launch", [...addr(net.token, "token"), ...src(net.token)]),
+  ocRow(net.virtual?.source.kind === "nft" ? `COLLECTION ${net.virtual.tokenSymbol}` : `TOKEN $${net.virtual?.tokenSymbol ?? "IDM"}`, net.token ?? "pending launch", [...addr(net.token, "token"), ...src(net.token)]),
   net.quote === NATIVE_ETH
     ? ocRow("PAIRED WITH", net.virtual?.source.kind === "nft" ? "ETH (WETH bids included) · one note per item sold" : "native ETH")
     : ocRow(`PAIRED WITH $${quoteName ?? net.quoteSymbol}`, net.quote ?? "—", addr(net.quote, "token")),
   ...(net.virtual?.source.kind === "nft"
     ? (() => {
       const s = net.virtual.source;
-      const venues: [string, `0x${string}` | undefined][] = [["SEAPORT (OPENSEA)", s.seaport?.[0]], ["CREDITSTRATEGY", s.strategy], ["CORE", s.core], ["STATEMENTS · COMPOSE", s.statements]];
-      return venues.filter(([, a]) => a).map(([k, a]) => ocRow(k, a!, addr(a!)));
+      const venues: [string, `0x${string}` | undefined][] = [["SEAPORT (OPENSEA)", s.seaport?.[0]], ["CREDITSTRATEGY", s.strategy], ["CORE", s.core], ["STATEMENTS · PAGES", s.statements], ["BALANCE · LOCKS", s.balance]];
+      return [
+        ...venues.filter(([, a]) => a).map(([k, a]) => ocRow(k, a!, addr(a!))),
+        ...(s.balancePool ? [ocRow("BALANCE POOL · ORNAMENTS", `v4 · ${s.balancePool.poolId}`, addr(s.balancePool.poolManager))] : []),
+      ];
     })()
     : net.virtual && net.virtual.source.kind !== "v4"
     ? [ocRow("POOL", `${net.virtual.source.kind} · ${net.virtual.source.address}`, addr(net.virtual.source.address))]
@@ -413,6 +434,11 @@ $("oc-grid").innerHTML = [
   ocRow("SOURCE", "discodirector/intelligent-dance-market", [["github", LINKS.github]]),
   ocRow("X", LINKS.x ?? "account soon", LINKS.x ? [["x.com", LINKS.x]] : []),
 ].join("");
+// An nft station's log counts sales and reads the chain, not a hook.
+if (net.virtual?.source.kind === "nft") {
+  $("c-swaps-label").textContent = "sales";
+  $("console-sub").textContent = "every sale plays · reading the chain · times in UTC";
+}
 $("onchain-sub").textContent =
   source.kind === "replay" ? `showing a replay · live contracts on ${net.label.toLowerCase()}` : `live on ${net.label.toLowerCase()}`;
 
@@ -422,7 +448,7 @@ $("onchain-sub").textContent =
 const switchLink = $<HTMLAnchorElement>("src-switch");
 if (source.kind === "live") {
   $("station-tag").hidden = false;
-  $("station-name").textContent = station ? `$${station.ticker}` : net.label;
+  $("station-name").textContent = station ? stationName(station) : net.label;
   $("station-chain").textContent = (station ? chainOf(station).name : net.label).toUpperCase();
   // Preview: labelled. Off air (offAir above): marked, the way back linked, PLAY disabled; the panel keeps following
   // the pool.

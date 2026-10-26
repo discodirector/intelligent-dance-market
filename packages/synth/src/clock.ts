@@ -29,17 +29,63 @@ export interface LockCue {
   ink?: readonly [number, number, number, number];
 }
 
+/**
+ * A Statement sold (a page changing hands): its price against the recent page median, percent (100 = the median),
+ * the page's points when known (core nft.ts tags rel / points). The engine plays a full-chord stab (creditPage).
+ */
+export interface PageCue {
+  rel: number;
+  points?: number;
+}
+
+/** An overprint: the base page's overprint count after it (absent: unknown). From INVERTED_AT on, the paper is black. */
+export interface OverprintCue {
+  count?: number;
+}
+
+/** Statements: from this many overprints a page is printed on black paper (Statements.INVERTED_AT). */
+export const INVERTED_AT = 7;
+
+/**
+ * A swap in BALANCE's pool: an ornament, never a rules input. `plate` the ink's strongest plate (0 C, 1 M, 2 Y, 3 K;
+ * absent: no ink read), `isBuy` BALANCE bought, `size` 0..3 by the ETH it moved (ornamentSize).
+ */
+export interface InkCue {
+  plate?: number;
+  isBuy: boolean;
+  size: number;
+}
+
+/** An InkCue's size from the ETH a swap moved (wei): < 0.02 · < 0.1 · < 0.5 · more. */
+export const inkSize = (wei: bigint): number => (wei < 20_000_000_000_000_000n ? 0 : wei < 100_000_000_000_000_000n ? 1 : wei < 500_000_000_000_000_000n ? 2 : 3);
+
 /** Sales waiting for their 8th: a sweep longer than this plays its newest ones. */
 export const SALE_QUEUE = 4;
+/** Pages and overprints waiting for their beat (each kind): a burst plays its newest ones. */
+export const PAGE_QUEUE = 4;
+/** Ornaments waiting: at most one an 8th, so this many is a bar's worth; one older than a bar is dropped. */
+export const INK_QUEUE = 8;
+/** An ornament waiting longer than this many 16ths (a bar) is let go. */
+export const INK_PATIENCE = 16;
 
 /**
  * Where the NFT cues land, shared by every scheduler (planSteps, the live player): a sale on the next 8th (one per
- * 8th, so a sweep is a short run of stabs), a withdraw on the next downbeat. Deterministic: the same pushes and steps
- * give the same landings.
+ * 8th, so a sweep is a short run of stabs), a withdraw on the next downbeat, a page sale and an overprint on the next
+ * beat, a BALANCE swap's ornament on the next off-16th (the "e" or "a" of a beat: never where a sale or a beat cue
+ * lands), at most one an 8th, dropped after a bar of waiting (`dropped` counts them). Deterministic: the same pushes
+ * and steps give the same landings.
  */
 export class CueQueue {
   private sales: SaleCue[] = [];
   private lock: LockCue | null = null;
+  private pages: PageCue[] = [];
+  private overprints: OverprintCue[] = [];
+  private inks: { cue: InkCue; at: number }[] = [];
+  /** Steps taken so far (take() calls), the ornaments' clock. */
+  private n = 0;
+  private lastInk = -Infinity;
+  /** Ornaments let go: over the queue, or waiting over a bar. */
+  dropped = 0;
   pushSale(cue: SaleCue) {
     this.sales.push(cue);
     if (this.sales.length > SALE_QUEUE) this.sales.shift();
@@ -47,14 +93,44 @@ export class CueQueue {
   pushLock(cue: LockCue) {
     this.lock = cue;
   }
+  pushPage(cue: PageCue) {
+    this.pages.push(cue);
+    if (this.pages.length > PAGE_QUEUE) this.pages.shift();
+  }
+  pushOverprint(cue: OverprintCue) {
+    this.overprints.push(cue);
+    if (this.overprints.length > PAGE_QUEUE) this.overprints.shift();
+  }
+  pushInk(cue: InkCue) {
+    this.inks.push({ cue, at: this.n });
+    if (this.inks.length > INK_QUEUE) {
+      this.inks.shift();
+      this.dropped++;
+    }
+  }
   /** The cues this step plays, as StepHit fields (none: an empty object, so a hit without cues is unchanged). */
-  take(step: number): { sale?: SaleCue; lock?: LockCue } {
-    const out: { sale?: SaleCue; lock?: LockCue } = {};
+  take(step: number): { sale?: SaleCue; lock?: LockCue; page?: PageCue; overprint?: OverprintCue; ink?: InkCue } {
+    const out: { sale?: SaleCue; lock?: LockCue; page?: PageCue; overprint?: OverprintCue; ink?: InkCue } = {};
+    const n = this.n++;
     if (this.lock && step === 0) {
       out.lock = this.lock;
       this.lock = null;
     }
     if (this.sales.length && step % 2 === 0) out.sale = this.sales.shift()!;
+    if (step % 4 === 0) {
+      if (this.pages.length) out.page = this.pages.shift()!;
+      if (this.overprints.length) out.overprint = this.overprints.shift()!;
+    }
+    if (this.inks.length) {
+      while (this.inks.length && n - this.inks[0].at > INK_PATIENCE) {
+        this.inks.shift();
+        this.dropped++;
+      }
+      if (this.inks.length && step % 2 === 1 && n - this.lastInk >= 2) {
+        out.ink = this.inks.shift()!.cue;
+        this.lastInk = n;
+      }
+    }
     return out;
   }
 }
@@ -81,6 +157,9 @@ export interface TimelinePoint {
   /** NFT stations: this point's sale was a rated Credit (SaleCue), or a BALANCE withdraw (LockCue). */
   sale?: SaleCue;
   lock?: LockCue;
+  /** NFT stations: this point was a Statement sold (PageCue) or an overprint (OverprintCue). */
+  page?: PageCue;
+  overprint?: OverprintCue;
 }
 
 export interface StepCharacter {
@@ -117,6 +196,10 @@ export interface StepHit extends StepCharacter {
   /** NFT stations (CueQueue): a rated sale lands on this step, a withdraw on this downbeat. Absent everywhere else. */
   sale?: SaleCue;
   lock?: LockCue;
+  /** NFT stations (CueQueue): a Statement sale or an overprint on this beat, a BALANCE swap's ornament on this 16th. */
+  page?: PageCue;
+  overprint?: OverprintCue;
+  ink?: InkCue;
 }
 
 /**
@@ -258,8 +341,13 @@ export function planSteps(
   eraId?: string | null,
   barOffset = 0,
   program: Program = HOUSE_PROGRAM,
+  /** NFT stations: BALANCE swaps' ornaments, at render seconds, in time order (never rules inputs, never points). */
+  inks: readonly { time: number; cue: InkCue }[] = [],
+  /** Out: the ornaments let go (over the queue or a bar late). */
+  stats?: { inksDropped: number },
 ): StepHit[] {
   const hits: StepHit[] = [];
+  let inkCursor = 0;
   let grid = 0;
   let index = 0;
   let dropCursor = 0;
@@ -276,11 +364,14 @@ export function planSteps(
       if (point.drop) pending = point.drop;
       if (point.sale) cues.pushSale(point.sale);
       if (point.lock) cues.pushLock(point.lock);
+      if (point.page) cues.pushPage(point.page);
+      if (point.overprint) cues.pushOverprint(point.overprint);
       if (point.trackDrop) {
         trackPending = { at: dropCursor, held: point.trackDrop.held ?? points[dropCursor - 1]?.state ?? point.state };
       }
       dropCursor += 1;
     }
+    while (inkCursor < inks.length && inks[inkCursor].time <= grid + 1e-6) cues.pushInk(inks[inkCursor++].cue);
     const step = index % 16;
     let state = stateAt(points, grid);
     let trackDrop: true | undefined;
@@ -327,6 +418,7 @@ export function planSteps(
     grid += duration;
     index += 1;
   }
+  if (stats) stats.inksDropped = cues.dropped;
   return hits;
 }
 

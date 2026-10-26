@@ -10,8 +10,8 @@
 // batched), and plays one input per item sold.
 import { createPublicClient, defineChain, fallback, http, toHex, type PublicClient } from "viem";
 import {
-  checkpointProblem, checkpointState, decodeNftLogs, nftCarryFromJSON, decodeSwapLogs, mutate, rawLog, readNftLogs, swapLogFilter,
-  type CheckpointSwap, type CreditTable, type DecodedSwap, type NftCarry, type NftTag, type RawLog, type StationSource, type State,
+  checkpointProblem, checkpointState, decodeNftLogs, nftCarryFromJSON, decodeSwapLogs, mutate, rawLog, readNftLogs, readNftPageLogs, swapLogFilter,
+  type CheckpointSwap, type CreditTable, type DecodedSwap, type NftCarry, type NftOrnament, type NftTag, type RawLog, type StationSource, type State,
 } from "@swarm-sequencer/core";
 import type { Network } from "../config";
 import { decodeSlots, RULES } from "../rules";
@@ -19,6 +19,8 @@ import { loadRatings } from "./ratings";
 import { fromWei, type Feed, type SwapEvent } from "./types";
 
 const POLL_MS = 12_000;
+/** The token an NFT station's pool ornaments name on the feed (core nft.ts balancePool: Credits' BALANCE). */
+const ORNAMENT_TOKEN = "BALANCE";
 
 export interface VirtualPool {
   /** Where the swaps come from: kind, PoolManager + poolId (v4) or the pool, and which side is ETH; or a collection. */
@@ -117,14 +119,14 @@ export function startVirtual(net: Network, feed: Feed): () => void {
    * eth_getLogs over [a, b]: halved when the RPC refuses the size (a busy collection can pass Tenderly's 20k results in
    * one chunk), retried after a pause on anything else (a rate limit: splitting would only send more).
    */
-  async function getLogs(f: { address: `0x${string}` | `0x${string}`[]; topics: (`0x${string}` | `0x${string}`[])[] }, a: bigint, b: bigint, tries = 3): Promise<RawLog[]> {
+  async function getLogs(f: { address: `0x${string}` | `0x${string}`[]; topics: (`0x${string}` | `0x${string}`[] | null)[] }, a: bigint, b: bigint, tries = 3): Promise<RawLog[]> {
     try {
       const logs = await client.request({ method: "eth_getLogs", params: [{ ...f, fromBlock: toHex(a), toBlock: toHex(b) }] } as never);
       return (logs as Parameters<typeof rawLog>[0][]).map(rawLog);
     } catch (err) {
       if (closed) throw err;
       const msg = String((err as Error)?.message ?? err).toLowerCase();
-      if (/more than \d+ results|block range|too large|response size/.test(msg) && b - a >= 16n) {
+      if (/more than \d+ results|block range|too large|response size|size limit/.test(msg) && b - a >= 16n) {
         const m = (a + b) / 2n;
         return [...(await getLogs(f, a, m)), ...(await getLogs(f, m + 1n, b))];
       }
@@ -134,14 +136,19 @@ export function startVirtual(net: Network, feed: Feed): () => void {
     }
   }
 
-  /** One chunk of the source as rules inputs: a pool's swaps, or a collection's sales and the carry after them. */
-  async function readChunk(from: bigint, end: bigint): Promise<{ swaps: (DecodedSwap & { nft?: NftTag; holdTempo?: true; holdSizeEma?: true })[]; carry?: NftCarry }> {
+  /**
+   * One chunk of the source as rules inputs: a pool's swaps, or a collection's sales and the carry after them (with the
+   * pages' history for a sold or overprinted Statement), and its token pool's swaps as ornaments (Credits: BALANCE).
+   */
+  async function readChunk(from: bigint, end: bigint): Promise<{ swaps: (DecodedSwap & { nft?: NftTag; holdTempo?: true; holdSizeEma?: true })[]; carry?: NftCarry; ornaments?: NftOrnament[] }> {
     if (src.kind !== "nft") {
       const logs = await client.request({ method: "eth_getLogs", params: [{ ...filter!, fromBlock: toHex(from), toBlock: toHex(end) }] });
       return { swaps: decodeSwapLogs(src, logs.map(rawLog)) };
     }
-    const r = decodeNftLogs(src, await readNftLogs(src, from, end, getLogs, { concurrency: NFT_BATCH }), carry, { ratings });
-    return { swaps: r.sales, carry: r.carry };
+    const logs = await readNftLogs(src, from, end, getLogs, { concurrency: NFT_BATCH });
+    const pages = await readNftPageLogs(src, logs, end, getLogs);
+    const r = decodeNftLogs(src, logs, carry, { ratings, pages });
+    return { swaps: r.sales, carry: r.carry, ornaments: r.ornaments };
   }
 
   async function pull(to: bigint, backfill: boolean) {
@@ -149,9 +156,26 @@ export function startVirtual(net: Network, feed: Feed): () => void {
     for (let from = cursor + 1n; from <= to && !closed; from += chunk) {
       const end = from + chunk - 1n > to ? to : from + chunk - 1n;
       const read = await readChunk(from, end);
+      // Ornaments go out in order with the swaps (block, log index), none of them touching the state.
+      const orn = read.ornaments ?? [];
+      let oi = 0;
+      let lastTs = 0;
+      const before = (o: NftOrnament, b: bigint, i: number) => o.blockNumber < b || (o.blockNumber === b && o.logIndex < i);
+      const flush = async (b: bigint | null, i: number) => {
+        while (oi < orn.length && (b === null || before(orn[oi], b, i))) {
+          const o = orn[oi++];
+          if (closed) return;
+          // No block read for an old ornament (thousands on a launch day): the last known time is close enough.
+          const ts = o.timestamp ?? times.get(o.blockNumber) ?? (backfill && lastTs ? lastTs : await blockTime(o.blockNumber, times));
+          lastTs = ts;
+          feed.onOrnament?.({ ts, block: Number(o.blockNumber), tx: o.txHash, isBuy: o.isBuy, amount: fromWei(BigInt(o.amount)), eth: fromWei(BigInt(o.eth)), ...(o.ink ? { ink: o.ink, plate: o.plate } : {}), token: ORNAMENT_TOKEN }, backfill);
+        }
+      };
       for (const sw of read.swaps) {
         if (closed) return;
+        await flush(sw.blockNumber, sw.logIndex);
         const ts = sw.timestamp ?? (await blockTime(sw.blockNumber, times));
+        lastTs = ts;
         const r = mutate(state, { isBuy: sw.isBuy, quoteAmt: sw.quoteAmt, tick: sw.tick, blockNumber: sw.blockNumber, timestamp: ts, ...(sw.holdTempo ? { holdTempo: true } : {}), ...(sw.holdSizeEma ? { holdSizeEma: true } : {}) }, undefined, rules.mutate);
         state = r.state;
         const ev: SwapEvent = {
@@ -176,6 +200,7 @@ export function startVirtual(net: Network, feed: Feed): () => void {
         }
         feed.onSwap(ev, backfill);
       }
+      await flush(null, 0);
       cursor = end;
       if (read.carry) carry = read.carry;
     }

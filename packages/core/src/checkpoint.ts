@@ -53,7 +53,7 @@ export interface StationCheckpoint {
    * NFT stations only: the decoder's carry after `block` (nft.ts nftCarryToJSON: the last price and the median's window,
    * wei as decimal strings), so the sizes, ticks and composes after it are those of the full replay.
    */
-  nft?: { lastPrice: string | null; recent: string[] };
+  nft?: { lastPrice: string | null; recent: string[]; pages?: string[] };
 }
 
 const isHexStr = (v: unknown) => typeof v === "string" && /^0x[0-9a-fA-F]{1,64}$/.test(v);
@@ -85,6 +85,7 @@ export function checkpointProblem(cp: unknown, want: { key: string; fingerprint:
     const p = c.nft?.lastPrice;
     const digits = (v: unknown) => typeof v === "string" && /^\d+$/.test(v);
     if (!c.nft || (p !== null && !digits(p)) || !Array.isArray(c.nft.recent) || !c.nft.recent.every(digits)) return "nft carry missing";
+    if (c.nft.pages !== undefined && (!Array.isArray(c.nft.pages) || !c.nft.pages.every(digits))) return "nft carry pages malformed";
   }
   return null;
 }

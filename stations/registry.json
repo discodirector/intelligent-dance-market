@@ -112,11 +112,13 @@
         "core": "0xcdb1889ae12074d750CD9B8531B692015465e0dD",
         "statements": "0x75Edd94b7e49b3bD5C8047b91F165A5e265a069b",
         "balance": "0x3620540c994433D7B4a628C46d2ED5F92572eA07",
-        "ratings": "credits"
+        "ratings": "credits",
+        "statementsFrom": 26100993,
+        "balancePool": { "poolManager": "0x000000000004444c5dc75cB358380D2e3dE08A90", "poolId": "0xd262227cd6ad883b3d85c5138f017f90aaac0ff3ce69136c36a7280dbd009a03" }
       },
       "theme": { "phos": "#e2dfd4", "phosDim": "#7a7870", "ghost": "#222220", "lcd": "#0b0b0a", "panel": "#f2f1ec", "sell": "#ff3d9a", "whale": "#ffd100" },
       "program": "credits",
-      "status": "pending",
+      "status": "live",
       "gift": true
     }
   ]

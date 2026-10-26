@@ -19,8 +19,8 @@ export {
 } from "./state.ts";
 export type { DecodeOptions, SequencerState, Slots, State } from "./state.ts";
 
-export { advanceIdle, CueQueue, eraAt, freshIdleMemory, genreStep, nowAt, planSteps, SALE_QUEUE, stateAt, stepCharacter, stepDuration, viewAt } from "./clock.ts";
-export type { DropCue, IdleMemory, LockCue, SaleCue, StepHit, TimelinePoint, TrackDropCue, TransportView } from "./clock.ts";
+export { advanceIdle, CueQueue, eraAt, freshIdleMemory, genreStep, INK_PATIENCE, INK_QUEUE, inkSize, INVERTED_AT, nowAt, PAGE_QUEUE, planSteps, SALE_QUEUE, stateAt, stepCharacter, stepDuration, viewAt } from "./clock.ts";
+export type { DropCue, IdleMemory, InkCue, LockCue, OverprintCue, PageCue, SaleCue, StepHit, TimelinePoint, TrackDropCue, TransportView } from "./clock.ts";
 
 export { arrange, euclid, FORM_BARS, sectionAt } from "./arrange.ts";
 export { LEAD_PATCHES, leadPatch } from "./leads.ts";

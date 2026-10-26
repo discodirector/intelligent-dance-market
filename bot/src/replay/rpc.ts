@@ -69,7 +69,7 @@ export async function getLogsChunked<E extends AbiEvent>(
  */
 export async function getRawLogsChunked(
   clients: PublicClient[],
-  filter: { address: `0x${string}` | `0x${string}`[]; topics: (`0x${string}` | `0x${string}`[])[] },
+  filter: { address: `0x${string}` | `0x${string}`[]; topics: (`0x${string}` | `0x${string}`[] | null)[] },
   fromBlock: bigint,
   toBlock: bigint,
   opts: ChunkOptions = {},

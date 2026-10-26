@@ -132,6 +132,9 @@ export function stationFingerprint(chainId: number, src: StationSource, genesisB
       Number(genesisBlock),
       // BALANCE withdraws are inputs (nft.ts): a source with them is another stream. Absent: the fingerprint as before.
       ...(src.balance ? [a(src.balance)] : []),
+      // Statement sales and overprints are inputs (nft.ts "pages"): with the Statements, another stream than before them.
+      // (The page history and the BALANCE pool only tag and ornament: not in the fingerprint.)
+      ...(src.statements ? ["pages"] : []),
     ]);
   }
   const c = src.calibration;

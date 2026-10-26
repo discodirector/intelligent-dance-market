@@ -1,6 +1,7 @@
 // The NFT screen of an nft station (docs/STATIONS.md "NFT stations"): a small LCD on the drum machine that shows the
 // item being traded now, its on-chain art. A sale is queued and shown on the next beat, so the screen switches in
-// rhythm; with nothing new it walks the last few items traded, one every IDLE_BEATS beats.
+// rhythm; with nothing new the last sale stays on the glass (the same one as the LAST SWAP line), so the screen only
+// moves when the collection trades.
 //
 // The art is the collection's own tokenURI (Credits: data:application/json;base64 with a data:image/svg+xml;base64
 // image, ~3 KB of SVG, an eth_call of ~0.6-0.9M gas, ~0.3-0.4 s on the public gateways). It is fetched only when the
@@ -10,7 +11,9 @@
 // Credits extras (core nft.ts tags): a rated sale wears a small "RATING 132 · CK" label on the glass; a BALANCE
 // withdraw takes two beats, the locked page (Statements tokenURI, now in its WITHDRAWN format) then the holder's
 // Balance artwork (LineageArtwork tokenURI of tokenIdOf(holder): the wallet's CMYK mixture), captioned with the
-// points and the release's ink. Same rules for the art: data SVG only, as an <img>; the label is text.
+// points and the release's ink. A Statement sold shows the page (Statements tokenURI, utf8 JSON) labelled "PAGE #id ·
+// points"; an overprint the base page after it, labelled "OVERPRINT #base ← #top". Same rules for the art: data SVG
+// only, as an <img>; the label is text. Swaps in BALANCE's pool (ornaments) never reach the screen.
 import { plateLetters } from "@swarm-sequencer/core";
 import { createPublicClient, defineChain, fallback, http, parseAbi, type PublicClient } from "viem";
 import type { Network } from "./config";
@@ -22,10 +25,6 @@ const ABI = parseAbi([
   "function tokenIdOf(address wallet) view returns (uint256)",
   "function artwork() view returns (address)",
 ]);
-/** Beats between two items when no sale is waiting. */
-const IDLE_BEATS = 2;
-/** Items the idle walk goes through. */
-const RECENT = 6;
 /** Sales waiting for their beat; a sweep longer than this shows its last ones. */
 const QUEUE = 8;
 const FETCH_LIMIT = 2;
@@ -40,7 +39,8 @@ interface Shown {
   e: SwapEvent;
 }
 
-const keyOf = (s: Shown) => `${s.kind}:${s.kind === "wallet" ? s.e.nft!.holder : s.id}`;
+/** The art's cache key: an overprint changes its base page's art, so it is read afresh (its tx in the key). */
+const keyOf = (s: Shown) => `${s.kind}:${s.kind === "wallet" ? s.e.nft!.holder : s.id}${s.e.nft!.via === "overprint" ? `:${s.e.tx}` : ""}`;
 
 export class NftScreen {
   private readonly client: PublicClient;
@@ -50,12 +50,9 @@ export class NftScreen {
   private readonly waiting: (() => void)[] = [];
   private inFlight = 0;
   private queue: Shown[] = [];
-  private recent: Shown[] = [];
   private current: Shown | null = null;
   private history: Shown | null = null;
   private lastBeat = -1;
-  private idle = 0;
-  private walk = 0;
   private artwork: Promise<`0x${string}` | null> | null = null;
   private readonly img: HTMLImageElement;
   private readonly text: HTMLElement;
@@ -87,21 +84,20 @@ export class NftScreen {
     if (!e.nft) return;
     const n = e.nft;
     const withdraw = n.via === "withdraw";
-    // A withdraw shows the page, then the wallet (when the station knows where the art is).
+    // A withdraw shows the page, then the wallet (when the station knows where the art is); a page sold or overprinted
+    // shows the page.
     const shows: Shown[] = withdraw
       ? [
           ...(this.extra.statements ? [{ kind: "page" as const, id: n.id, e }] : []),
           ...(this.extra.balance && n.holder ? [{ kind: "wallet" as const, id: n.id, e }] : []),
         ]
-      : [{ kind: "item", id: n.id, e }];
+      : n.kind === "statement" || n.via === "overprint"
+        ? this.extra.statements ? [{ kind: "page" as const, id: n.id, e }] : []
+        : [{ kind: "item", id: n.id, e }];
     if (!shows.length) return;
-    if (n.via !== "compose" && !withdraw) {
-      const s = shows[0];
-      this.recent = [s, ...this.recent.filter((r) => r.id !== s.id)].slice(0, RECENT);
-    }
     if (!live) {
-      // The history only fills the idle walk; its newest item is on the glass at the next beat.
-      this.history = shows[0];
+      // The history only sets the glass: its newest sale is shown at the next beat and stays until a new one.
+      this.history = shows[shows.length - 1];
       return;
     }
     this.queue.push(...shows);
@@ -116,17 +112,9 @@ export class NftScreen {
     if (beat === this.lastBeat) return;
     this.lastBeat = beat;
     const next = this.queue.shift() ?? (this.current ? undefined : this.history ?? undefined);
-    if (next) {
-      this.idle = 0;
-      this.show(next);
-      if (this.queue[0]) void this.art(this.queue[0]);
-      return;
-    }
-    if (++this.idle < IDLE_BEATS || this.recent.length < 2) return;
-    this.idle = 0;
-    this.walk = (this.walk + 1) % this.recent.length;
-    this.show(this.recent[this.walk]);
-    void this.art(this.recent[(this.walk + 1) % this.recent.length]);
+    if (!next) return;
+    this.show(next);
+    if (this.queue[0]) void this.art(this.queue[0]);
   }
 
   /** The glass's small label: text only (digits and plate letters from the decoder). */
@@ -143,7 +131,7 @@ export class NftScreen {
     this.el.classList.toggle("buy", e.isBuy && !e.whale);
     this.el.classList.toggle("sell", !e.isBuy && n.via !== "withdraw");
     this.el.classList.toggle("whale", e.whale);
-    this.el.classList.toggle("lock", n.via === "withdraw");
+    this.el.classList.toggle("lock", n.via === "withdraw" || n.via === "overprint");
     if (n.via === "compose") {
       this.img.hidden = true;
       this.text.hidden = false;
@@ -154,7 +142,17 @@ export class NftScreen {
     }
     let alt: string;
     let fallbackText: string;
-    if (s.kind === "page") {
+    if (s.kind === "page" && n.via === "overprint") {
+      this.cap.textContent = `OVERPRINT #${n.id}${n.overprints !== undefined ? ` · ${n.overprints}×` : ""}\n${n.points !== undefined ? `${n.points.toLocaleString("en-US")} PTS` : n.venue.toUpperCase()}`;
+      this.label(`OVERPRINT #${n.id} ← #${n.top}`);
+      alt = `Statement #${n.id}`;
+      fallbackText = `OVER\nPRINT\n#${n.id}`;
+    } else if (s.kind === "page" && n.kind === "statement") {
+      this.cap.textContent = `PAGE #${n.id} ${e.isBuy ? "BUY" : "SELL"}\n${formatQuote(e.quote)} ETH · ${n.venue.toUpperCase()}`;
+      this.label(`PAGE #${n.id}${n.points !== undefined ? ` · ${n.points.toLocaleString("en-US")}` : ""}`);
+      alt = `Statement #${n.id}`;
+      fallbackText = `PAGE\n#${n.id}`;
+    } else if (s.kind === "page") {
       this.cap.textContent = `LOCK PAGE #${n.id}\n${(n.points ?? 0).toLocaleString("en-US")} ${n.venue}`;
       this.label("WITHDRAWN");
       alt = `Statement #${n.id}`;

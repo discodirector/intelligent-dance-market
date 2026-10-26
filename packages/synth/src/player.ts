@@ -8,7 +8,10 @@ import {
   viewAt,
   type DropCue,
   type IdleMemory,
+  type InkCue,
   type LockCue,
+  type OverprintCue,
+  type PageCue,
   type SaleCue,
   type StepHit,
   type TimelinePoint,
@@ -55,6 +58,10 @@ export interface LivePlayer {
   /** NFT stations: a rated Credit sale (lands on the next 8th) or a BALANCE withdraw (the next downbeat). */
   noteSale(cue: SaleCue): void;
   noteLock(cue: LockCue): void;
+  /** NFT stations: a Statement sold or an overprint (the next beat), a BALANCE swap's ornament (the next off-16th). */
+  notePage(cue: PageCue): void;
+  noteOverprint(cue: OverprintCue): void;
+  noteInk(cue: InkCue): void;
   /**
    * Heat -> drop prototype: the latest swap finished the track. Until the next downbeat the voices keep
    * playing `held` (the finished track; omit to hold the state before the drop), then that bar lands as the drop.
@@ -86,6 +93,11 @@ export interface RenderOptions {
    * what it was without the layer.
    */
   ornaments?: readonly OrnamentCue[];
+  /**
+   * NFT stations: BALANCE swaps' ornaments at render seconds, in time order (clock.ts InkCue, CueQueue). Omitted or
+   * empty: the render is exactly what it was without them.
+   */
+  inks?: readonly { time: number; cue: InkCue }[];
 }
 
 /**
@@ -486,6 +498,15 @@ export function createLivePlayer(ctx: AudioContext, options?: LivePlayerOptions)
     noteLock(cue) {
       if (running) cues.pushLock(cue);
     },
+    notePage(cue) {
+      if (running) cues.pushPage(cue);
+    },
+    noteOverprint(cue) {
+      if (running) cues.pushOverprint(cue);
+    },
+    noteInk(cue) {
+      if (running) cues.pushInk(cue);
+    },
     noteTrackDrop(held) {
       trackHold = held ?? committed ?? initialState();
     },
@@ -582,7 +603,7 @@ export async function renderTimelineToBuffer(
   const rig = new EraRig(ctx, eraId, false, null, program);
   rig.connect(ctx.destination);
   for (const cue of options?.ornaments ?? []) rig.requestOrnament(cue);
-  const hits = planSteps(points, seconds, eraId, options?.barOffset ?? 0, program);
+  const hits = planSteps(points, seconds, eraId, options?.barOffset ?? 0, program, options?.inks ?? []);
   for (const hit of hits) {
     if (hit.time < seconds) rig.play(hit);
   }

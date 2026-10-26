@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname, join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import {
-  CHECKPOINT_VERSION, decodeNftLogs, decodeSwapLogs, nftCarryFromJSON, nftCarryToJSON, encode, parseCreditTable, readNftLogs, stationFingerprint, swapLogFilter,
+  CHECKPOINT_VERSION, decodeNftLogs, decodeSwapLogs, nftCarryFromJSON, nftCarryToJSON, encode, parseCreditTable, readNftLogs, readNftPageLogs, stationFingerprint, swapLogFilter,
   type Calibration, type CreditTable, type CheckpointSwap, type DecodedSwap, type NftCarryJSON, type NftTag, type PoolKind, type StationCheckpoint, type StationSource, type SwapSource,
 } from "@swarm-sequencer/core";
 import { getRawLogsChunked, makeClients, withRetry } from "./replay/rpc.ts";
@@ -73,7 +73,10 @@ export interface RegistryEntry {
   quote?: `0x${string}`;
   calibration?: Calibration;
   /** kind "nft": the collection is `token`; its supply frame and venues (core nft.ts NftSource). */
-  nft?: { itemSupply: number; refPrice: string; seaport?: `0x${string}`[]; strategy?: `0x${string}`; core?: `0x${string}`; statements?: `0x${string}`; balance?: `0x${string}`; ratings?: "credits" };
+  nft?: {
+    itemSupply: number; refPrice: string; seaport?: `0x${string}`[]; strategy?: `0x${string}`; core?: `0x${string}`; statements?: `0x${string}`; balance?: `0x${string}`; ratings?: "credits";
+    statementsFrom?: number; balancePool?: { poolManager: `0x${string}`; poolId: `0x${string}` };
+  };
   genesisBlock: number;
   token: `0x${string}`;
   house?: boolean;
@@ -231,15 +234,19 @@ export function ratingsFor(name: string | undefined): CreditTable | null {
 /**
  * A station's swaps in [from, to] as rules inputs (timestamps filled from the blocks when the logs lack them). An NFT
  * station reads its collection (core readNftLogs: Transfers and the ecosystem over the range, Seaport at the sale
- * blocks) and decodes from `carry` (its state after from - 1), which is set to the carry after `to`.
+ * blocks; never the BALANCE pool's swaps, which are the site's ornaments, not inputs), the pages' history when a page
+ * sold or was overprinted (readNftPageLogs: one request over the Statements' whole life, its range not chunked), and
+ * decodes from `carry` (its state after from - 1), which is set to the carry after `to`.
  */
 export async function readStationSwaps(st: BotStation, from: bigint, to: bigint, clients = makeClients(st.rpcUrls), carry?: NftCarryJSON): Promise<RawSwap[]> {
   const opts = { chunk: st.logChunk, maxChunk: st.maxChunk };
   const src = st.source;
   let decoded: (DecodedSwap & { nft?: NftTag; holdTempo?: true; holdSizeEma?: true })[];
   if (src.kind === "nft") {
-    const logs = await readNftLogs(src, from, to, (filter, a, b) => getRawLogsChunked(clients, filter, a, b, opts));
-    const r = decodeNftLogs(src, logs, nftCarryFromJSON(carry), { ratings: ratingsFor(src.ratings) });
+    const logs = await readNftLogs(src, from, to, (filter, a, b) => getRawLogsChunked(clients, filter, a, b, opts), { ornaments: false });
+    // A topic-filtered read of a few pages: one range (shrunk only if the RPC refuses it).
+    const pages = await readNftPageLogs(src, logs, to, (filter, a, b) => getRawLogsChunked(clients, filter, a, b, { chunk: b - a + 1n }));
+    const r = decodeNftLogs(src, logs, nftCarryFromJSON(carry), { ratings: ratingsFor(src.ratings), pages });
     decoded = r.sales;
     if (carry) Object.assign(carry, nftCarryToJSON(r.carry));
   } else decoded = decodeSwapLogs(src, await getRawLogsChunked(clients, swapLogFilter(src), from, to, opts));
