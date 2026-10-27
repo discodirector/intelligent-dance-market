@@ -1,8 +1,9 @@
-// The "how" section (index.html #how) of an nft station (registry kind "nft", core nft.ts): the house text explains the
-// $IDM hook's pool; a collection station says what it reads and how each event sounds, in the same layout (the pitch
-// and the `cat spec/…` table). Credits has its own copy (its venues, Statements, BALANCE); any other collection a
-// generic one. Static strings only: nothing from the chain or the registry reaches the markup. The house page (no
-// station, or a pool station) is left exactly as index.html has it.
+// The "how" section (index.html #how) of an nft or hamster station: the house text explains the $IDM hook's pool; a
+// collection station (registry kind "nft", core nft.ts) and the hamster station (kind "hamster", core hamster.ts) say
+// what they read and how each input sounds, in the same layout (the pitch and the `cat spec/…` table). Credits has its
+// own copy (its venues, Statements, BALANCE); any other collection a generic one. Static strings only: nothing from
+// the chain or the registry reaches the markup. The house page (no station, or a pool station) is left exactly as
+// index.html has it.
 import type { Station } from "./stations";
 
 type Row = [input: string, rule: string, sound: string];
@@ -42,17 +43,42 @@ const NFT_ROWS: Row[] = [
   ["silence", "10 / 30 / 60 min since the last sale", "thinning → sparse → drone"],
 ];
 
-/** Rewrites #how for an nft station; anything else keeps index.html's own (the house page is untouched). */
-export function applyNftHow(station: Station | null | undefined) {
+const HAMSTER_PITCH = `
+  <p class="big">every 30 m of wheel is a note.</p>
+  <p>A real hamster's running wheel at Squeekchain, measured every few seconds by its sensor. We record it around the clock, so every listener hears the same night.</p>
+  <p>The wheel runs through the $IDM hook's rules (a 16-step, 4-track pattern and a bass line). The station only listens: nothing here rewards the wheel turning. While the hamster sleeps, the station dreams in ambient.</p>`;
+
+// Sizes: 0.0125 ETH x (speed / usual)^8 against the v2 tiers (0.7x, 1.5x, 3x the typical size) = 0.96x, 1.05x, 1.15x.
+const HAMSTER_ROWS: Row[] = [
+  ["run", "every 30 m of wheel distance", "a step · <span class=\"g\">+</span> a buy adds"],
+  ["speed", "vs the hamster's usual (median of its last 127 running speeds): &lt;0.96× · &lt;1.05× · &lt;1.15× · ≥1.15×", "<b>HAT</b> · <b>GLITCH</b> · <b>SNARE</b> · <b>KICK</b>"],
+  ["pace", "median of the last 12 running speeds", "the bass degree · it climbs as a run speeds up"],
+  ["rhythm", "the gaps between notes", "a faster run, a faster track · inside the genre's tempo range"],
+  ["stop", "the wheel stands still", "<span class=\"r\">−</span> a sell removes · the grid thins, the heat cools"],
+  ["milestone", "Squeekchain's distance and speed records, daily distances, streaks", "<b class=\"a\">WHALE</b> · <b class=\"a\">MOVEMENT</b> · drop / fill"],
+  ["heat", "a note on a full grid (≥48 of 64 bits) + 1 · a stop − 1 · 60 min without a note → 0", "filter opens · rolls · at 16 the track is complete: <b class=\"a\">DROP</b>"],
+  ["4 pages", "64 notes a page · epoch = page / 4", "the next <b>GENRE</b>: acid, electro, UK garage, drum &amp; bass, lo-fi house · its next <b>STYLE</b>"],
+  ["sleep", "10 min without a note", "ambient and drone on the frozen pattern · a new dream every 30 min · the next run wakes it"],
+  ["Squeekchain events", "settlements, claims and merges on Sepolia", "quiet ornaments, never a note"],
+  ["replay", "REPLAY LAST RUN on the wheel screen", "the last finished run again, at 1x"],
+];
+
+/** Rewrites #how for an nft or hamster station; anything else keeps index.html's own (the house page is untouched). */
+export function applyStationHow(station: Station | null | undefined) {
+  if (station?.kind === "hamster") return fill(HAMSTER_PITCH, "wheel", HAMSTER_ROWS);
   if (station?.kind !== "nft") return;
+  const credits = station.key === "credits";
+  fill(credits ? CREDITS_PITCH : NFT_PITCH, credits ? "credits" : "collection", credits ? CREDITS_ROWS : NFT_ROWS);
+}
+
+function fill(pitchHtml: string, spec: string, rows: Row[]) {
   const how = document.getElementById("how");
   const pitch = how?.querySelector(".pitch");
   const head = how?.querySelector(".tt-head");
   const body = how?.querySelector("tbody");
   if (!how || !pitch || !head || !body) return;
-  const credits = station.key === "credits";
   how.classList.add("how-nft");
-  pitch.innerHTML = credits ? CREDITS_PITCH : NFT_PITCH;
-  head.innerHTML = `&gt; cat spec/${credits ? "credits" : "collection"}.txt <span class="tt-rules">· rules v2 · off-chain</span>`;
-  body.innerHTML = (credits ? CREDITS_ROWS : NFT_ROWS).map(([a, b, c]) => `<tr><td>${a}</td><td>${b}</td><td>${c}</td></tr>`).join("");
+  pitch.innerHTML = pitchHtml;
+  head.innerHTML = `&gt; cat spec/${spec}.txt <span class="tt-rules">· rules v2 · off-chain</span>`;
+  body.innerHTML = rows.map(([a, b, c]) => `<tr><td>${a}</td><td>${b}</td><td>${c}</td></tr>`).join("");
 }

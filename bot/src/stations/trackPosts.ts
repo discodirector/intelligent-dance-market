@@ -108,6 +108,8 @@ export interface StationTrackCaption {
   genre?: string;
   style?: string;
   site?: string;
+  /** The hamster station: the wheel's makers' X handle (registry hamster.tag, their ok given 2026-10-27). */
+  tag?: string;
 }
 
 /**
@@ -121,6 +123,21 @@ export function nftTrackCaption(c: StationTrackCaption): string {
   return [
     `track #${c.trackNo} finished on the ${name} station: ${c.count} sales${sound ? `, ${sound}` : ""}.`,
     `every ${name} sale is a note, played through the ${cashtag("IDM")} rules.`,
+    `${site}/?net=${c.key}`,
+  ].join("\n");
+}
+
+/**
+ * The hamster station's track post: same rules as a collection's (impersonal, lowercase, $IDM the only cashtag), the
+ * notes, genre · style, the wheel's makers tagged when the registry names their handle (hamster.tag), the station link.
+ */
+export function hamsterTrackCaption(c: StationTrackCaption): string {
+  const sound = [c.genre, c.style].filter(Boolean).map((x) => x!.toLowerCase()).join(" · ");
+  const site = (c.site ?? "https://theidm.fun").replace(/\/$/, "");
+  const name = c.label.replace(/\$/g, "").toLowerCase();
+  return [
+    `track #${c.trackNo} finished on the ${name} station: ${c.count} notes from a real hamster's wheel${sound ? `, ${sound}` : ""}.`,
+    `every 30 m of the wheel is a note, played through the ${cashtag("IDM")} rules.${c.tag ? ` wheel by @${c.tag}` : ""}`,
     `${site}/?net=${c.key}`,
   ].join("\n");
 }

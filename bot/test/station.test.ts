@@ -24,12 +24,14 @@ describe("station registry", () => {
   });
 
   it("every played entry becomes a bot station with its chain's log chunk", () => {
-    for (const e of reg.stations.filter((s) => s.kind !== "hook")) {
+    for (const e of reg.stations.filter((s) => s.kind !== "hook" && s.kind !== "hamster")) {
       const st = stationFromEntry(e, reg);
       expect(st.maxChunk).toBe(BigInt(reg.chains[String(e.chainId)].logChunk));
       expect(st.rpcUrls!.length).toBeGreaterThan(0);
     }
     expect(() => stationFromEntry(reg.stations.find((s) => s.kind === "hook")!, reg)).toThrow();
+    // the hamster reads its published night (updateHamsterStation), not logs
+    expect(() => stationFromEntry(reg.stations.find((s) => s.kind === "hamster")!, reg)).toThrow(/published night/);
   });
 });
 

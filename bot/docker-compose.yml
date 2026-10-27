@@ -94,6 +94,49 @@ services:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
 
+  # Hamster station data (src/hamster/publish.ts): follows the recorder's log (read-only) and writes
+  # out/stations-data/hamster.json for the site and the bot every few seconds. Profile hamster, like the recorder.
+  hamster-publish:
+    image: swarm-sequencer-bot:latest
+    container_name: swarm-sequencer-hamster-publish
+    profiles: ["hamster"]
+    command: ["npx", "tsx", "src/hamster/publish.ts"]
+    restart: unless-stopped
+    environment:
+      HAMSTER_DIR: /data/hamster
+      HAMSTER_PUBLIC_DIR: /data/stations-data
+    volumes:
+      - ../hamster:/data/hamster:ro
+      - ../out/stations-data:/data/stations-data
+    mem_limit: 256m
+    cpus: 0.25
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # Station radio (src/radio/index.ts, docs/STATIONS.md "Listen page"): a station's sound as a plain MP3 stream
+  # (Squeekchain's: the cage stream takes theidm.fun/radio/squeekchain.mp3 as an audio input). Headless Chromium plays
+  # the built site's listen page, ffmpeg encodes. Loopback only: Caddy proxies /radio/* to it. Profile radio.
+  radio:
+    image: swarm-sequencer-bot:latest
+    container_name: swarm-sequencer-radio
+    profiles: ["radio"]
+    command: ["npx", "tsx", "src/radio/index.ts"]
+    restart: unless-stopped
+    environment:
+      RADIO_NET: squeekchain
+      RADIO_PORT: "8788"
+      STATIONS_DATA_DIR: /data/stations-data
+    ports:
+      - "127.0.0.1:8798:8788"
+    volumes:
+      - ../out/stations-data:/data/stations-data:ro
+    mem_limit: 768m
+    cpus: 0.75
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
   # Pulse keeper (src/pulse.ts): same image, needs only LIVE_RPC_URL + PULSE_TREASURY (+ PULSE_KEY to send).
   # Dry run unless pulse.env sets PULSE_SEND=true. Behind a profile, so `docker compose up -d` starts only the bot;
   # start it after launch with `docker compose --profile pulse up -d pulse`.

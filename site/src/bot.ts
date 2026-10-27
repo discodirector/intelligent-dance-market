@@ -45,6 +45,8 @@ interface Entry extends RawTimelineEvent {
     /** The item (a page for compose, withdraw, overprint and a Statement sale), the venue, a compose's items, the rating (tenths), an overprint's top page. */
     id?: string; venue?: string; items?: number; rating?: number; top?: string;
   };
+  /** The hamster station (core hamster.ts tag): what the wheel did. */
+  hamster?: { via: string; speed: number; kind?: string; value?: string };
 }
 
 interface SetupOptions {
@@ -294,7 +296,7 @@ function paint(t: number) {
 
   const e = entries[idx];
   const when = e?.ts ? new Date(e.ts * 1000).toISOString().slice(0, 16).replace("T", " ") + " UTC" : "";
-  $("foot-right").textContent = [when, e?.blockNumber ? `BLK ${e.blockNumber.toLocaleString("en-US")}` : ""].filter(Boolean).join(" · ");
+  $("foot-right").textContent = [when, e?.blockNumber && !hamsterMode ? `BLK ${e.blockNumber.toLocaleString("en-US")}` : ""].filter(Boolean).join(" · ");
   logLines(idx);
 }
 
@@ -388,8 +390,31 @@ function stationTheme(t?: StationTheme, key?: string) {
 
 /** A collection station's release (ReleaseSetup.nft): the item's name ("Credit"), else null (a pool: swaps). */
 let nftItem: string | null = null;
-/** What an input is on the release tape: a swap, or (a collection station) a sale. */
-const unit = () => (nftItem ? "SALE" : "SWAP");
+/** The hamster station's release (ReleaseSetup.hamster). */
+let hamsterMode = false;
+/** What an input is on the release tape: a swap, or (a collection station) a sale, or (the hamster) a note. */
+const unit = () => (nftItem ? "SALE" : hamsterMode ? "NOTE" : "SWAP");
+
+/** The hamster's input on the tape, as the site's feed says it (site main.ts hamsterWhat), upper case. */
+function hamsterWhat(e: Entry): string {
+  const h = e.hamster!;
+  if (h.via === "run") return `<span class="sd">RUN </span> ${(h.speed / 1000).toFixed(2)} M/S · +30 M`;
+  if (h.via === "stop") return `<span class="sd">STOP</span> THE WHEEL STANDS`;
+  const v = Number(h.value ?? 0);
+  const what =
+    h.kind === "daily_distance_milestone" ? `${(v / 1e6).toFixed(2)} KM TODAY`
+    : h.kind === "distance_milestone" ? `${(v / 1e6).toFixed(2)} KM IN ALL`
+    : h.kind === "speed_record" ? `SPEED RECORD ${(v / 1000).toFixed(2)} M/S`
+    : (h.kind ?? "").toUpperCase();
+  return `<span class="sd">MILE</span> ${what}`;
+}
+
+/** The module's words for the hamster station: notes, "every 30 m of wheel is a note". */
+function hamsterLabels(name: string) {
+  $("c-swaps-label").textContent = "notes";
+  $("swap-silk").textContent = "NOTE #";
+  $("foot-left").textContent = `EVERY 30 M OF WHEEL IS A NOTE · ${name.toUpperCase()}`;
+}
 
 /**
  * A collection station's input on the tape, as its site feed says it (site main.ts nftWhat), upper case to match the
@@ -440,6 +465,8 @@ interface ReleaseSetup extends ReleaseRequest {
    * cashtag); the tape and the module name sales, not swaps.
    */
   nft?: { item: string; name: string };
+  /** The hamster station (registry kind "hamster"): its name; the tape and the module name notes. */
+  hamster?: { name: string };
 }
 
 interface ReleaseInfo {
@@ -520,7 +547,7 @@ function releaseTape(r: BuiltRelease, n: number, dropped: boolean) {
     const amt = formatQuote(quoteOf(e) * (shownQuote?.perEth ?? 1)).padStart(8, " ");
     const tag = whale ? ` <span class="tag">${e.isBuy ? "FILL" : "DROP"}</span>` : "";
     const trk = TRACKS[(e.track ?? 0) & 3].padEnd(6, " ");
-    const what = nftItem && (e as Entry).nft ? nftWhat(e as Entry) : `<span class="sd">${e.isBuy ? "BUY " : "SELL"}</span> ${amt} ${shownQuote?.symbol ?? quoteSymbolOf(e)}`;
+    const what = nftItem && (e as Entry).nft ? nftWhat(e as Entry) : hamsterMode && (e as Entry).hamster ? hamsterWhat(e as Entry) : `<span class="sd">${e.isBuy ? "BUY " : "SELL"}</span> ${amt} ${shownQuote?.symbol ?? quoteSymbolOf(e)}`;
     rows.push(
       `<li class="${cls}"><span class="p">&gt;</span> <span class="t">${hhmm(e.ts ?? 0)}</span>  ${what}  ` +
         `<span class="trk">${trk}</span> s${String((e.step ?? 0) + 1).padStart(2, "0")}${tag}</li>`,
@@ -599,7 +626,7 @@ function paintRelease(r: BuiltRelease, t: number) {
 
   const e = n > 0 ? r.entries[n - 1] : null;
   const when = e?.ts ? new Date(e.ts * 1000).toISOString().slice(0, 16).replace("T", " ") + " UTC" : "";
-  $("foot-right").textContent = [when, e?.blockNumber ? `BLK ${e.blockNumber.toLocaleString("en-US")}` : ""].filter(Boolean).join(" · ");
+  $("foot-right").textContent = [when, e?.blockNumber && !hamsterMode ? `BLK ${e.blockNumber.toLocaleString("en-US")}` : ""].filter(Boolean).join(" · ");
   releaseTape(r, n, dropped);
 }
 
@@ -615,11 +642,12 @@ function paceText(r: BuiltRelease): string {
 }
 
 window.__setupRelease = async (o) => {
-  const { timeline, width, height, fps, wavUrl, title, subtitle, station, theme, quote, skin, nft, ...req } = o;
+  const { timeline, width, height, fps, wavUrl, title, subtitle, station, theme, quote, skin, nft, hamster, ...req } = o;
   rel = buildRelease(timeline, cleanRequest(req));
   const r = rel;
   const no = r.selection.trackNo;
   nftItem = nft?.item ?? null;
+  hamsterMode = !!hamster;
   opts = {
     width: width ?? 1080,
     height: height ?? 1080,
@@ -638,6 +666,7 @@ window.__setupRelease = async (o) => {
     $("model-sub").textContent = station;
     $("foot-left").textContent = `EVERY TRADE IS A NOTE · ${station.toUpperCase()}`;
     if (nft) nftLabels(nft.name);
+    if (hamster) hamsterLabels(hamster.name);
   }
   $("title").textContent = opts.title;
   $("subtitle").textContent = opts.subtitle;

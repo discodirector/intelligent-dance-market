@@ -23,6 +23,8 @@ import { crossfadeSeconds, epochOf, eraById, eraOf, type Era } from "./eras.ts";
 import { HOUSE_PROGRAM, type Program } from "./program.ts";
 import { initialState, type SequencerState } from "./state.ts";
 import type { ReleasePlan } from "./release.ts";
+import type { StationPack } from "./pack.ts";
+import { sleepAt, sleepState, withSleep, type SleepSlot } from "./sleep.ts";
 
 export interface StepListenerEvent {
   step: number;
@@ -41,6 +43,11 @@ export interface EraView {
 export interface LivePlayerOptions {
   /** What the player plays (program.ts). Fixed for the player's life: a new station is a new player. Default house. */
   program?: Program;
+  /**
+   * Sleep mode (sleep.ts): once the last input is SLEEP_AFTER_SEC old, play this pack's styles, one per 30 min slot of
+   * the clock, on the frozen state. The player plays withSleep(program, sleep). Absent: idle stages as always.
+   */
+  sleep?: StationPack;
 }
 
 export interface LivePlayer {
@@ -77,6 +84,8 @@ export interface LivePlayer {
   readonly running: boolean;
   getTransport(): TransportView;
   getEra(): EraView;
+  /** Sleep mode: the slot playing now (or that the next step would play), null when awake or without a sleep pack. */
+  getSleep(): SleepSlot | null;
   onStep(listener: (event: StepListenerEvent) => void): () => void;
 }
 
@@ -393,7 +402,8 @@ class EraRig {
  * has not been scheduled yet, and neither rebuilds a playing graph.
  */
 export function createLivePlayer(ctx: AudioContext, options?: LivePlayerOptions): LivePlayer {
-  const program = options?.program ?? HOUSE_PROGRAM;
+  const sleepPack = options?.sleep ?? null;
+  const program = sleepPack ? withSleep(options?.program ?? HOUSE_PROGRAM, sleepPack) : (options?.program ?? HOUSE_PROGRAM);
   const rig = new EraRig(ctx, null, true, null, program);
   rig.connect(ctx.destination);
 
@@ -411,6 +421,10 @@ export function createLivePlayer(ctx: AudioContext, options?: LivePlayerOptions)
   let idleMem: IdleMemory = freshIdleMemory();
   const scheduled: Scheduled[] = [];
   const listeners = new Set<(event: StepListenerEvent) => void>();
+  /** The listener's genre override (setEraOverride); sleep mode overrides it while asleep. */
+  let userOverride: string | null = null;
+  const clockNow = () => (clockSec != null ? clockSec : Date.now() / 1000);
+  const sleepOf = (state: SequencerState, nowSec: number) => (sleepPack ? sleepAt(state.lastTs, nowSec, program, sleepPack) : null);
 
   function arm(time: number) {
     if (!committed) return;
@@ -430,9 +444,15 @@ export function createLivePlayer(ctx: AudioContext, options?: LivePlayerOptions)
         state = trackHold;
       }
     }
+    const nowSec = clockNow();
+    if (sleepPack) {
+      // Asleep: the slot's style on the frozen state; awake: the listener's override (null follows the chain).
+      const slot = sleepOf(state, nowSec);
+      if (slot) state = sleepState(state, slot);
+      rig.setOverride(slot ? slot.era.id : userOverride);
+    }
     const { tempo, duration } = genreStep(state, rig.override, null, program);
     const character = stepCharacter(state.patternId, step, rig.override, null, program);
-    const nowSec = clockSec != null ? clockSec : Date.now() / 1000;
     const idleStep = advanceIdle(idleMem, state, nowSec, step);
     idleMem = idleStep.mem;
     let drop: StepHit["drop"];
@@ -484,6 +504,7 @@ export function createLivePlayer(ctx: AudioContext, options?: LivePlayerOptions)
       else pending = state;
     },
     setEraOverride(eraId) {
+      userOverride = eraId;
       rig.setOverride(eraId);
     },
     setClock(nowSec) {
@@ -557,7 +578,11 @@ export function createLivePlayer(ctx: AudioContext, options?: LivePlayerOptions)
     },
     getEra() {
       const state = committed ?? pending ?? initialState();
-      return rig.describe(state, ctx.currentTime);
+      const slot = sleepOf(state, clockNow());
+      return rig.describe(slot ? sleepState(state, slot) : state, ctx.currentTime);
+    },
+    getSleep() {
+      return sleepOf(pending ?? committed ?? initialState(), clockNow());
     },
     onStep(listener) {
       listeners.add(listener);

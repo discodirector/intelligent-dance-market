@@ -843,3 +843,5 @@ export * from "./nft.ts";
 export * from "./credittable.ts";
 // Station checkpoints: the state a bot replay reached, for the site to start from (checkpoint.ts).
 export * from "./checkpoint.ts";
+// Hamster source: a real hamster's wheel (Squeekchain) -> the rules input, one per 30 m of wheel (hamster.ts).
+export * from "./hamster.ts";

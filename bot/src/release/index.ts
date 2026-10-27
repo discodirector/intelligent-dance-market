@@ -54,6 +54,8 @@ export interface ReleaseOpts {
   skin?: string;
   /** A collection station (kind "nft"): the item ("Credit") and collection ("CREDITS") names; the video counts sales. */
   nft?: ReleaseNft;
+  /** The hamster station: its name; the video counts notes, the tape says what the wheel did. */
+  hamster?: { name: string };
 }
 
 export interface ReleaseNft { item: string; name: string }
@@ -179,7 +181,7 @@ async function renderFrames(
     await page.goto(`${srv.base}/bot.html`, { waitUntil: "load" });
     await page.waitForFunction(() => typeof (window as any).__setupRelease === "function", null, { timeout: 120_000 });
     const info = await page.evaluate((a) => (window as any).__setupRelease(a), {
-      ...req, timeline: o.timeline, width: size, height: size, fps, wavUrl: WAV_PATH, title: o.title, subtitle: o.subtitle, station: o.station, theme: o.theme, quote: o.quote, skin: o.skin, nft: o.nft,
+      ...req, timeline: o.timeline, width: size, height: size, fps, wavUrl: WAV_PATH, title: o.title, subtitle: o.subtitle, station: o.station, theme: o.theme, quote: o.quote, skin: o.skin, nft: o.nft, hamster: o.hamster,
     });
     if (Math.abs(info.seconds - seconds) > 1e-6) throw new Error(`bot.html planned ${info.seconds}s, the WAV is ${seconds}s (site and web out of sync?)`);
     const frames = Math.round(fps * seconds);

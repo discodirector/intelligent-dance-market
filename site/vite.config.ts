@@ -30,6 +30,7 @@ export default defineConfig({
         stations: fileURLToPath(new URL("stations.html", import.meta.url)),
         bot: fileURLToPath(new URL("bot.html", import.meta.url)),
         stream: fileURLToPath(new URL("stream.html", import.meta.url)),
+        listen: fileURLToPath(new URL("listen.html", import.meta.url)),
       },
     },
   },

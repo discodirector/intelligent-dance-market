@@ -176,10 +176,21 @@ const cache = new Map<string, Arrangement>();
  * so the site, the bot's renders and replays agree. `bar` adds phrase-level
  * movement (a fill every 4th bar, a hat break every 8th) on top of the chain.
  */
-export function arrange(state: SequencerState, bar = 0): Arrangement {
+/**
+ * `breakdown` / `intro`: a style's own layer levels for the breakdown / the intro over the form's
+ * (GenreStyle.breakdown, GenreStyle.intro); left out, the form's.
+ */
+export function arrange(
+  state: SequencerState,
+  bar = 0,
+  breakdown?: Partial<Omit<Section, "name" | "bar">>,
+  intro?: Partial<Omit<Section, "name" | "bar">>,
+): Arrangement {
   const phrase = ((bar % 8) + 8) % 8;
-  const section = sectionAt(bar);
-  const key = `${state.pattern}:${state.bass}:${state.patternId >>> 0}:${state.root}:${section.bar}`;
+  const form = sectionAt(bar);
+  const over = form.name === "breakdown" ? breakdown : form.name === "intro" ? intro : undefined;
+  const section = over ? { ...form, ...over } : form;
+  const key = `${state.pattern}:${state.bass}:${state.patternId >>> 0}:${state.root}:${section.bar}${section === form ? "" : `:${JSON.stringify(over)}`}`;
   const hit = cache.get(key);
   if (hit) return hit;
 

@@ -35,6 +35,12 @@
       "nativeSymbol": "MON",
       "weth": "0xEE8c0E9f1BFFb4Eb878d8f15f368A02a35481242",
       "poolManager": "0x188d586ddcf52439676ca21a244753fa19f9ea8e"
+    },
+    "11155111": {
+      "name": "Sepolia", "explorer": "https://sepolia.etherscan.io", "explorerName": "Etherscan",
+      "rpcUrls": ["https://sepolia.gateway.tenderly.co", "https://ethereum-sepolia-rpc.publicnode.com"],
+      "logChunk": 40000,
+      "weth": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"
     }
   },
   "stations": [
@@ -118,6 +124,22 @@
       },
       "theme": { "phos": "#e2dfd4", "phosDim": "#7a7870", "ghost": "#222220", "lcd": "#0b0b0a", "panel": "#f2f1ec", "sell": "#ff3d9a", "whale": "#ffd100" },
       "program": "credits",
+      "status": "live",
+      "gift": true
+    },
+    {
+      "key": "squeekchain",
+      "label": "SQUEEKCHAIN",
+      "ticker": "SQUEEKCHAIN",
+      "chainId": 11155111,
+      "genesisBlock": 11990000,
+      "token": "0x6872bfa5ccc3e9e440c6c16e5ffdabb8dba4cc76",
+      "quote": "0x0000000000000000000000000000000000000000",
+      "quoteSymbol": "ETH",
+      "kind": "hamster",
+      "hamster": { "data": "/stations-data/hamster.json", "sleep": "hamster-sleep", "tag": "squeekchain" },
+      "theme": { "phos": "#ffc46b", "phosDim": "#a3702a", "ghost": "#2e1f0c", "lcd": "#120b04" },
+      "program": "hamster",
       "status": "live",
       "gift": true
     }

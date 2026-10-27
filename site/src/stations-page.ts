@@ -5,8 +5,9 @@ import "./style.css";
 import "./stations.css";
 import { createPublicClient, defineChain, fallback, http, parseAbi, type PublicClient } from "viem";
 import type { State } from "@swarm-sequencer/core";
-import { epochOf, eraOf, isOn, programFor, styleOf, type Program } from "@swarm-sequencer/synth";
+import { epochOf, eraOf, isOn, packFor, programFor, sleepAt, styleOf, withSleep, type Program } from "@swarm-sequencer/synth";
 import { NETWORKS } from "./config";
+import { startHamster } from "./data/hamster";
 import { startVirtual } from "./data/virtual";
 import { decodeSlots, RULES, toSynth } from "./rules";
 import { WaveSky, type SkyAudio } from "./sky";
@@ -18,7 +19,7 @@ const raw = parseAbi(["function raw() view returns (uint256 slot0, uint256 slot1
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
 interface Card {
-  /** "SALES" for a collection, "SWAPS" for a pool. */
+  /** "SALES" for a collection, "NOTES" for the hamster's wheel, "SWAPS" for a pool. */
   unit: string;
   /** What this station plays (its registry program): names the genre · style on the card. */
   program: Program;
@@ -35,7 +36,11 @@ function card(s: Station, i: number, plus: boolean): Card {
   el.className = "st";
   // The card's own variables: its LCD, LED and button glow in the station's colours, the page stays as it is.
   applyTheme(s.theme, el);
-  const pool = s.kind === "hook" ? "v4 pool · $IDM hook" : s.kind === "nft" ? "ERC-721 · every sale a note, the rules run in the browser" : `${s.kind} pool · no hook, the rules run in the browser`;
+  const pool = s.kind === "hook" ? "v4 pool · $IDM hook" : s.kind === "nft" ? "ERC-721 · every sale a note, the rules run in the browser" : s.kind === "hamster" ? "a real hamster's wheel · every 30 m a note, the rules run in the browser" : `${s.kind} pool · no hook, the rules run in the browser`;
+  // The hamster station has no token or pool to link: its wheel's maker instead.
+  const source = s.kind === "hamster"
+    ? `<dt>WHEEL</dt><dd><a href="https://docs.squeekchain.com" target="_blank" rel="noopener">Squeekchain ↗</a></dd><dt>SOURCE</dt>`
+    : `<dt>${s.kind === "nft" ? "COLLECTION" : "TOKEN"}</dt><dd><a href="${chain.explorer}/token/${s.token}" target="_blank" rel="noopener">${esc(stationName(s))} ↗</a></dd><dt>${s.kind === "nft" ? "MARKET" : "POOL"}</dt>`;
   el.innerHTML = `
     <div class="st-top"><span class="silk">STATION ${String(i + 1).padStart(2, "0")}${s.house ? " · HOUSE" : plus ? " · STATION+" : ""}</span><span class="led"></span></div>
     <div class="st-lcd">
@@ -46,12 +51,11 @@ function card(s: Station, i: number, plus: boolean): Card {
     </div>
     <dl>
       <dt>CHAIN</dt><dd>${esc(chain.name)}</dd>
-      <dt>${s.kind === "nft" ? "COLLECTION" : "TOKEN"}</dt><dd><a href="${chain.explorer}/token/${s.token}" target="_blank" rel="noopener">${esc(stationName(s))} ↗</a></dd>
-      <dt>${s.kind === "nft" ? "MARKET" : "POOL"}</dt><dd>${esc(pool)}</dd>
+      ${source}<dd>${esc(pool)}</dd>
     </dl>
     <div class="st-foot"><span class="st-air"><span class="dot" aria-hidden="true"></span>ON AIR</span><a class="btn-sq" href="${playerHref(s)}">LISTEN ▸</a></div>`;
   const q = (sel: string) => el.querySelector<HTMLElement>(sel)!;
-  return { el, unit: s.kind === "nft" ? "SALES" : "SWAPS", program: programFor(s.program), now: q(".st-now"), meta: q(".st-meta"), cells: [...el.querySelectorAll<HTMLElement>(".st-cells i")], dot: q(".dot") };
+  return { el, unit: s.kind === "nft" ? "SALES" : s.kind === "hamster" ? "NOTES" : "SWAPS", program: programFor(s.program), now: q(".st-now"), meta: q(".st-meta"), cells: [...el.querySelectorAll<HTMLElement>(".st-cells i")], dot: q(".dot") };
 }
 
 /** Genre · style the player picks for this state (the station's program), the track in progress and the pattern. */
@@ -128,6 +132,40 @@ function tuneVirtual(c: Card, s: Station) {
   });
 }
 
+/**
+ * Hamster station: the wheel decoded from our recorder's file (data/hamster.ts), as the player does; asleep, the card
+ * names the dream the player plays (synth sleep.ts).
+ */
+function tuneHamster(c: Card, s: Station) {
+  const net = NETWORKS[s.key];
+  if (!net?.hamster) return fail(c, "NOT PLAYABLE YET");
+  const sleep = net.hamster.sleep ? packFor(net.hamster.sleep) : undefined;
+  const program = sleep ? withSleep(c.program, sleep) : c.program;
+  let state: State | null = null;
+  c.meta.textContent = "READING THE WHEEL…";
+  const draw = () => {
+    if (!state) return;
+    show(c, state);
+    const slot = sleep ? sleepAt(state.lastTs, Date.now() / 1000, program, sleep) : null;
+    if (slot) c.now.textContent = `ASLEEP · ${styleOf(slot.era, slot.epoch, program).style.name}`.toUpperCase();
+  };
+  startHamster(net, {
+    onSwap(e) {
+      state = e.state;
+    },
+    onState(st) {
+      state = st;
+      draw();
+    },
+    onBlock() {},
+    onClock() {},
+    onStatus(_text, ok) {
+      if (!ok) return fail(c, "DATA ERROR · RETRYING");
+      draw();
+    },
+  }, net.hamster);
+}
+
 // On air = the registry's live stations minus the expired subscriptions in the bot's status.json (registry alone when
 // the file is missing or slow), so the list waits for that one small read before it renders.
 const status = await loadStatus();
@@ -142,6 +180,7 @@ const seen = new IntersectionObserver((entries) => {
     const i = cards.findIndex((c) => c.el === e.target);
     const s = stations[i];
     if (s.kind === "hook") tuneHook(cards[i], s);
+    else if (s.kind === "hamster") tuneHamster(cards[i], s);
     else tuneVirtual(cards[i], s);
   }
 });

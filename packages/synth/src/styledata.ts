@@ -330,12 +330,22 @@ export interface LiquidData extends SoundData {
   sub?: number;
   /** soulful. Four-chord progressions, two bars a chord: exactly 4 chords each. 1..6. Default LIQUID_SOUL_PROGS. */
   progressions?: readonly (readonly PadChord[])[];
-  /** soulful. Sub walks over one chord (two bars, onsets 0..31); `oct` 0 or 1 = an octave up. 1..6 of 1..12. Default LIQUID_SOUL_BASS. */
-  walks?: readonly (readonly (CoreNote & { oct: number })[])[];
+  /**
+   * soulful, classic. Sub walks over one chord (two bars, onsets 0..31); `oct` 0 or 1 = an octave up, `semi` -12..12
+   * semitones over the chord root (left out: the root). 1..6 of 1..12. Soulful default LIQUID_SOUL_BASS; classic
+   * left out keeps its rolling sub on the chain's bass onsets, given plays the walk on each vamp chord instead.
+   */
+  walks?: readonly (readonly (CoreNote & { oct: number; semi?: number })[])[];
   /** soulful. Rhodes comping over one chord (onsets 0..31; a hit on 30+ plays the next chord early). 1..6 of 1..10. Default LIQUID_SOUL_COMP. */
   comps?: readonly (readonly CoreNote[])[];
   /** classic, atmos, soulful. The sub's voice (classic: `octave` 0.14 is its octave layer). */
   bass?: Partial<SubSpec>;
+  /**
+   * classic, atmos, soulful. A reese over the sub, off by default (`level` 0): a detuned saw pair an octave up on
+   * every sub note, driven, through a lowpass that may wobble in time (LiquidReeseSpec; the values when on are
+   * engine.ts LIQUID_REESE).
+   */
+  reese?: Partial<LiquidReeseSpec>;
   /** classic, atmos. The tape pad (reads osc, cutoff, q, attack, release, level, vib = wow depth). */
   pad?: Partial<PadSpec>;
   /** atmos. The airy formant choir over the pads (reads osc, cutoff, q, attack, release, level, vib). */
@@ -347,6 +357,23 @@ export interface LiquidData extends SoundData {
    * over the base's preset (LIQUID_ORNAMENTS). Only plays on a mention of the token.
    */
   ornament?: Partial<LiquidOrnamentSpec>;
+}
+
+/** The liquid reese (LiquidData.reese): Dark Sub's reese voice on the liquid sub notes. */
+export interface LiquidReeseSpec {
+  /** Level 0..1.5: 0 = off (the house), 1 = the house reese level (Dark Sub's). */
+  level: number;
+  /** Saw detune, ± cents 0..40. */
+  detune: number;
+  /** tanh drive 0.1..5. */
+  drive: number;
+  /** Lowpass base Hz 60..1200 and resonance 0.3..8. */
+  cutoff: number;
+  q: number;
+  /** Wobble depth, a share of the cutoff 0..1 (0 = a still filter). */
+  depth: number;
+  /** Wobble cycles per beat 0.0625..4. */
+  rate: number;
 }
 
 /** A liquid mention voice: nature far away, an amen ghost snare, one note of the style's keys. */
@@ -464,7 +491,343 @@ export interface GarageData extends SoundData {
    * the base's preset (GARAGE_ORNAMENTS). Not the Dark Sub `foley` ticks above: this one only plays on a mention.
    */
   ornament?: Partial<GarageOrnamentSpec>;
+  /**
+   * classic. The UK garage voices (UkgSpec), off by default: with `ukg.level` > 0 the Vocal Chops renderer gives way
+   * to the energetic synth 2-step (engine.ts garageUkg), which reads `kicks`, `skips`, `chords`, `progressions`,
+   * `vowels`, `kit`, `stabs`, `basslines`, `motifs`, `calls` and the sound fields (`bass`, `pad` and `rain` are not
+   * read; its sub is `ukg.sub`). Merged field by field over UKG_SPEC (engine.ts); `{ level: 0 }` (the house value)
+   * builds nothing new, so every house style and older pack schedules exactly as before.
+   */
+  ukg?: UkgData;
+  /**
+   * classic, ukg only. Chord stab rhythms over two bars: 1..6 figures of 2..12 hits { s 0..31, len 0.25..8 16ths,
+   * vel 0.1..1, core }. `vel` is the hit's velocity: it scales the stab's level, cutoff, filter envelope and drive,
+   * so every chord sounds a little different. Non-core hits need the chain's glitch row. Default UKG_STABS.
+   */
+  stabs?: readonly (readonly UkgStab[])[];
+  /**
+   * classic, ukg only. Basslines over two bars: 1..6 lines of 2..16 notes { s 0..31, len 0.25..8, semi -12..24 over
+   * the chord's bass (0 root, 12 the octave jump, 7 the fifth), vel 0.1..1, core, glide? (slide in from the last
+   * note, `ukg.sub.glide` s) }. Non-core notes play where the chain has a bass onset (or on a busy glitch row).
+   * Every note must stay in the key: (chord bass + semi) mod 12 in the natural minor scale for every chord of the
+   * style's table (validatePack). Default UKG_BASSLINES.
+   */
+  basslines?: readonly (readonly UkgBassNote[])[];
+  /**
+   * classic, ukg only. Pluck (and lead) motifs over two bars: 1..6 of 2..8 notes { s 0..31, len 0.25..8, tone 0..5
+   * (index into the chord's stab voicing, low to high; past the top it wraps up an octave), oct -1..2, core }. Chord
+   * tones only, so a motif is always in key. Every second time round its last core note moves up one chord tone.
+   * Default UKG_MOTIFS.
+   */
+  motifs?: readonly (readonly UkgMotifNote[])[];
+  /**
+   * classic, ukg only. Vocal-synth calls over two bars ("yeah", "uh", "eh", "oh"): 1..6 of 1..12 calls { s 0..31,
+   * len 0.5..8, vowel 0..5 and to? 0..5 (indices into `vowels`: the formants glide from one to the other), tone
+   * 0..5 (chord tone, as motifs), oct? -1..1, rep? 0..4 (stutter cuts a 32nd apart before it), core }. Default UKG_CALLS (over UKG_VOWELS unless the style gives `vowels`).
+   */
+  calls?: readonly (readonly UkgCall[])[];
 }
+
+/** A UK garage stab hit (GarageData.stabs). */
+export interface UkgStab extends CoreNote {
+  /** Velocity 0.1..1. */
+  vel: number;
+}
+/** A UK garage bass note (GarageData.basslines). */
+export interface UkgBassNote extends CoreNote {
+  /** Semitones over the chord's bass, -12..24. */
+  semi: number;
+  /** Velocity 0.1..1. */
+  vel: number;
+  /** Slide into this note from the last bass note. */
+  glide?: boolean;
+}
+/** A UK garage pluck/lead note (GarageData.motifs). */
+export interface UkgMotifNote extends CoreNote {
+  /** Chord tone index 0..5 (low to high in the stab voicing). */
+  tone: number;
+  /** Octave shift -1..2. Default 0. */
+  oct?: number;
+}
+/** A UK garage vocal-synth call (GarageData.calls). */
+export interface UkgCall extends CoreNote {
+  /** Vowel index into `vowels`, 0..5, and the vowel it glides to (default the same). */
+  vowel: number;
+  to?: number;
+  /** Chord tone index 0..5. */
+  tone: number;
+  /** Octave shift -1..1. Default 0. */
+  oct?: number;
+  /** Stutter: 0..4 short cuts (a 32nd apart) before the call ("y-y-yeah"). Default 0. */
+  rep?: number;
+}
+
+/**
+ * The main synth: a short chord stab ("TUM", not a pad). Per chord tone `voices` unison saws `detune` cents apart
+ * (split left and right when 2 or more), a square `osc2` an octave up in the middle; a 12 or 24 dB lowpass whose
+ * envelope jumps to cutoff x (1 + 4 x env x vel) and falls back in `fdecay`; tanh drive; amp A/D/S/R; an optional
+ * pitch envelope (`punch` semitones over the note falling in `punchTime`).
+ */
+export interface UkgStabSpec {
+  /** Level 0..1.5 (1 = the house level). */
+  level: number;
+  /** Unison saws per tone 1..4 and their spread, cents 0..40. */
+  voices: number;
+  detune: number;
+  /** Square an octave up, 0..1 of the saw. */
+  osc2: number;
+  /** Lowpass, Hz 400..9000; resonance 0.3..8; slope 12 or 24 dB/oct. */
+  cutoff: number;
+  q: number;
+  slope: 12 | 24;
+  /** Filter envelope amount 0..1 and its decay, s 0.03..1. */
+  env: number;
+  fdecay: number;
+  /** Amp envelope: attack 0.001..0.05 s, decay 0.05..1 s, sustain 0..1, release 0.02..0.6 s. */
+  attack: number;
+  decay: number;
+  sustain: number;
+  release: number;
+  /** Pitch envelope: semitones over the note 0..12 (0 = none), falling in 0.005..0.1 s. */
+  punch: number;
+  punchTime: number;
+  /** tanh drive 0..4 (scaled by velocity). */
+  drive: number;
+  /** How much velocity moves level, cutoff, envelope and drive, 0..1 (0 = every hit the same). */
+  vel: number;
+  /** Stereo spread of the two unison sides 0..1. */
+  width: number;
+  /** Register shift, semitones -12..12, over the chord voicing (its pad tones over the tonic in F#3..F4, MIDI 54..65). */
+  octave: number;
+}
+
+/** Organ under the stab: per chord tone sines at 0, +12 and +19 semitones (drawbars), chorus, drive, a short envelope. */
+export interface UkgOrganSpec {
+  /** Level 0..1.5 (0 = no organ). */
+  level: number;
+  /** Drawbar levels of the 8', 4' and 2 2/3' (0, +12, +19), each 0..1. */
+  bars: readonly [number, number, number];
+  /** Chorus detune, cents 0..20; drive 0..4; lowpass Hz 600..9000. */
+  chorus: number;
+  drive: number;
+  cutoff: number;
+  /** Decay 0.05..1.5 s, sustain 0..1, release 0.02..0.8 s. */
+  decay: number;
+  sustain: number;
+  release: number;
+}
+
+/** The sub: one sine, mono, with glide and a little drive (energy 40..90 Hz). */
+export interface UkgSubSpec {
+  /** Level 0..1.5. */
+  level: number;
+  /** Attack 0.001..0.03 s, decay 0.1..1.5 s, sustain 0..1, release 0.03..0.4 s. */
+  attack: number;
+  decay: number;
+  sustain: number;
+  release: number;
+  /** tanh drive 0..3 (harmonics for small speakers). */
+  drive: number;
+  /** Glide time of a `glide` note, s 0.02..0.2. */
+  glide: number;
+  /** Pitch drop into every note that does not glide: semitones 0..12 over the note, falling in `bendTime` 0.02..0.4 s (0 = none). */
+  bend: number;
+  bendTime: number;
+}
+
+/**
+ * The mid bass an octave over the sub (the "womp" in 100..500 Hz), centred: "saw" a saw and a square, "fm" a sine
+ * carrier with a sine modulator at `ratio` whose index falls from `index` to `floor` x index in `fmDecay`, "reese"
+ * two saws `detune` cents apart plus a centre saw (a gentle chorus). All through a highpass (`hp`), a lowpass with an
+ * envelope and drive.
+ */
+export interface UkgMidSpec {
+  /** "organ": the M1 organ bass (a sine, its octave and a little square, driven). */
+  kind: "saw" | "fm" | "reese" | "organ";
+  /** Level 0..1.5 (0 = no mid bass). */
+  level: number;
+  /** Lowpass Hz 150..3000, its envelope 0..1 (to cutoff x (1 + 5 x env)), resonance 0.3..8. */
+  cutoff: number;
+  env: number;
+  q: number;
+  /** Decay 0.05..1 s, sustain 0..1, release 0.02..0.4 s. */
+  decay: number;
+  sustain: number;
+  release: number;
+  /** tanh drive 0..5. */
+  drive: number;
+  /** Detune, cents 0..40 (saw: the square against the saw; reese: the two outer saws). */
+  detune: number;
+  /** FM: modulator ratio 0.5..6, index 0..8, its fall 0.03..0.6 s and floor 0..1. */
+  ratio: number;
+  index: number;
+  fmDecay: number;
+  floor: number;
+  /** Highpass under it, Hz 40..300 (the sub owns the bottom). */
+  hp: number;
+  /**
+   * The warp ("BWOOM"): every note that does not glide starts `bend` semitones (0..12) over its pitch and falls in
+   * `bendTime` (0.02..0.4 s). 0 = none.
+   */
+  bend: number;
+  bendTime: number;
+}
+
+/**
+ * Korg M1-style organ chords on the stab rhythm: per tone a sine, its octave and a quiet third harmonic, a key click,
+ * drive for grit, a lowpass, a percussive envelope (short decay to a low sustain).
+ */
+export interface UkgM1Spec {
+  /** Level 0..1.5 (0 = none). */
+  level: number;
+  /** Register shift over the stab voicing, semitones -12..12. */
+  octave: number;
+  /** Lowpass Hz 600..8000; drive 0..4; key click 0..1. */
+  cutoff: number;
+  drive: number;
+  click: number;
+  /** Decay 0.05..1 s, sustain 0..1, release 0.02..0.4 s. */
+  decay: number;
+  sustain: number;
+  release: number;
+}
+
+/** FM electric piano chords on the stab rhythm: per tone a sine modulator at `ratio` into two chorused sine carriers. */
+export interface UkgEpSpec {
+  /** Level 0..1.5 (0 = none). */
+  level: number;
+  /** Register shift over the stab voicing, semitones -12..12. */
+  octave: number;
+  /** Modulator ratio 0.5..4, index 0..6 falling to `floor` (0..1) x index in `decay` 0.05..2 s (the tine). */
+  ratio: number;
+  index: number;
+  floor: number;
+  decay: number;
+  /** Chorus detune, cents 0..20; lowpass Hz 800..9000; release 0.05..1.5 s. */
+  chorus: number;
+  cutoff: number;
+  release: number;
+}
+
+/** String pad swells on each chord of the breakdown, the rebuild's first half and the intro's break. */
+export interface UkgStringsSpec {
+  /** Level 0..1.5 (0 = none). */
+  level: number;
+  /** Saw pair detune, cents 0..40; lowpass Hz 400..6000 (opens with the swell); attack 0.05..4 s; release 0.1..4 s. */
+  detune: number;
+  cutoff: number;
+  attack: number;
+  release: number;
+  /** 1: swell on every chord in every section (a held pad or drone), not only the breakdowns. 0..1. */
+  hold: number;
+}
+
+/** The pluck: a short bright note (saw or triangle), a quick lowpass envelope, a small pitch drop, ping-pong panned. */
+export interface UkgPluckSpec {
+  /** Level 0..1.5 (0 = no pluck). */
+  level: number;
+  wave: "sawtooth" | "triangle" | "square";
+  /** Lowpass Hz 400..9000 and its envelope 0..1; decay 0.05..0.6 s, release 0.03..0.5 s. */
+  cutoff: number;
+  env: number;
+  decay: number;
+  release: number;
+  /** Pitch drop into the note, semitones 0..12 over 0.03 s. */
+  bend: number;
+  /** Ping-pong pan width 0..1 (the notes alternate sides). */
+  pan: number;
+}
+
+/** The vocal synth: saw + square + breath through two formant bandpasses that glide vowel to vowel, a pitch scoop. */
+export interface UkgVoxSpec {
+  /** Level 0..1.5 (0 = no calls). */
+  level: number;
+  /** Formant resonance 2..14. */
+  q: number;
+  /** Breath noise 0..1. */
+  breath: number;
+  /** Pitch scoop into the note, semitones -12..12 over `scoop` s 0.01..0.2 (negative: from below). */
+  bend: number;
+  scoop: number;
+  /** Release 0.02..0.5 s. */
+  release: number;
+  /** Lowpass, Hz 1000..9000 (the pool tick opens it up to 1500 more). */
+  lp: number;
+}
+
+/** The lead: square + saw an octave up, portamento, chorus; it plays the motif in the drop sections. */
+export interface UkgLeadSpec {
+  /** Level 0..1.5 (0 = no lead; the pluck plays the motif everywhere). */
+  level: number;
+  /** Portamento, s 0..0.2; chorus detune, cents 0..25; lowpass Hz 600..9000; release 0.03..0.6 s. */
+  glide: number;
+  detune: number;
+  cutoff: number;
+  release: number;
+}
+
+/**
+ * The groove on top of the swing: odd 16th hats land `hatLate` x a 16th later still (0..0.35, each hit varied by
+ * `jitter` 0..1 of it), the percussion `percLate` (0..0.35); ghost snares at `ghost` (0..1.5) x their figure
+ * velocity, each varied; `perc` (0..1.5) the rim/conga figure in the gaps; `open` (0..1.5) the open hats.
+ */
+export interface UkgGrooveSpec {
+  hatLate: number;
+  percLate: number;
+  jitter: number;
+  ghost: number;
+  perc: number;
+  open: number;
+  /** Tambourine on the off-8ths 0..1.5, skippy ghost kicks 0..1.5 (0 = none). */
+  tamb: number;
+  ghostKick: number;
+  /** Disco open hats on every off-8th 0..1.5; metallic ticks on the percussion figure's high hits 0..1.5 (0 = none). */
+  offOpen: number;
+  metal: number;
+}
+
+/** UK garage (GarageData.ukg): every part's sound and the song-form switches. */
+export interface UkgSpec {
+  /** Overall level of the synths 0..1.5; 0 = off (the base plays its own renderer). */
+  level: number;
+  /** Bars per chord, 1 or 2. */
+  bars: number;
+  stab: UkgStabSpec;
+  organ: UkgOrganSpec;
+  sub: UkgSubSpec;
+  /** The mid bass from the build on. */
+  mid: UkgMidSpec;
+  /** A second mid bass for the second half of the drop and the rebuild (the "second drop"); level 0 = the `mid` stays. */
+  drop2: UkgMidSpec;
+  pluck: UkgPluckSpec;
+  vox: UkgVoxSpec;
+  lead: UkgLeadSpec;
+  groove: UkgGrooveSpec;
+  /** M1 organ chords, FM electric piano chords (both on the stab rhythm) and string swells; all off by default. */
+  m1: UkgM1Spec;
+  ep: UkgEpSpec;
+  strings: UkgStringsSpec;
+  /**
+   * The style's own tonics (pitch classes 0..11, 1..6 of them; the instance picks one), in place of the genre's
+   * (futuregarage C# D# G# A#). Empty = the genre's.
+   */
+  keys: readonly number[];
+  /**
+   * The scale validatePack holds every chord tone and bass note to: "minor" (natural minor, the default),
+   * "harmonic" (harmonic minor), "phrygian" (b2), "dark" (natural + harmonic minor + Phrygian b2 + the tritone:
+   * every pitch but the major 3rd and the major 6th).
+   */
+  scale: "minor" | "harmonic" | "phrygian" | "dark";
+  /** 1: the mid bass plays from the intro's bar 4 and through the build (a bassline-led style). 0..1. */
+  midEarly: number;
+  /** 1: every fourth bar's last beat turns the bass's roots and octaves over (0 <-> 12) with a slide; 0: the line as written. */
+  turn: number;
+  /** A slow filter arc on the stab, mid bass and pluck: open over `bars` (8, 16 or 32) bars, close over as many; `depth` 0..1. */
+  sweep: { bars: number; depth: number };
+}
+
+/** GarageData.ukg as a style writes it: every object merged field by field over UKG_SPEC (engine.ts). */
+export type UkgData = { [K in keyof UkgSpec]?: UkgSpec[K] extends number | string | readonly number[] ? UkgSpec[K] : Partial<UkgSpec[K]> };
 
 /** A future garage mention voice: a reverse breath, a foley object, a ghost groove, a vocal "yeah". */
 export type GarageMentionVoice = "reverse" | "foley" | "groove" | "yeah";
@@ -677,6 +1040,12 @@ export interface Acid303Voice {
   /** Default gate in 16ths 0.1..4; the knob sweep's length in bars 4..32. */
   gate: number;
   sweep: number;
+  /**
+   * Off unless given (no house value): a softly rounded sine under the line, 0..1 of the 303's level. It plays the line's
+   * notes in the bottom octave (from E1..D#2, octave jumps up stay there), follows the slides and the gate, and sits
+   * on the bass bus, so the kick ducks it. The low end a resonant 303 lacks: its passband drops as the peak rises.
+   */
+  sub?: number;
 }
 
 /** Acid. Bases: "classic" (303 Floor), "acidhouse" (Acid House), "rubber" (Slow Rubber). */
@@ -1082,8 +1451,11 @@ export interface ElectroKit {
  * `fm` (alienrave only); for them `cutoff` is the filter floor and the envelope opens it to `open` times that.
  */
 export interface ElectroBassSpec {
-  /** 1..4 oscillators: wave, detune cents -40..40, level 0..1 (client03, alienrave). */
-  osc: readonly PadOsc[];
+  /**
+   * 1..4 oscillators: wave, detune cents -40..40, level 0..1 (client03, alienrave). A wave may also be a narrow pulse,
+   * "pulse25" or "pulse12" (25% and 12.5% duty: a hollow, nasal machine pulse); the house basses use none.
+   */
+  osc: readonly ElectroBassOsc[];
   /** Filter Hz 60..1200, plus `color` Hz 0..3000 with the pool tick. */
   cutoff: number;
   color: number;
@@ -1103,6 +1475,74 @@ export interface ElectroBassSpec {
   glide: number;
   /** FM index of the snarl sine, 0..4 (alienrave). */
   fm: readonly [number, number];
+  /**
+   * alienrave. The snarl's modulator as a ratio of the note 0.5..4 (default 2: the house snarl). 1 is a hollow,
+   * woody FM, 1.5 and 3 metallic and clangy.
+   */
+  ratio?: number;
+}
+/** An electro bass oscillator: a wave or a narrow pulse ("pulse25", "pulse12"). */
+export interface ElectroBassOsc {
+  type: Wave | "pulse25" | "pulse12";
+  detune: number;
+  level: number;
+}
+/**
+ * A polymetric machine sequence (every electro base; off unless a style gives `seq`): a cycle of 3..16 steps that runs
+ * against the 16-step drums (a 7-step cycle over a 16-step bar comes round on a different 16th every bar), played by
+ * the style's lead patch (`leads`). It plays while the section's lead layer is open.
+ */
+export interface ElectroSeqSpec {
+  /** 3..16 steps: semitones -12..24 over the sequence root, or null (a rest). At least 2 notes. */
+  notes: readonly (number | null)[];
+  /** 16ths per step 1..4 (1 = 16ths, 2 = 8ths, 3 = dotted 8ths: a 3-against-4 feel). Default 1. */
+  rate?: number;
+  /** The root's register in semitones over E4..D#5 on the tonic, -24..12. Default 0. */
+  octave?: number;
+  /** client03, alienrave: follow the bar's chord (`bass`). Default false: one tonal centre. */
+  follow?: boolean;
+  /** Note length in 16ths 0.25..4. Default 0.8. */
+  gate?: number;
+  /** Level 0..1.2 (the lead patch's level scale; the cold stabs play at 0.8). Default 0.5. */
+  level?: number;
+  /** The first step's extra level, 0..1 (an accent once a cycle, so the phase is heard). Default 0.25. */
+  accent?: number;
+  /** Slow evolution: the cycle rotates one step every `evolve` bars, 0..32 (0 = never). Default 0. */
+  evolve?: number;
+}
+/**
+ * Metallic percussion (every electro base; off unless a style gives `metal`): a cycle of 3..16 levels at 16ths
+ * running against the bar (an odd cycle phases against the 16-step drums), each hit a two-operator FM ping (a sine
+ * carrier at `freq`, a modulator at `ratio` x freq whose index falls fast: inharmonic ratios ring like struck metal)
+ * plus a short bandpassed tick. It plays while the hats play, on the perc bus, panned left and right in turn.
+ */
+export interface ElectroMetalSpec {
+  /** 3..16 levels 0..1 (0 = rest), at least one hit. */
+  steps: readonly number[];
+  /** Carrier Hz 200..6000. Default 1800. */
+  freq?: number;
+  /** Modulator ratio 0.5..8. Default 1.41 (inharmonic: metal). */
+  ratio?: number;
+  /** FM index 0..8 at the hit. Default 3. */
+  index?: number;
+  /** Decay s 0.01..0.4. Default 0.06. */
+  decay?: number;
+  /** Peak 0..0.5. Default 0.12. */
+  level?: number;
+  /** Stereo spread 0..1, alternating hit to hit. Default 0.5. */
+  pan?: number;
+  /** Loose timing: each hit lands 0..`jitter` ms late (hashed, deterministic), 0..15. Default 0. */
+  jitter?: number;
+}
+/**
+ * Microtiming per voice (every electro base; off unless a style gives `jitter`), in ms 0..15: each hit lands 0..ms
+ * late, hashed per step (deterministic). The kick and the snare are never moved: they stay on the grid while the hats
+ * (`hat`, closed and open, with client03's chops and grains) and client03's ghost snares (`ghost`) roll around them.
+ * 0-2 is a machine, 1-10 a human on hardware, 3-15 a loose roller.
+ */
+export interface ElectroJitter {
+  hat?: number;
+  ghost?: number;
 }
 /** Client_03's computer voice: a narrow pulse at `pitch` Hz 60..400 through jumping formants, crushed to `bits` 3..8, band-limited `hp`..`lp` Hz. */
 export interface ElectroVoiceSpec {
@@ -1113,6 +1553,8 @@ export interface ElectroVoiceSpec {
   lp: number;
   /** Level 0..0.15. */
   level: number;
+  /** How often it speaks in the full section: every 2, 4 or 8 bars (default 8). */
+  every: number;
 }
 /** Alien Rave's hoover: detuned saws a tone scooping up `bend` semitones (0..12), a resonant lowpass that snaps open and closes. */
 export interface HooverSpec {
@@ -1125,6 +1567,29 @@ export interface HooverSpec {
   /** 1..4 saws a tone, detune cents -50..50 each (heat widens them). */
   detune: readonly number[];
   /** Level 0..0.4. */
+  level: number;
+}
+/**
+ * Alien Rave's laser on the glitch row: a resonant square (lowpass resonance `q` 0.3..12) falling from `from` Hz
+ * (300..6000) plus `color` Hz (0..4000) with the pool tick to 140..260 Hz in about 0.11 s, into the echo. `level`
+ * 0..0.4 (0: no lasers). The house: from 2400, color 2600, q 6, level 0.28 (up to ~6 kHz on a bright pool).
+ */
+export interface LaserSpec {
+  from: number;
+  color: number;
+  q: number;
+  level: number;
+}
+/**
+ * Alien Rave's sci-fi arp: a 25% pulse through a resonant lowpass (`q` 0.3..12) that snaps from the note times
+ * `open` (1..8) plus `color` (0..6) with the pool tick, at most `cap` Hz (500..11000), down to the note in 80 ms.
+ * `level` 0..0.4 (0: no arp). The house: open 3, color 3, cap 11000, q 5, level 0.22 (a bright plink up to ~8 kHz).
+ */
+export interface AlienArpSpec {
+  open: number;
+  color: number;
+  cap: number;
+  q: number;
   level: number;
 }
 /** Alien Rave's robot call: saw and square through gliding formants, ring-modulated at `ring` times the note (0.25..4). Level 0..1.2. */
@@ -1160,8 +1625,16 @@ export interface ElectroData extends SoundData {
   /** client03. Bass figures over two bars, 1..24 notes each, 1..6. Default CLIENT_BASS. */
   riffs?: readonly (readonly ElectroRiffNote[])[];
   /**
-   * client03. Computer-voice words: onset step 0..15 and 1..4 syllables [F1 Hz 200..1200, F2 Hz 600..3000, consonant
-   * "k" | "t" | "p" | "s" | null]. 1..6. Default CLIENT_WORDS.
+   * client03, opt-in (left out: no answer). The lead's answers to the bass riff, on the style's `leads`: two-bar
+   * figures { s 0..31, semi -12..24 over the tonic two octaves above the bass floor, len 0.25..16 16ths, core }, 1..16
+   * notes each, 1..6. Picked with the riff's hash: with as many answers as riffs, answer i plays with riff i. Core
+   * notes play wherever the lead speaks (from the build's bar 12), the rest only on a busy chain.
+   */
+  answers?: readonly (readonly { s: number; semi: number; len: number; core: boolean }[])[];
+  /**
+   * client03, alienrave. Computer-voice words: onset step 0..15 and 1..8 syllables [F1 Hz 200..1200, F2 Hz 600..3000,
+   * consonant "k" | "t" | "p" | "s" | null] (a phrase of eight is "SYS-TEM RE-CEIVES HU-MAN SIG-NAL"). 1..6. Default
+   * CLIENT_WORDS on client03; alienrave speaks only when the style gives words (CLIENT_VOICE's voice).
    */
   words?: readonly { s: number; syl: readonly (readonly [number, number, "k" | "t" | "p" | "s" | null])[] }[];
   /** alienrave. Open-hat steps (0..15, 0..4 a bar), 1..6. Default ALIEN_OPEN_HATS. */
@@ -1177,6 +1650,12 @@ export interface ElectroData extends SoundData {
   arpCells?: readonly (readonly number[])[];
   /** alienrave. Robot calls: onset step 0..15, length 1..16 16ths, 1..4 vowels [F1 Hz 200..1200, F2 Hz 600..3000]. 1..6. Default ALIEN_VOX. */
   calls?: readonly { s: number; len: number; vowels: readonly (readonly [number, number])[] }[];
+  /** classic, client03, alienrave. A polymetric machine sequence on the lead patch. Default none. */
+  seq?: ElectroSeqSpec;
+  /** classic, client03, alienrave. Metallic FM percussion on its own cycle. Default none. */
+  metal?: ElectroMetalSpec;
+  /** classic, client03, alienrave. Hat and ghost microtiming. Default none (on the grid). */
+  jitter?: ElectroJitter;
   /** classic, client03, alienrave. The drum kit, merged over the base's (ELECTRO_KITS). */
   kit?: Partial<ElectroKit>;
   /** classic, client03, alienrave. The bass voice, merged over the base's (ELECTRO_BASS_TONES). */
@@ -1189,6 +1668,10 @@ export interface ElectroData extends SoundData {
   hoover?: Partial<HooverSpec>;
   /** alienrave. The robot call voice. */
   vox?: Partial<VoxSpec>;
+  /** alienrave, opt-in. The glitch row's laser, merged over the base's (from 2400, color 2600, q 6, level 0.28); level 0 mutes it. Default: the base's. */
+  laser?: Partial<LaserSpec>;
+  /** alienrave, opt-in. The sci-fi arp's voice, merged over the base's (open 3, color 3, cap 11000, q 5, level 0.22); level 0 mutes it. */
+  arp?: Partial<AlienArpSpec>;
   /**
    * Every base. The attention layer's robot word, the voice a mention of the token plays (engine.ts robotWord), merged
    * field by field over the base's preset (ROBOT_WORDS). Default: the base's preset.
@@ -1552,12 +2035,12 @@ const SOUND = ["mix", "fx", "vinyl"] as const;
  */
 export const DATA_FIELDS: { readonly [G in DataGenre]: Readonly<Record<string, readonly (keyof GenreDataMap[G])[]>> } = {
   liquid: {
-    classic: ["vamps", "stabs", "answers", "contours", "kit", "fills", "sub", ...SOUND, "bass", "pad", "ornament"],
-    atmos: ["vamps", "phrases", "contours", "kit", "fills", "sub", ...SOUND, "bass", "pad", "choir", "ornament"],
-    soulful: ["progressions", "walks", "comps", "kit", "fills", "sub", ...SOUND, "bass", "strings", "ornament"],
+    classic: ["vamps", "stabs", "answers", "contours", "walks", "kit", "fills", "sub", ...SOUND, "bass", "reese", "pad", "ornament"],
+    atmos: ["vamps", "phrases", "contours", "kit", "fills", "sub", ...SOUND, "bass", "reese", "pad", "choir", "ornament"],
+    soulful: ["progressions", "walks", "comps", "kit", "fills", "sub", ...SOUND, "bass", "reese", "strings", "ornament"],
   },
   futuregarage: {
-    classic: ["chords", "progressions", "skips", "kicks", "sub", ...SOUND, "kit", "bass", "pad", "vowels", "rain", "ornament"],
+    classic: ["chords", "progressions", "skips", "kicks", "sub", "stabs", "basslines", "motifs", "calls", ...SOUND, "kit", "bass", "pad", "vowels", "rain", "ornament", "ukg"],
     dark: ["chords", "progressions", "foley", "kicks", "sub", ...SOUND, "kit", "bass", "reese", "choir", "rain", "ornament"],
     atmos: ["vamps", "choirs", "pans", "kicks", "sub", ...SOUND, "kit", "bass", "pad", "choir", "rain", "ornament"],
   },
@@ -1582,9 +2065,9 @@ export const DATA_FIELDS: { readonly [G in DataGenre]: Readonly<Record<string, r
     moment: ["chords", "progressions", "figures", "accents", "stabBars", "bassline", "bells", "percs", "claps", "hats", ...SOUND, "kit", "subTone", "stabTone", "padTone", "bellTone", "sweep", "field", "rumble", "echoTone", "melody"],
   },
   electro: {
-    classic: ["kicks", "arps", ...SOUND, "kit", "bassTone", "ornament"],
-    client03: ["chords", "progressions", "kicks", "ghosts", "warps", "chops", "riffs", "words", ...SOUND, "kit", "bassTone", "pad", "voice", "ornament"],
-    alienrave: ["chords", "progressions", "kicks", "opens", "lines", "stabs", "arpCells", "calls", ...SOUND, "kit", "bassTone", "hoover", "vox", "ornament"],
+    classic: ["kicks", "arps", "seq", "metal", "jitter", ...SOUND, "kit", "bassTone", "ornament"],
+    client03: ["chords", "progressions", "kicks", "ghosts", "warps", "chops", "riffs", "answers", "words", "seq", "metal", "jitter", ...SOUND, "kit", "bassTone", "pad", "voice", "ornament"],
+    alienrave: ["chords", "progressions", "kicks", "opens", "lines", "stabs", "arpCells", "calls", "words", "seq", "metal", "jitter", ...SOUND, "kit", "bassTone", "hoover", "vox", "laser", "arp", "ornament"],
   },
   ambientidm: {
     classic: ["chords", "progressions", "figures", "tiers", ...SOUND, "kit", "pad", "line"],

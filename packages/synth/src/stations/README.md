@@ -61,9 +61,9 @@ figure 0..63. `core: true` notes play even in a quiet market; the others need th
 
 | genre | base (house style) | notes and rhythm tables | sound fields (below; plus `mix` `fx` `vinyl` everywhere) |
 | --- | --- | --- | --- |
-| `liquid` | `classic` Keys | `vamps` `stabs` `answers` `contours` `kit` `fills` `sub` | `kit` `bass` `pad` |
-| | `atmos` Atmospheric | `vamps` `phrases` `contours` `kit` `fills` `sub` | `kit` `bass` `pad` `choir` |
-| | `soulful` Soulful | `progressions` (exactly 4 chords) `walks` `comps` `kit` `fills` `sub` | `kit` `bass` `strings` |
+| `liquid` | `classic` Keys | `vamps` `stabs` `answers` `contours` `walks` (off by default) `kit` `fills` `sub` | `kit` `bass` `reese` `pad` |
+| | `atmos` Atmospheric | `vamps` `phrases` `contours` `kit` `fills` `sub` | `kit` `bass` `reese` `pad` `choir` |
+| | `soulful` Soulful | `progressions` (exactly 4 chords) `walks` `comps` `kit` `fills` `sub` | `kit` `bass` `reese` `strings` |
 | `futuregarage` | `classic` Vocal Chops | `chords` `progressions` (2 bars a chord) `skips` `kicks` `sub` | `kit` `bass` `pad` `vowels` `rain` |
 | | `dark` Dark Sub | `chords` `progressions` (4 bars a chord) `foley` `kicks` `sub` | `kit` `bass` `reese` `choir` `rain` |
 | | `atmos` Rain Atmos | `vamps` `choirs` `pans` `kicks` `sub` | `kit` `bass` `pad` `choir` `rain` |
@@ -79,9 +79,9 @@ figure 0..63. `core: true` notes play even in a quiet market; the others need th
 | `dubtechno` | `classic` Lucidflow | `chords` (merged over i9 i11 iv7 VI9 VII9 v7) `progressions` `figures` `accents` `stabBars` `bassline` `bells` `percs` `claps` `hats` | `kit` `subTone` `stabTone` `padTone` `bellTone` `sweep` `field` `rumble` `echoTone` `melody` |
 | | `ixtlan` Ixtlan | the same | the same |
 | | `moment` The Moment | the same | the same |
-| `electro` | `classic` Cold 808 | `kicks` `arps` | `kit` `bassTone` |
-| | `client03` Client_03 | `chords` `progressions` (4 indices, 2 bars a chord) `kicks` `ghosts` `warps` `chops` `riffs` `words` | `kit` `bassTone` `pad` `voice` |
-| | `alienrave` Alien Rave | `chords` `progressions` (4 indices, 1 bar a chord) `kicks` `opens` `lines` `stabs` `arpCells` `calls` | `kit` `bassTone` `hoover` `vox` |
+| `electro` | `classic` Cold 808 | `kicks` `arps` `seq` `metal` `jitter` | `kit` `bassTone` |
+| | `client03` Client_03 | `chords` `progressions` (4 indices, 2 bars a chord) `kicks` `ghosts` `warps` `chops` `riffs` `answers` `words` `seq` `metal` `jitter` | `kit` `bassTone` `pad` `voice` |
+| | `alienrave` Alien Rave | `chords` `progressions` (4 indices, 1 bar a chord) `kicks` `opens` `lines` `stabs` `arpCells` `calls` `words` `seq` `metal` `jitter` | `kit` `bassTone` `hoover` `vox` |
 | `ambientidm` | `classic` Tape Keys | `chords` `progressions` (4 bars a chord) `figures` `tiers` | `kit` `pad` `line` |
 | | `boc` Tape Haze | `chords` `progressions` `phrases` `tiers` `notes` | `kit` `pad` `bass` `lead` |
 | | `crystal` Crystal | `chords` `progressions` `arps` `tiers` `notes` | `kit` `line` `glass` `bell` `shimmer` |
@@ -95,6 +95,12 @@ The shapes in short (full rules in `styledata.ts`):
   least two in 0..12), `root` -12..12 over the bass tonic.
 - `stabs` / `phrases` / `comps` / `cuts` / `choirs` / `walks` / `chops`: figures of `{ s, len, core }` (+ `swell`,
   `oct` 0|1, `slice` 0..3 where the genre says).
+- liquid `walks`: `{ s, len, oct, core, semi? }` over two bars; `semi` -12..12 moves the note off the chord root (left
+  out: the root; keep to roots, fifths and octaves so it fits every chord). Keys (`classic`) plays no walk unless the
+  style gives one: then the walk replaces its rolling sub on the chain's bass onsets. Reference: `hamster-dnb.ts`.
+- liquid `reese` (every base, off by default): `{ level, detune, drive, cutoff, q, depth, rate }`, Dark Sub's
+  detuned saw pair an octave over every sub note, driven, through a lowpass wobbling `rate` cycles per beat by
+  `depth`; `level` 0 = off, 1 = Dark Sub's level (0..1.5). Values when on: `engine.ts` `LIQUID_REESE`.
 - `kit` (liquid): any of `kick` (synth kick spec), levels, `snare` "keys" | "soft" | "soul", hat voices, `crash`, and
   `breaks`: lanes of 32 characters, "." rest or 1-9 velocity in ninths (`kick` `snare` `ghost` `hat` `open`).
 - `kicks`: `{ lo, mid, hi }` lists of one-bar kick figures (steps 0..15) for a quiet, medium and busy kick row.
@@ -102,6 +108,12 @@ The shapes in short (full rules in `styledata.ts`):
 - `lines` (acid): 16 steps, each `null` (rest) or `{ degree 0..4, octave -1..1, flags (1 accent + 2 slide +
   4 ornament), gate? 16ths }`; at least 4 notes.
 - `sub`: the sub level 0..1 (futuregarage up to 1.2).
+- futuregarage `ukg` (classic only, off by default): the UK garage voices, an energetic synth 2-step in place of
+  Vocal Chops when `ukg.level` > 0 (styledata.ts `UkgSpec`: `stab`, `organ`, `sub`, `mid`, `drop2`, `pluck`, `vox`,
+  `lead`, `groove`, `bars`). It reads `kicks` `skips` `chords` `progressions` `vowels` `kit` and its own figures
+  `stabs` (hits with a velocity), `basslines` (semitones over the chord's bass), `motifs` and `calls` (chord tones),
+  which need `ukg` on. Every chord tone and bass note must be in the natural minor over the tonic (7ths, 9ths, sus and
+  6/9 voicings are fine). Reference: `hamster-ukg.ts`, `imd-dark.ts`; docs/STATIONS.md "UK garage voices".
 - futuregarage `ornament` (every base; not Dark Sub's `foley` ticks): the attention layer's mention voices, what a
   mention of the token plays: `{ voices, smart, foley, level, slots }` over the base's preset. `voices` / `smart` 1..4
   of `"reverse"` (an "aah" and a noise wash swelling from the step into the next 0 or 8, cut there), `"foley"` (one
@@ -128,10 +140,15 @@ The shapes in short (full rules in `styledata.ts`):
 - electro: `kicks` `{ half, lo, mid, hi }` lists of **two-bar** kick figures (onsets 0..31; `half` plays in the intro);
   `arps` (classic) 1..3 semitones the bass cycles through; `chords` `[{ bass, tones, third?, seventh? }]` with
   `progressions` of 4 indices (give 6+ chords or your own progressions); `riffs` (client03) two-bar bass notes
-  `{ s, semi, len, f }` (f: 1 accent, 2 slide, 4 ornament, 8 dead note); `lines` (alienrave) 6..16 steps of `null` or
+  `{ s, semi, len, f }` (f: 1 accent, 2 slide, 4 ornament, 8 dead note); `answers` (client03, opt-in) the style's
+  `leads` answering riff i with answer i, two-bar `{ s, semi over the tonic, len, core }`; `lines` (alienrave) 6..16 steps of `null` or
   `[semi, flags]`; `ghosts`, `stabs` two-bar `{ s, ... , core }` figures; `warps` 16 hat pitch multipliers; `chops`
   `{ open, steps }`; `opens` open-hat steps; `arpCells` chord-tone indices; `words` / `calls` the computer voice's
-  syllables `[F1, F2, consonant]` and the robot's vowels `[F1, F2]`; `ornament` (every base) the attention layer's
+  syllables `[F1, F2, consonant]` (1..8; alienrave speaks only when given words) and the robot's vowels `[F1, F2]`;
+  `seq` (every base, off unless given) a polymetric sequence on the style's lead patch `{ notes 3..16 (semitones or
+  null), rate 1..4 16ths, octave, follow, gate, level, accent, evolve }`; `metal` (every base) FM metal percussion on its
+  own cycle `{ steps 3..16 levels, freq, ratio, index, decay, level, pan, jitter }`; `jitter` `{ hat, ghost }` ms 0..15
+  late (the kick and the snare stay on the grid); `ornament` (every base) the attention layer's
   robot word, the voice a mention of the token plays: `{ vowels [[F1, F2]] 1..4, wave, steps 2..16 (crush), octave
   -24..24, syllable 0.5..4 16ths, ring 0..4, lowpass 0..12000, echo { steps, feedback } | null, level 0.01..0.1, slots }`
   over the base's preset (Cold 808 dark dry "oh-oo", Client_03 "ah-ee", Alien Rave ring-modulated and echoed). It is
@@ -175,13 +192,13 @@ Per genre (which base reads which: the table above and `DATA_FIELDS` in `styleda
 
 | genre | sound fields |
 | --- | --- |
-| `liquid` | `kit` (now also `snare` as your own layers, hats with `crush`), `bass` (all), `pad` (classic, atmos), `choir` (atmos), `strings` (soulful) |
+| `liquid` | `kit` (now also `snare` as your own layers, hats with `crush`), `bass` (all), `reese` (all, off unless `level` > 0), `pad` (classic, atmos), `choir` (atmos), `strings` (soulful) |
 | `futuregarage` | `kit` `{ kick, snare, ghost, hat, shaker, open }`, `bass`, `reese` (dark), `pad` (classic, atmos), `choir` (dark, atmos), `vowels` (classic chops), `rain` |
 | `triphop` | `kit` `{ kick, snare, drag, hat, open }`, `bass`, `bassTone` (bristol, cinematic), `bowed` (the strings) |
 | `lofihouse` | `kit` `{ kick, clap, snare, hat, open, shaker }`, `bass`, `organTone` + `pad` (rave), `chop` + `pump` (chop) |
-| `acid` | `kit` `{ kick, clap, snare, hat, open, perc }`, `voice` (the 303: `wave` saw/square, `cutoff`, `envMod`, `resonance`, `decay`, `drive`, `level`, `accent`, `gate`, `sweep`) |
+| `acid` | `kit` `{ kick, clap, snare, hat, open, perc }`, `voice` (the 303: `wave` saw/square, `cutoff`, `envMod`, `resonance`, `decay`, `drive`, `level`, `accent`, `gate`, `sweep`; optional and off by default `sub` 0..1, a softly rounded sine under the line in the bottom octave E1..D#2 at that share of the 303's level, sliding with it and ducked by the kick) |
 | `dubtechno` | `kit` `{ kick: { center, rise, sweep, hold, decay, drive, lp, click, clickHz, level }, clap: { level, hz, decay, rim }, hat: { off, decay, hp, metal, shaker, shakerDecay, shuffle }, perc: { level, decay } }` (each voice merged field by field); `subTone` `{ level, octave, lp, attack, release, drive }`; `stabTone` `{ wave, detune, lp, env, envTime, q, hp, attack, release, gain, pan, move, octave }` plus, optional and off by default, a second oscillator per tone `wave2` (a wave or `"pulse"` of `width` 0.05..0.5) at `mix2` 0..1.5, `octave2` -12..24, and `velLp` 0..1 (the figure hit's level opens or darkens the cutoff), and the voice `engine` `"osc"` (default) / `"fm"` / `"pluck"`: `fm` `{ ratio 0.5..12, index 0..12, floor 0..1, decay 0.01..2, ratio2 0.5..16, index2 0..12, decay2 0.005..1, vel 0..1 }` (a sine modulator into two detuned sine carriers per tone, its index falling over `decay`; the second modulator off unless `index2` > 0), `pluck` `{ modes: 1..4 ratios 0.5..16, decay 0.05..4, damp 0..2, tone 200..10000, burst 0.0002..0.005, vel 0..1 }` (a mallet click strikes a resonator per tone and mode, each ringing `decay` x (1 / ratio)^`damp` s); `padTone` `{ level, wave, detune, octave, lp, attack, release }` and an optional `hp` 20..1000 Hz; `bellTone` `{ level, every, ratio, index, decay }`; `sweep` `{ stab, echo }` bars per filter open-close, and the echo's breath `send` / `fb` 0..1 (how far the level into the echo / of its repeats dips) over `breath` bars (default `echo`); `field` `{ level, hz }` the rain; `rumble` `{ level, lp, decay, duck }` the techno rumble (the kick into its own dark room, ducked by the kick; off unless `level` > 0); `echoTone` `{ width, alt, wobble, rate }` the echo's shape (repeats panned `width` 0..1, house 0.55; `alt` 1..8 16ths for the odd repeats = a ping-pong of two times; `wobble` 0..1 a tape wobble of up to 3 ms at `rate` Hz); `melody` `{ level, wave, detune, octave, notes?, every, count, chance, attack, hold, release, lp, echo, space }` a sparse melody of rare single notes (off unless `level` > 0: `count` notes in a cell of `every` bars with probability `chance`, pitches from `notes` or the bar's chord, a whale buy answers with one). The echo is `fx.echo` (`steps` 3 = dotted 8th, up to 12 `taps`, `fb` < 0.75) |
-| `electro` | `kit` `{ kick, snare: "808" \| "client" \| "alien" \| layers, ghost (client03), hat: { hp, decay, metal, q }, open: { hp, decay, metal, q, level, crush? }, accents: [on, e, and, a] }`; `bassTone` `{ osc, cutoff, color, q, open, decay, drive, level, sub, glide, fm }` (pairs `[plain, accent]`; classic reads `cutoff color q decay level sub`); `pad` (client03); `voice` `{ pitch, bits, hp, lp, level }` (client03's speak-and-spell); `hoover` `{ cutoff, color, q, hp, bend, detune, level }` and `vox` `{ ring, level }` (alienrave) |
+| `electro` | `kit` `{ kick, snare: "808" \| "client" \| "alien" \| layers, ghost (client03), hat: { hp, decay, metal, q }, open: { hp, decay, metal, q, level, crush? }, accents: [on, e, and, a] }`; `bassTone` `{ osc, cutoff, color, q, open, decay, drive, level, sub, glide, fm, ratio }` (pairs `[plain, accent]`; classic reads `cutoff color q decay level sub`; `osc` types may be "pulse25" / "pulse12"; `ratio` the alienrave FM ratio, default 2); `pad` (client03); `voice` `{ pitch, bits, hp, lp, level }` (client03's speak-and-spell); `hoover` `{ cutoff, color, q, hp, bend, detune, level }` and `vox` `{ ring, level }` (alienrave) |
 | `ambientidm` | `kit`: each base its own parts (classic `{ kick, snare, hat }`, boc `{ kick, thump, snare, dust, ghost, hat, open }`, crystal `{ click, rim, crack, tick, hat, open }`), `pad` (classic, boc), `bass` + `lead` (boc), `line` (classic, crystal), `glass` + `bell` + `shimmer` (crystal) |
 | `drone` | `wall` (classic) / `pad` (dark) the breathing layers, `bed` (dark: the beating subs), `overtone` (pulse), `glint` (all), `kick` (dark's concussion), `breath` (classic), `rumble` (dark), `swell` (classic, pulse) |
 

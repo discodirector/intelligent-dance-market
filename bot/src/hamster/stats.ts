@@ -5,8 +5,9 @@
 //   npx tsx src/hamster/stats.ts 2026-10-25         that day (status-2026-10-25.jsonl or .jsonl.gz)
 //   npx tsx src/hamster/stats.ts path/to/file.jsonl[.gz] [--json]
 //
-// Samples are the distinct measurements (by measurement.observedAt) across status and heartbeat lines. An ACTIVE period
-// runs from the first ACTIVE sample to the first non-ACTIVE one after it (or the last ACTIVE sample when the file ends).
+// Samples are the distinct measurements (by measurement.observedAt) across status and heartbeat lines. A running period
+// runs from the first sample with rpm > 0 to the first stopped one after it (or the last running sample when the file
+// ends). coreStatus is not used for this: it is the mining core's state, ACTIVE only on some samples of a run.
 // "km" sums the increases of measurement.distanceMm (a per-12:00-UTC-day counter: a drop is a reset, counted from 0).
 import { existsSync, readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
@@ -40,7 +41,7 @@ export interface DayStats {
   firstRx: number | null;
   lastRx: number | null;
   active: Period[];
-  /** Seconds between consecutive distinct observedAt while ACTIVE. */
+  /** Seconds between consecutive distinct observedAt while running. */
   intervals: { n: number; min: number; median: number; p90: number; max: number } | null;
   /** rx - receivedAt of each new sample, seconds (how late the recorder saw it). */
   lag: { median: number; p90: number } | null;
@@ -113,11 +114,11 @@ export function dayStats(lines: string[]): DayStats {
     s.maxRpm = Math.max(s.maxRpm, x.rpmMilli / 1000);
     s.maxSpeedMmS = Math.max(s.maxSpeedMmS, x.speedMmPerSecond);
     const prev = samples[i - 1];
-    if (x.coreStatus === "ACTIVE") {
+    if (x.rpmMilli > 0) {
       if (!cur) s.active.push((cur = { start: x.observedMs, stop: x.observedMs, open: true, samples: 0 }));
       cur.stop = x.observedMs;
       cur.samples++;
-      if (prev?.coreStatus === "ACTIVE") gaps.push((x.observedMs - prev.observedMs) / 1000);
+      if (prev && prev.rpmMilli > 0) gaps.push((x.observedMs - prev.observedMs) / 1000);
     } else if (cur) {
       cur.stop = x.observedMs;
       cur.open = false;
@@ -155,11 +156,11 @@ export function formatStats(s: DayStats, label = ""): string {
   if (s.firstRx !== null) out.push(`rx ${new Date(s.firstRx).toISOString()} .. ${new Date(s.lastRx!).toISOString()}`);
   out.push(`distinct measurements (observedAt) ${s.samples}`);
   const total = s.active.reduce((t, p) => t + (p.stop - p.start), 0);
-  out.push(`ACTIVE periods ${s.active.length}, total ${dur(total)}`);
-  for (const p of s.active.slice(0, 60)) out.push(`  ${hms(p.start)} - ${hms(p.stop)}${p.open ? " (still active)" : ""}  ${dur(p.stop - p.start)}, ${p.samples} samples`);
+  out.push(`running periods ${s.active.length}, total ${dur(total)}`);
+  for (const p of s.active.slice(0, 60)) out.push(`  ${hms(p.start)} - ${hms(p.stop)}${p.open ? " (still running)" : ""}  ${dur(p.stop - p.start)}, ${p.samples} samples`);
   if (s.active.length > 60) out.push(`  … ${s.active.length - 60} more`);
   const i = s.intervals;
-  out.push(i ? `observedAt interval while ACTIVE (s): n ${i.n}, min ${i.min.toFixed(2)}, median ${i.median.toFixed(2)}, p90 ${i.p90.toFixed(2)}, max ${i.max.toFixed(2)}` : "observedAt interval while ACTIVE: no data (no consecutive ACTIVE samples)");
+  out.push(i ? `observedAt interval while running (s): n ${i.n}, min ${i.min.toFixed(2)}, median ${i.median.toFixed(2)}, p90 ${i.p90.toFixed(2)}, max ${i.max.toFixed(2)}` : "observedAt interval while running: no data (no consecutive running samples)");
   if (s.lag) out.push(`seen after receivedAt (s): median ${s.lag.median.toFixed(2)}, p90 ${s.lag.p90.toFixed(2)}`);
   out.push(`max rpm ${s.maxRpm.toFixed(1)}, max speed ${s.maxSpeedMmS} mm/s (${(s.maxSpeedMmS * 0.0036).toFixed(2)} km/h)`);
   out.push(`distance ${s.km.toFixed(3)} km, work units +${s.workUnits ?? 0n}`);

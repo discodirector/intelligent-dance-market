@@ -62,11 +62,14 @@ export interface Station {
   quoteSymbol: "ETH" | "IMD";
   /**
    * "hook": the $IDM hook pool, state on chain. Any other kind is a pool without the hook, played in the browser
-   * (data/virtual.ts) from its Swap logs through core swaps.ts; "nft" a collection's sales through core nft.ts.
+   * (data/virtual.ts) from its Swap logs through core swaps.ts; "nft" a collection's sales through core nft.ts;
+   * "hamster" a hamster's wheel (Squeekchain) through core hamster.ts, from our recorder's file (data/hamster.ts).
    */
-  kind: "hook" | PoolKind | "nft";
+  kind: "hook" | PoolKind | "nft" | "hamster";
   hook?: `0x${string}`;
   nft?: StationNft;
+  /** kind "hamster": the published night (bot hamster/publish.ts) and the sleep pack (synth sleep.ts). */
+  hamster?: { data: string; sleep?: string; tag?: string };
   /** House stations (run by theidm) are listed first. */
   house?: boolean;
   /** A gift: on air without a subscription, never expires (docs/STATIONS.md "Gift stations"). */
@@ -153,7 +156,7 @@ export async function loadStatus(timeoutMs = 2500): Promise<StatusMap | null> {
 export const statusOf = (s: Station, status: StatusMap | null): RuntimeStatus => status?.[s.key]?.status ?? s.status;
 
 /** A station's name on screen: a token's cashtag ($IDM), a collection's own name (CREDITS: an NFT has no cashtag). */
-export const stationName = (s: Station): string => (s.kind === "nft" ? s.label : `$${s.ticker}`);
+export const stationName = (s: Station): string => (s.kind === "nft" || s.kind === "hamster" ? s.label : `$${s.ticker}`);
 
 /** Station+ now (status.json; without it, none): listed right after the house and gift stations. */
 export const isPlus = (s: Station, status: StatusMap | null): boolean => !s.house && status?.[s.key]?.plus === true;
@@ -173,7 +176,7 @@ export const API_BASE = (import.meta.env.VITE_STATIONS_API ?? "") + "/api/statio
 
 /** The registry entry for a network (a played station by key, else chain + pool id), or undefined (testnets, replays). */
 export function stationFor(net: Network): Station | undefined {
-  const played = net.virtual ? STATIONS.find((s) => s.key === net.key && s.chainId === net.chainId) : undefined;
+  const played = net.virtual || net.hamster ? STATIONS.find((s) => s.key === net.key && s.chainId === net.chainId) : undefined;
   if (played || !net.poolId) return played;
   return STATIONS.find((s) => s.chainId === net.chainId && s.poolId?.toLowerCase() === net.poolId!.toLowerCase());
 }
@@ -188,6 +191,7 @@ export const playerHref = (s: Station): string => (s.kind === "hook" ? "/" : `/?
 export function swapSourceOf(s: Station): StationSource {
   if (s.kind === "hook") throw new Error(`${s.key}: the hook station is read on chain, not replayed`);
   if (s.kind === "nft") return { kind: "nft", collection: s.token, ...s.nft!, weth: chainOf(s).weth };
+  if (s.kind === "hamster") throw new Error(`${s.key}: a hamster station reads its published night, not logs`);
   const src: SwapSource = s.kind === "v4"
     ? { kind: "v4", address: s.poolManager!, poolId: s.poolId!, ethSide: s.ethSide ?? 0 }
     : { kind: s.kind, address: s.pool!, ethSide: s.ethSide! };
@@ -201,6 +205,29 @@ export const CHECKPOINT_BASE = "/stations-data";
 export function stationNetwork(s: Station): Network {
   const chain = chainOf(s);
   const urls = rpcUrlsOf(s);
+  if (s.kind === "hamster") {
+    return {
+      key: s.key,
+      mainnet: true,
+      label: `${s.label} STATION`,
+      chainId: s.chainId,
+      rpcUrl: urls[0],
+      explorer: chain.explorer,
+      explorerName: chain.explorerName,
+      hook: null,
+      rules: "v2",
+      token: s.token,
+      quote: s.quote ?? "0x0000000000000000000000000000000000000000",
+      quoteSymbol: s.quoteSymbol,
+      poolManager: null,
+      poolId: null,
+      startBlock: s.genesisBlock,
+      launchedBy: "the $IDM hook's rules, played in your browser on a real hamster's wheel, one note per 30 m",
+      launchUrl: null,
+      treasury: null,
+      hamster: { url: s.hamster!.data, ...(s.hamster!.sleep ? { sleep: s.hamster!.sleep } : {}) },
+    };
+  }
   return {
     key: s.key,
     mainnet: true,

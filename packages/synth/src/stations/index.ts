@@ -2,14 +2,21 @@ import { HOUSE_PROGRAM, type Program } from "../program.ts";
 import { programFromPack, validatePack, type StationPack } from "../pack.ts";
 import credits from "./credits.ts";
 import creditsDubhouse from "./credits-dubhouse.ts";
+import hamster from "./hamster.ts";
+import hamsterSleep from "./hamster-sleep.ts";
+import imdDark from "./imd-dark.ts";
 import infer from "./infer.ts";
+import machineElectro from "./machine-electro.ts";
 
 /**
  * Station packs on air, by the registry's `program` key (stations/registry.json). "idm" is the house program; every
  * other key names a pack here. example.ts is the swarm's reference, not a station, so it is not listed.
- * credits-dubhouse is baked but on no station yet (the Credits station's first pack, kept for later).
+ * credits-dubhouse is baked but on no station yet (the Credits station's first pack, kept for later). hamster-sleep is
+ * the hamster station's sleep mode (registry hamster.sleep, synth sleep.ts), never a program of its own. imd-dark is
+ * baked but on no station yet (dark disco / electro, set aside for the IDM station). machine-electro is baked but on
+ * no station yet (futuristic machine electro: Rother / Plant43 / Client_03; its destination is not decided).
  */
-export const PACKS: Record<string, StationPack> = { infer, credits, "credits-dubhouse": creditsDubhouse };
+export const PACKS: Record<string, StationPack> = { infer, credits, "credits-dubhouse": creditsDubhouse, hamster, "hamster-sleep": hamsterSleep, "imd-dark": imdDark, "machine-electro": machineElectro };
 
 /**
  * Packs added at runtime (docs/STATIONS.md "Automatic pipeline"): the pipeline publishes a gated pack as JSON

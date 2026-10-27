@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IDM station radio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root { --phos: #6cf595; --phos-dim: #2f8f4f; --lcd-bg: #06150c; }
+    html, body { margin: 0; height: 100%; background: transparent; }
+    body { font: 800 12px/1.2 "JetBrains Mono", ui-monospace, monospace; letter-spacing: 0.12em; text-transform: uppercase; }
+    body.bare #bar { display: none; }
+    #bar {
+      box-sizing: border-box; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px;
+      padding: 10px 16px; background: var(--lcd-bg); color: var(--phos); border-radius: 6px;
+    }
+    #play { all: unset; flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; cursor: pointer; }
+    #play:focus-visible { outline: 2px solid var(--phos); outline-offset: 4px; }
+    #icon { flex: none; width: 0; height: 0; border-left: 14px solid var(--phos); border-top: 9px solid transparent; border-bottom: 9px solid transparent; }
+    body.playing #icon { width: 14px; height: 14px; border: 0; background: linear-gradient(90deg, var(--phos) 0 35%, transparent 35% 65%, var(--phos) 65%); }
+    #text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    #name, #now { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #now { color: var(--phos-dim); font-weight: 700; }
+    body.bad #now { opacity: 0.5; }
+    #by { flex: none; color: var(--phos-dim); text-decoration: none; font-weight: 700; }
+    #by:hover { color: var(--phos); }
+  </style>
+</head>
+<body>
+  <!-- A station's sound alone for streams and other sites (src/listen.ts). -->
+  <div id="bar">
+    <button id="play" type="button" aria-label="Play or stop the station">
+      <span id="icon"></span>
+      <span id="text"><span id="name">station radio</span><span id="now">tap to listen</span></span>
+    </button>
+    <a id="by" href="https://theidm.fun/" target="_blank" rel="noopener">theidm.fun ↗</a>
+  </div>
+  <script type="module" src="./src/listen.ts"></script>
+</body>
+</html>

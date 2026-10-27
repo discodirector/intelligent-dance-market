@@ -1,7 +1,7 @@
 // Audio: the synth's live player routed through our master gain + analyser.
 // createLivePlayer connects to ctx.destination, so we shadow `destination` on this AudioContext instance
 // with our master gain (no synth change needed).
-import { createLivePlayer, type LivePlayer, type Program, type SequencerState } from "@swarm-sequencer/synth";
+import { createLivePlayer, type LivePlayer, type Program, type SequencerState, type StationPack } from "@swarm-sequencer/synth";
 
 export class Audio {
   ctx: AudioContext | null = null;
@@ -12,8 +12,11 @@ export class Audio {
   timeData = new Uint8Array(2048);
   freqData = new Uint8Array(1024);
 
-  /** `program`: what the live player plays (synth program.ts). Default house; a station page passes its own. */
-  constructor(private readonly program?: Program) {}
+  /**
+   * `program`: what the live player plays (synth program.ts). Default house; a station page passes its own. `sleep`:
+   * the hamster station's sleep pack (synth sleep.ts).
+   */
+  constructor(private readonly program?: Program, private readonly sleep?: StationPack | null) {}
 
   get running() {
     return !!this.player?.running;
@@ -59,7 +62,7 @@ export class Audio {
       this.analyser = analyser;
       this.timeData = new Uint8Array(analyser.fftSize);
       this.freqData = new Uint8Array(analyser.frequencyBinCount);
-      this.player = createLivePlayer(ctx, { program: this.program });
+      this.player = createLivePlayer(ctx, { program: this.program, ...(this.sleep ? { sleep: this.sleep } : {}) });
     }
     return this.ctx;
   }

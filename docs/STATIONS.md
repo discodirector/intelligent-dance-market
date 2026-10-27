@@ -104,11 +104,96 @@ s wide through a lowpass at `tone` Hz strikes one bandpass resonator per `modes`
 (1 / ratio)^`damp` s; `vel` opens the mallet). Both run under the stab's highpass, lowpass envelope, sweep, velocity
 cutoff, `mix2` layer, sends, whale throws and the attention-layer ornament; both bit-exact offline. Per stab of a
 three-tone chord: the pair 24 nodes, FM 39 (with the second modulator), the pluck 36 (one buffer source, 9 resonators).
+UK garage voices (2026-10-27), future garage base `classic` only, off unless a style sets `ukg` (level > 0; the house
+value `{ level: 0 }` builds nothing, so every house style and earlier pack is unchanged: engine-trace vs HEAD 180/180
+house cases and the credits, infer, hamster and hamster-sleep packs identical). With `ukg` on, the base plays an
+energetic synth 2-step (engine.ts `garageUkg`) instead of Vocal Chops: a 2-step kit (the `kicks` tier's figures
+alternate bar by bar, never four to the floor; clap-snare on 2 and 4; `skips` ghosts as far as the chain's ghosts reach,
+each its own level; swung 16th hats with the odd ones pushed later by `ukg.groove.hatLate` x a 16th, each hit varied by
+`jitter`; rim and congas in the gaps), short chord stabs on a 2-bar figure (`stabs`: onset, length and a velocity per
+hit that moves the stab's level, cutoff, filter envelope and drive), an organ under them, a sine sub with octave jumps
+and glides (`basslines`: semitones over the chord's bass, `glide`), a driven mid bass an octave up (`ukg.mid.kind`:
+saw, FM or reese; `ukg.drop2` a second one for the second half of the drop and the rebuild), a pluck motif of chord
+tones answering the stabs (`motifs`, or the lead in the drop: square + saw with portamento), and a vocal synth (`calls`:
+two formants gliding vowel to vowel over `vowels`, a pitch scoop) closing every two bars. The song form arranges it: the
+stab filter opens over the intro and build, a half bar drops out (16th snare roll, reverse stab of the next chord, noise
+riser) before the drop (bar 16) and before the bass comes back in the intro (bar 4; the intro's first four bars are a
+drum-and-stab break), whose first bass hit is the strongest under a crash; every fourth bar the bass jumps the octave and
+slides and the last stab is thrown into the echo (fx bus). The chain steers it: kick tier, ghost count, hat density
+(five or more hats play every "e"), the glitch row the non-core hits, the chain's bass onsets the non-core bass notes,
+the heat the rolls. Keys: `chords` may carry 7ths, 9ths, 11ths and 13ths (m7, m9, maj7, maj9, sus, 6/9), but with `ukg`
+on validatePack holds every chord tone and bass, and every bassline note over every chord's bass, in the natural minor
+over the tonic (`UKG_KEY`); motifs and calls index chord tones, so they are in key by construction. Default tables:
+`UKG_SPEC`, `UKG_CHORDS` (9 wide R&B voicings: Fm9, Fm7 from the fifth, Dbmaj7, Abmaj7, Bbm9, Cm7, Eb6/9, Fsus4add9,
+Bbm7 in F minor), `UKG_PROGRESSIONS`, `UKG_STABS`, `UKG_BASSLINES`, `UKG_MOTIFS`, `UKG_CALLS`, `UKG_VOWELS` (engine.ts);
+fields and ranges in styledata.ts `UkgSpec`. Swing stays the style's (`swing` 0.62..0.66 is an MPC 56..58%: the engine
+delays the odd 16ths by swing - 0.5 of a 16th). Not opened: per-bus reverb pre-delay and highpass, autopan, 16th volume
+shaping. `stations/hamster-ukg.ts` is the reference pack (on no station).
+Late-90s voices (2026-10-27, after the owner heard the v2 synth styles as toy-organ game music), all inside `ukg` and
+off by default: `ukg.m1` M1-style organ chords on the stab rhythm (sine + octave + a quiet third harmonic, key click,
+grit, lowpass, percussive envelope), `ukg.ep` FM electric piano chords (ratio-1 tine whose index falls, two chorused
+carriers), `ukg.strings` string swells on each chord of the breakdown, the rebuild's first half and the intro's break,
+`ukg.mid.kind: "organ"` (the M1 organ bass) and `mid.bend` / `sub.bend` (the warp: every note that does not glide falls
+from `bend` semitones over `bendTime`), vocal calls with a stutter (`calls[].rep` short cuts a 32nd apart, "y-y-yeah"),
+an octave (`oct`), a faster scoop (`vox.scoop`) and a lowpass (`vox.lp`), up to 12 calls a figure, and a tambourine and
+skippy ghost kicks (`groove.tamb`, `groove.ghostKick`). Future garage styles may swing to 0.8 (MPC ~65%; other
+genres stay at 0.68). The hamster station plays the `hamster-ukg90-*` set (`stations/hamster-ukg.ts`, owner
+2026-10-27); the v2 styles and the first garage set (hamster-garage.ts) are out of rotation.
+Dark disco on the same voices (2026-10-27, `stations/imd-dark.ts`, baked, on no station: set aside for the IDM
+station), all off by default: `ukg.keys`
+(the style's own tonics, 1..6 pitch classes, in place of the genre's C# D# G# A#), `ukg.scale` (what validatePack
+holds chords and basslines to: "minor", "harmonic", "phrygian", or "dark" = every pitch but the major 3rd and 6th:
+b2, tritone and leading tone allowed), `ukg.midEarly` (the mid bass from the intro's bar 4 and through the build: a
+bassline-led style), `ukg.turn` (1 by default: every fourth bar's last beat turns the bass's roots and octaves over
+with a slide; 0 plays the line as written, for 16th machine lines and phrases that resolve themselves), `ukg.sweep` (`bars` 8/16/32, `depth`: the stab, mid bass and pluck filters open over that many
+bars and close over as many), `strings.hold` (the pad or drone on every chord, every section), `groove.offOpen` (open
+hats on every off-beat) and `groove.metal` (metallic ticks in place of the high conga). Basslines take up to 32
+notes (16ths over two bars), motifs and stabs 16. Four-to-the-floor is only `kicks` data. A style's `riser` (0..1,
+default 1, any genre: styles.ts GenreStyle) scales the noise risers, the heat riser on every bar while the floor is hot
+and the base's own (UK garage's into a drop, Alien Rave's into a section change); imd-dark and hamster-electro set 0
+(over long echoes they read as air blowing through the track). A style's `heat` (0..1, default 1) scales how much
+the floor's heat moves it (filter, drive, resonance, rolls, risers), and `breakdown` sets its own breakdown layer levels
+over the form's (arrange.ts: kick, snare, hat, glitch, bass, pad, lead, texture, bed, filter, each 0..1): the hamster's
+acid takes 0.4 of the heat and keeps a half kick and the full 303 in its breakdown, so it neither swells by 5 dB on a
+hot floor nor falls to near silence. `intro` (same fields, all eight intro bars; left out, the form's: kick 0.75,
+snare 0, hat 0 then 0.45, bass 0 then 0.6, filter 0.3 opening to 0.5) does the same for the intro: the hamster's drum
+& bass keeps its half-time snare, hats, bass and an open filter there (it fell 6-8 dB under the body). Liquid also
+opens, off by default: `walks` on Keys (a composed walk in place of the rolling sub), a walk note's `semi` off the
+chord root, and `reese` on every base (Dark Sub's reese over the sub notes, `level` 0 = off).
 Electro opens Cold 808 (two-bar kick figures, the bass arp, the 808 kit, the bass filter), Client_03 (chords and
 progressions, kicks, ghost-snare funk, the break hats' warp and chops, the bass riffs, the computer voice's words;
 the kit, the grimy bass, the ghost pad, the speak-and-spell voice) and Alien Rave (chords and progressions, kicks,
 open hats, the phase bass lines, hoover stabs, arp cells, robot calls; the kit, the FM bass, the hoover, the ring-
 modulated vox). `test/fixtures/dub-electro.ts` is the reference pack for both (not a station).
+Client_03's lead answers (2026-10-27, off by default): `answers`, two-bar figures `{ s, semi, len, core }` the
+style's `leads` play over the tonic (two octaves above the bass floor), picked with the riff's hash so answer i goes
+with riff i; core notes wherever the lead speaks, the rest on a busy chain. Zero Kelvin (hamster-electro) uses them. Client_03's computer voice may speak more often: `voice.every` (2, 4 or 8
+bars in the full section, default 8).
+Machine electro additions (2026-10-27, `stations/machine-electro.ts`, baked, on no station), every one off unless a
+style sets it (engine-trace vs HEAD: 180/180 house cases and the credits, infer, hamster, hamster-sleep and imd-dark
+packs identical). On every electro base: `seq`, a polymetric machine sequence played by the style's lead patch
+(`leads`) while the lead layer is open: a cycle of 3..16 steps (semitones over E4..D#5 on the tonic, or rests), one
+step every `rate` 16ths (1..4: 3 is dotted 8ths, 3 against 4), running on across bar lines so an odd cycle phases
+against the 16-step drums; `octave`, `gate`, `level`, an `accent` on the cycle's first step, `follow` (client03 and
+alienrave: move with the chord's bass) and `evolve` (the cycle rotates one step every so many bars: a repeating figure
+that slowly turns). `metal`, metallic percussion on its own cycle of 3..16 levels at 16ths (an odd cycle phases
+against the bar): a two-operator FM ping per hit (`freq`, `ratio`: inharmonic ratios ring like metal, `index` falling
+fast, `decay`, `level`, alternating `pan`) with a short bandpassed tick, on the perc bus while the hats play, landing up
+to `jitter` ms late. `jitter`, microtiming per voice in ms 0..15 (each hit lands 0..ms late, hashed per step, so a
+render stays deterministic): `hat` (the closed and open hats; client03 also its grains and chops) and `ghost`
+(client03's ghost snares); the kick and the snare never move (0-2 ms a machine, 1-10 a human on hardware, 3-15 a loose
+roller). The bass: `bassTone.osc` may use narrow pulses (`"pulse25"`, `"pulse12"`: a hollow machine pulse; client03,
+alienrave) and `bassTone.ratio` sets Alien Rave's FM snarl ratio (0.5..4, default 2: 1 woody, 1.5 and 3 metallic).
+The computer voice: `words` take up to 8 syllables (a phrase: "SYS-TEM RE-CEIVES HU-MAN SIG-NAL"), and Alien Rave
+speaks them too when a style gives `words` (Client_03's voice and timing: one phrase every eight bars of the full
+section, every eight in the breakdown); without `words` it says nothing, as before. Not opened: per-voice jitter on the
+perc and toms, a sci-fi event layer (radio, transmissions, distant impacts) and pad filter/width automation.
+Alien Rave's laser and arp voices (2026-10-27, off by default: left out, the house sound): `laser`, the glitch row's
+falling square (`from` Hz 300..6000 plus `color` 0..4000 with the pool tick, lowpass resonance `q`, `level` 0..0.4,
+0 mutes it; house 2400, 2600, 6, 0.28) and `arp`, the sci-fi arp's pulse (`open` 1..8 and `color` 0..6 times the note,
+at most `cap` Hz 500..11000, `q`, `level` 0..0.4, 0 mutes it; house 3, 3, 11000, 5, 0.22). On small speakers both read
+as mouse squeaks or small lasers: the hamster's Alien Rave styles (Hoover Sprint, Cheek Pouch, Hull Breach,
+Hypnagogue) turn the laser off and play the arp darker and lower.
 
 Ambient IDM and drone (opened after the first five, same level): ambientidm opens its harmony (`chords`,
 `progressions`), the phrase material of each base (Tape Keys `figures`, Tape Haze `phrases`, Crystal `arps`), how fast
@@ -399,6 +484,65 @@ day, so the read names BALANCE as the sender: one more request per range, `nftIn
 - **"how" section** (`site/src/how.ts`): an nft station replaces the house text of `#how` (the pitch and the
   `cat spec/…` table) with its own: Credits a dedicated text and table, any other collection a generic one. The house
   page is untouched.
+
+### Hamster station
+
+`kind: "hamster"` (key `squeekchain`, label SQUEEKCHAIN, site `?net=squeekchain`; owner-approved 2026-10-26, the
+Squeekchain founder agreed 2026-10-27): a real hamster's running wheel (Squeekchain, docs.squeekchain.com: a wheel sensor feeding
+contracts on Sepolia) instead of a pool. The station only listens: nothing in it rewards the wheel turning
+(Squeekchain's welfare policy).
+
+```
+"hamster": { "data": "/stations-data/hamster.json", "sleep": "hamster-sleep" }
+```
+
+- **Recorder** (`bot/src/hamster/recorder.ts`, compose service `hamster`, profile hamster): the API keeps no history of
+  the wheel, so /v1/status is polled every second and /v1/events every 30 s, 24/7, into `/opt/swarm-sequencer/hamster`
+  (status-YYYY-MM-DD.jsonl, finished days gzipped; events.jsonl). `src/hamster/stats.ts [day]` prints a day's runs
+  (running = rpm > 0; `coreStatus` is the mining core's state, not the wheel's). The first night (2026-10-25/26): ~2 h of
+  running in five sessions (21:20-23:21, 01:16-02:08, 05:02-05:40 UTC), runs of ~5 min, 0.94-1.15 m/s, ~7 km; a
+  measurement every 5 s while the wheel turns, every 60 s while it stands.
+- **Publisher** (`bot/src/hamster/publish.ts`, compose service `hamster-publish`, same profile): follows the recorder's
+  files read-only and writes `out/stations-data/hamster.json` every 3 s when something is new: the measurements a
+  decode needs (the wheel turning, the first still one after it, a day-counter change; decodes exactly like the full
+  log, ~1,500 a night), the milestones since the first measurement, the cue events of the last 48 h, and `now` (the
+  newest measurement, for the wheel on screen). Served by the existing `/stations-data/*` route (zstd/gzip by Caddy).
+  It grows ~60 KB a night: a checkpoint (state + carry) replaces the old nights when it passes a few MB.
+- **Decoder** (`packages/core/src/hamster.ts`, shared by the site and the bot): every 30 m of wheel
+  (`HAMSTER_STEP_MM`) is one BUY at the measurement that crossed it; the wheel stopping is one SELL of the usual size;
+  a milestone event (daily/lifetime distance, speed record, streak) is one whale BUY. Size = 0.0125 ETH x (speed /
+  median of his last 127 running speeds)^8 with the size EMA held (as nft.ts): faster than usual climbs to snare and
+  kick, slower falls to hat. Tick = 3 x the median of the last 12 running speeds, so the bass degree follows the pace.
+  The tempo moves with the gaps between inputs (a faster hamster, a faster track). Settlements, claims, merges and
+  mints are cues, never inputs. Under the v2 rules the first night finished 3 tracks (23:07, 01:37, 05:17 UTC).
+- **Sleep mode** (`packages/synth/src/sleep.ts`, the live player's `sleep` option): once the last input is 10 min old
+  (`SLEEP_AFTER_SEC`, where idle thinning would start) the player plays the sleep pack (`hamster-sleep`: ambient IDM and
+  drone styles) on the frozen state, one style per 30 min of the wall clock (`SLEEP_SLOT_SEC`; each cycle plays every
+  style once, shuffled, never twice in a row; the slot also moves the key), idle and heat off. Every viewer hears the
+  same slot. The rig plays `withSleep(program, sleep)`: the awake genre order, the styles of both, so a sleep genre is
+  reached only through the player's override. The next input wakes the station on its own genre.
+- **Site** (`site/src/data/hamster.ts`, `wheelscreen.ts`): polls the file every 5 s and decodes it from the first
+  measurement. THE WHEEL screen draws the wheel turning at the live rpm and says RUNNING / RESTING / ASLEEP · DREAMING:
+  <style>; REPLAY LAST RUN plays the last finished run (inputs with no 10-min gap; a run going on now is live, not a
+  replay) from the state before it, at 1x on a virtual clock; live inputs wait meanwhile and land as history after it.
+- **Releases** (`updateHamsterStation`, run by `updateStations`): the bot decodes the same file into its cached tape
+  (`OUT_DIR/stations/hamster.json`, the carry kept with it; no checkpoint). Track posts with `STATION_TRACKS=…,hamster`:
+  title `SQUEEKCHAIN · A REAL WHEEL · TRACK #3 · 96 NOTES IN ORDER`, the tape says RUN 1.18 M/S / STOP / MILE, caption
+  `track #3 finished on the squeekchain station: 96 notes from a real hamster's wheel, acid · squeak.` / `every 30 m of the
+  wheel is a note, played through the $IDM rules. wheel by @squeekchain` / the station link (the handle is the
+  registry's `hamster.tag`, tagged with the founder's ok of 2026-10-27). $IDM the only cashtag.
+- **Sound**: awake genres acid, breakbeat (on electro) and UK garage (on future garage), `stations/hamster.ts`; sleep
+  `stations/hamster-sleep.ts`.
+
+Listen page (2026-10-27): `theidm.fun/listen.html?net=<key>` plays a station's sound alone (site/src/listen.ts: the
+same feed and player as the station page, no module) for someone else's stream or site. It starts on its own where the
+browser allows (OBS's browser source); elsewhere one tap on its bar starts it. `?ui=0` hides the bar (a stream: only
+the sound), `?vol=` sets the volume 0..1. Squeekchain's link: `theidm.fun/listen.html?net=squeekchain`.
+For a setup that takes a plain audio URL, the radio service (bot/src/radio, compose profile radio) plays that page
+in headless Chromium (`?tap=1`: the output as PCM, site/src/tap.ts), encodes MP3 128 kbps and serves one shared
+stream; Caddy proxies `/radio/*` to it: `theidm.fun/radio/squeekchain.mp3` (`/radio/health` for its state).
+What plays now: `/radio/now` (JSON: asleep, genre, style, text) and `/radio/now.txt` (one line, for a stream chat
+bot's `!music` command).
 
 ### Gift stations
 

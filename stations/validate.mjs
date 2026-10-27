@@ -3,9 +3,12 @@
 // (site/src/stations.ts) check each entry of the runtime registry (OUT_DIR/stations-data/stations.json, added by the
 // pipeline) the same way before merging it over the baked one. Plain JS, no imports: node, tsx and vite all load it.
 
-export const SUPPORTED_CHAINS = ["1", "8453", "42161", "4663", "143"];
-/** Pool kinds (core swaps.ts), the hook, and "nft": an ERC-721 collection's sales (core nft.ts). */
-export const KINDS = ["hook", "v4", "v3", "pancake-v3", "v2", "aerodrome-v2", "nft"];
+export const SUPPORTED_CHAINS = ["1", "8453", "42161", "4663", "143", "11155111"];
+/**
+ * Pool kinds (core swaps.ts), the hook, "nft": an ERC-721 collection's sales (core nft.ts), and "hamster": a hamster's
+ * wheel (Squeekchain on Sepolia, core hamster.ts), read from our recorder's published file.
+ */
+export const KINDS = ["hook", "v4", "v3", "pancake-v3", "v2", "aerodrome-v2", "nft", "hamster"];
 /** pending = added, not on air; preview = the pack is in, playable at ?net=<key> but not listed; live = on air. */
 export const STATUSES = ["live", "paused", "pending", "preview"];
 const NATIVE = "0x0000000000000000000000000000000000000000";
@@ -88,6 +91,17 @@ function nftProblems(n) {
   return out;
 }
 
+/** The `hamster` block: the published night (a /stations-data/ path), the sleep pack, the X handle its posts tag. */
+function hamsterProblems(h, packExists) {
+  if (!h || typeof h !== "object" || Array.isArray(h)) return ["hamster must be an object { data, sleep, tag }"];
+  const { data, sleep, tag, ...rest } = h;
+  const out = Object.keys(rest).map((k) => `hamster.${k}: unknown field`);
+  if (typeof data !== "string" || !/^\/stations-data\/[a-z0-9-]+\.json$/.test(data)) out.push("hamster.data must be a /stations-data/<name>.json path");
+  if (sleep !== undefined && (typeof sleep !== "string" || !/^[a-z0-9-]+$/.test(sleep) || !packExists(sleep))) out.push(`hamster.sleep "${sleep}" has no pack`);
+  if (tag !== undefined && (typeof tag !== "string" || !/^[A-Za-z0-9_]{1,15}$/.test(tag))) out.push("hamster.tag must be an X handle without @");
+  return out;
+}
+
 /**
  * Problems of one station entry against the chains, as plain messages. `packExists(program)` says whether a
  * program other than "idm" has a pack (baked file, or a runtime pack).
@@ -115,6 +129,12 @@ export function stationProblems(s, chains, { packExists = () => true } = {}) {
     else if (chain?.poolManager && !same(s.poolManager, chain.poolManager)) fail(`poolManager is not ${chain.name}'s v4 PoolManager ${chain.poolManager}`);
     if (!isHex(s.poolId, 32)) fail("poolId not bytes32");
     if (s.pool !== undefined) fail(`a ${s.kind} station has poolManager + poolId, not pool`);
+  } else if (s.kind === "hamster") {
+    // A wheel: `token` is the network's token (Squeekchain SQK), `hamster` where its night is published.
+    errors.push(...hamsterProblems(s.hamster, packExists));
+    for (const f of ["pool", "poolManager", "poolId", "ethSide", "calibration", "hook"]) if (s[f] !== undefined) fail(`a hamster station has no ${f}`);
+    if (!same(s.quote, NATIVE)) fail("a hamster station's quote is 0x0 (the rules' unit, nothing is traded)");
+    if (s.quoteSymbol !== "ETH") fail("a hamster station counts in the rules' unit: quoteSymbol must be ETH");
   } else if (s.kind === "nft") {
     // A collection: `token` is the ERC-721, `nft` its supply frame and venues; priced in ETH (WETH bids included).
     errors.push(...nftProblems(s.nft));
@@ -133,7 +153,8 @@ export function stationProblems(s, chains, { packExists = () => true } = {}) {
   if (s.calibration !== undefined && s.kind === "hook") fail("the hook station is read on chain: no calibration");
   errors.push(...calibrationProblems(s.calibration));
   if (s.nft !== undefined && s.kind !== "nft") fail("only an nft station has an nft block");
-  if (known && s.kind !== "hook" && s.kind !== "nft") {
+  if (s.hamster !== undefined && s.kind !== "hamster") fail("only a hamster station has a hamster block");
+  if (known && s.kind !== "hook" && s.kind !== "nft" && s.kind !== "hamster") {
     if (s.quoteSymbol !== "ETH") fail("played stations count in ETH: quoteSymbol must be ETH (a calibrated quote is converted)");
     const native = same(s.quote, NATIVE);
     const calibrated = typeof s.calibration?.quotePerEth === "string";
@@ -180,7 +201,7 @@ export function registryProblems(reg, opts = {}) {
 }
 
 /** The pool a played station hears, "<chainId>:<pool or poolId>" lowercased (two stations never share one). */
-const poolOf = (s) => `${s?.chainId}:${String(s?.kind === "nft" ? `nft:${s?.token}` : (s?.poolId ?? s?.pool ?? "")).toLowerCase()}`;
+const poolOf = (s) => `${s?.chainId}:${String(s?.kind === "nft" ? `nft:${s?.token}` : s?.kind === "hamster" ? `hamster:${s?.hamster?.data}` : (s?.poolId ?? s?.pool ?? "")).toLowerCase()}`;
 
 /**
  * The baked registry with the runtime entries ({ stations: [...] }, the pipeline's file) appended. A runtime entry is

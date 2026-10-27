@@ -428,8 +428,78 @@ const DRONE_CHECKS: Readonly<Record<keyof GenreDataMap["drone"] & string, Check>
   swell: num(0, 0.15),
 };
 
+/** A UK garage mid bass (styledata.ts UkgMidSpec). */
+const ukgMid = partial({
+  kind: oneOf(["saw", "fm", "reese", "organ"]), level: num(0, 1.5), cutoff: num(150, 3000), env: num(0, 1), q: num(0.3, 8), decay: num(0.05, 1),
+  sustain: num(0, 1), release: num(0.02, 0.4), drive: num(0, 5), detune: num(0, 40), ratio: num(0.5, 6), index: num(0, 8), fmDecay: num(0.03, 0.6),
+  floor: num(0, 1), hp: num(40, 300), bend: num(0, 12), bendTime: num(0.02, 0.4),
+});
+
+/**
+ * The key of the UK garage voices: the natural minor over the tonic. Chord tones may be 7ths, 9ths, 11ths and 13ths
+ * (minor 7 / minor 9 / major 7 / major 9 / sus / 6/9 voicings), but every pitch class must be in this scale, so
+ * the extensions never clash with the sub, the chain's bass onsets or each other.
+ */
+export const UKG_KEY: readonly number[] = [0, 2, 3, 5, 7, 8, 10];
+/** The scales a UK garage style may name (`ukg.scale`); "minor" is UKG_KEY. */
+export const UKG_SCALES: Readonly<Record<string, readonly number[]>> = {
+  minor: UKG_KEY,
+  harmonic: [0, 2, 3, 5, 7, 8, 11],
+  phrygian: [0, 1, 3, 5, 7, 8, 10],
+  dark: [0, 1, 2, 3, 5, 6, 7, 8, 10, 11],
+};
+/** The bass of each chord of the default UK garage table (engine.ts UKG_CHORDS), for basslines over it. */
+export const UKG_CHORD_BASS: readonly number[] = [0, 0, 8, 3, 5, 7, 10, 0, 5];
+/** How many chords the default UK garage progressions (engine.ts UKG_PROGRESSIONS) index, and how many vowels UKG_VOWELS has. */
+const UKG_CHORD_COUNT = 9;
+const UKG_VOWEL_COUNT = 5;
+const pc = (x: number) => ((x % 12) + 12) % 12;
+
+/** UK garage (futuregarage classic with `ukg`): the figures need the voices on, and every note stays in the key. */
+/** The UK garage voices are on: `ukg` given and its level (default 1) above 0 (engine.ts ukgSpec). */
+const ukgOn = (data: Record<string, unknown>) => isObj(data.ukg) && (typeof data.ukg.level === "number" ? data.ukg.level > 0 : true);
+
+function ukgCheck(data: Record<string, unknown>, p: string, e: Err) {
+  const on = ukgOn(data);
+  for (const k of ["stabs", "basslines", "motifs", "calls"]) {
+    if (data[k] !== undefined && !on) e(`${p}.${k}: only the UK garage voices read it; give the style ukg (level > 0)`);
+  }
+  if (!on) return;
+  const ukg = data.ukg as Record<string, unknown>;
+  const scaleName = typeof ukg.scale === "string" && ukg.scale in UKG_SCALES ? ukg.scale : "minor";
+  const KEY = UKG_SCALES[scaleName];
+  const chords = Array.isArray(data.chords) ? data.chords.filter(isObj) : null;
+  chords?.forEach((c, i) => {
+    if (typeof c.bass === "number" && !KEY.includes(pc(c.bass))) e(`${p}.chords[${i}].bass: ${c.bass} is out of the key (${scaleName}: ${KEY.join(" ")})`);
+    if (Array.isArray(c.pad)) c.pad.forEach((t, j) => typeof t === "number" && !KEY.includes(pc(t)) && e(`${p}.chords[${i}].pad[${j}]: ${t} is out of the key (${scaleName}: ${KEY.join(" ")})`));
+  });
+  const basses = chords ? chords.map((c) => (typeof c.bass === "number" ? c.bass : 0)) : UKG_CHORD_BASS;
+  if (Array.isArray(data.basslines)) {
+    data.basslines.forEach((line, i) => {
+      if (!Array.isArray(line)) return;
+      line.forEach((n, j) => {
+        if (!isObj(n) || typeof n.semi !== "number") return;
+        const semi = n.semi;
+        const off = basses.filter((b) => !KEY.includes(pc(b + semi)));
+        if (off.length) e(`${p}.basslines[${i}][${j}].semi: ${semi} over the chord bass ${off.join(", ")} is out of the key`);
+      });
+    });
+  }
+  const vowels = Array.isArray(data.vowels) ? data.vowels.length : UKG_VOWEL_COUNT;
+  if (Array.isArray(data.calls)) {
+    data.calls.forEach((fig, i) => {
+      if (!Array.isArray(fig)) return;
+      fig.forEach((x, j) => {
+        if (!isObj(x)) return;
+        for (const k of ["vowel", "to"]) if (typeof x[k] === "number" && (x[k] as number) >= vowels) e(`${p}.calls[${i}][${j}].${k}: vowel ${x[k]} is not in vowels (0..${vowels - 1})`);
+      });
+    });
+  }
+}
+
 /** Rules that depend on the base: the Ambient IDM kit parts it plays, Overtone Pulse's glints (partial numbers). */
 function baseCheck(genre: DataGenre, base: string, data: Record<string, unknown>, p: string, e: Err) {
+  if (genre === "futuregarage" && base === "classic") ukgCheck(data, p, e);
   if (genre === "ambientidm" && Array.isArray(data.progressions)) {
     const n = Array.isArray(data.chords) ? data.chords.length : 5;
     data.progressions.forEach((prog, i) => {
@@ -460,10 +530,12 @@ const FIELD_CHECKS: { readonly [G in DataGenre]: Readonly<Record<keyof GenreData
     fills: list(1, 6, shape({ kick: lane(8), snare: lane(8) })),
     sub: num(0, 1),
     progressions: list(1, 6, list(4, 4, padChord)),
-    walks: figures(1, 12, coreNote(32, { oct: int(0, 1) })),
+    walks: figures(1, 12, note(32, { core: bool, oct: int(0, 1), semi: int(-12, 12) }, ["semi"])),
     comps: figures(1, 10, coreNote(32)),
     ...SOUND_CHECKS,
     bass: subSpec,
+    // The reese over the sub (styledata.ts LiquidReeseSpec): off at level 0.
+    reese: partial({ level: num(0, 1.5), detune: num(0, 40), drive: num(0.1, 5), cutoff: num(60, 1200), q: num(0.3, 8), depth: num(0, 1), rate: num(0.0625, 4) }),
     pad: padSpec,
     choir: padSpec,
     strings: padSpec,
@@ -501,6 +573,48 @@ const FIELD_CHECKS: { readonly [G in DataGenre]: Readonly<Record<keyof GenreData
       foley: both(list(1, 3, oneOf(["lighter", "drop", "vinyl"])), distinct),
       level: num(0, 1.6),
       slots: list(1, 8, int(0, 15)),
+    }),
+    // UK garage (styledata.ts UkgSpec and the figures it reads); the key rules are in baseCheck.
+    stabs: figures(2, 16, coreNote(32, { len: num(0.25, 8), vel: num(0.1, 1) })),
+    basslines: figures(2, 32, shape({ s: int(0, 31), len: num(0.25, 8), semi: int(-12, 24), vel: num(0.1, 1), core: bool, glide: bool }, ["glide"])),
+    motifs: figures(2, 16, shape({ s: int(0, 31), len: num(0.25, 8), tone: int(0, 5), oct: int(-1, 2), core: bool }, ["oct"])),
+    calls: figures(1, 12, shape({ s: int(0, 31), len: num(0.5, 8), vowel: int(0, 5), to: int(0, 5), tone: int(0, 5), oct: int(-1, 1), rep: int(0, 4), core: bool }, ["to", "oct", "rep"])),
+    ukg: partial({
+      level: num(0, 1.5),
+      bars: int(1, 2),
+      stab: partial({
+        level: num(0, 1.5), voices: int(1, 4), detune: num(0, 40), osc2: num(0, 1), cutoff: num(400, 9000), q: num(0.3, 8), slope: oneOf([12, 24]),
+        env: num(0, 1), fdecay: num(0.03, 1), attack: num(0.001, 0.05), decay: num(0.05, 1), sustain: num(0, 1), release: num(0.02, 0.6),
+        punch: num(0, 12), punchTime: num(0.005, 0.1), drive: num(0, 4), vel: num(0, 1), width: num(0, 1), octave: int(-12, 12),
+      }),
+      organ: partial({
+        level: num(0, 1.5), bars: tuple(num(0, 1), num(0, 1), num(0, 1)), chorus: num(0, 20), drive: num(0, 4), cutoff: num(600, 9000),
+        decay: num(0.05, 1.5), sustain: num(0, 1), release: num(0.02, 0.8),
+      }),
+      sub: partial({ level: num(0, 1.5), attack: num(0.001, 0.03), decay: num(0.1, 1.5), sustain: num(0, 1), release: num(0.03, 0.4), drive: num(0, 3), glide: num(0.02, 0.2), bend: num(0, 12), bendTime: num(0.02, 0.4) }),
+      mid: ukgMid,
+      drop2: ukgMid,
+      pluck: partial({
+        level: num(0, 1.5), wave: oneOf(["sawtooth", "triangle", "square"]), cutoff: num(400, 9000), env: num(0, 1), decay: num(0.05, 0.6),
+        release: num(0.03, 0.5), bend: num(0, 12), pan: num(0, 1),
+      }),
+      vox: partial({ level: num(0, 1.5), q: num(2, 14), breath: num(0, 1), bend: num(-12, 12), scoop: num(0.01, 0.2), release: num(0.02, 0.5), lp: num(1000, 9000) }),
+      lead: partial({ level: num(0, 1.5), glide: num(0, 0.2), detune: num(0, 25), cutoff: num(600, 9000), release: num(0.03, 0.6) }),
+      groove: partial({
+        hatLate: num(0, 0.35), percLate: num(0, 0.35), jitter: num(0, 1), ghost: num(0, 1.5), perc: num(0, 1.5), open: num(0, 1.5), tamb: num(0, 1.5),
+        ghostKick: num(0, 1.5), offOpen: num(0, 1.5), metal: num(0, 1.5),
+      }),
+      keys: both(list(1, 6, int(0, 11)), distinct),
+      scale: oneOf(Object.keys(UKG_SCALES)),
+      midEarly: num(0, 1),
+      turn: oneOf([0, 1]),
+      sweep: partial({ bars: oneOf([8, 16, 32]), depth: num(0, 1) }),
+      m1: partial({ level: num(0, 1.5), octave: int(-12, 12), cutoff: num(600, 8000), drive: num(0, 4), click: num(0, 1), decay: num(0.05, 1), sustain: num(0, 1), release: num(0.02, 0.4) }),
+      ep: partial({
+        level: num(0, 1.5), octave: int(-12, 12), ratio: num(0.5, 4), index: num(0, 6), floor: num(0, 1), decay: num(0.05, 2), chorus: num(0, 20),
+        cutoff: num(800, 9000), release: num(0.05, 1.5),
+      }),
+      strings: partial({ level: num(0, 1.5), detune: num(0, 40), cutoff: num(400, 6000), attack: num(0.05, 4), release: num(0.1, 4), hold: num(0, 1) }),
     }),
   },
   triphop: {
@@ -554,7 +668,7 @@ const FIELD_CHECKS: { readonly [G in DataGenre]: Readonly<Record<keyof GenreData
     kit: acidKit,
     voice: partial({
       wave: oneOf(["saw", "square"]), cutoff: num(50, 400), envMod: num(300, 4000), resonance: num(1.5, 4.2), decay: num(0.05, 0.6),
-      drive: num(0.5, 3), level: num(0.05, 0.4), accent: num(1, 1.6), gate: num(0.1, 4), sweep: num(4, 32),
+      drive: num(0.5, 3), level: num(0.05, 0.4), accent: num(1, 1.6), gate: num(0.1, 4), sweep: num(4, 32), sub: num(0, 1),
     }),
   },
   dubtechno: {
@@ -618,7 +732,8 @@ const FIELD_CHECKS: { readonly [G in DataGenre]: Readonly<Record<keyof GenreData
     warps: list(1, 6, list(16, 16, num(0.5, 1.5))),
     chops: list(1, 6, shape({ open: int(0, 15), steps: list(0, 4, int(0, 15)) })),
     riffs: list(1, 6, list(1, 24, shape({ s: int(0, 31), semi: int(-12, 24), len: num(0.25, 16), f: int(0, 15) }))),
-    words: list(1, 6, shape({ s: int(0, 15), syl: list(1, 4, tuple(num(200, 1200), num(600, 3000), oneOf(["k", "t", "p", "s", null]))) })),
+    answers: list(1, 6, list(1, 16, shape({ s: int(0, 31), semi: int(-12, 24), len: num(0.25, 16), core: bool }))),
+    words: list(1, 6, shape({ s: int(0, 15), syl: list(1, 8, tuple(num(200, 1200), num(600, 3000), oneOf(["k", "t", "p", "s", null]))) })),
     opens: list(1, 6, list(0, 4, int(0, 15))),
     lines: list(1, 6, both(list(6, 16, alienStep), (x, p, e) => {
       if (Array.isArray(x) && x.filter((n) => n !== null).length < 2) e(`${p}: needs at least 2 notes`);
@@ -626,19 +741,44 @@ const FIELD_CHECKS: { readonly [G in DataGenre]: Readonly<Record<keyof GenreData
     stabs: list(1, 6, list(1, 10, shape({ s: int(0, 31), len: num(0.25, 16), core: bool }))),
     arpCells: list(1, 6, list(2, 16, int(0, 11))),
     calls: list(1, 6, shape({ s: int(0, 15), len: num(1, 16), vowels: list(1, 4, formant) })),
+    // The machine-electro additions (styledata.ts ElectroSeqSpec, ElectroMetalSpec, ElectroJitter): off unless given.
+    seq: both(
+      shape(
+        {
+          notes: list(3, 16, (x, p, e) => (x === null ? undefined : int(-12, 24)(x, p, e))),
+          rate: int(1, 4), octave: int(-24, 12), follow: bool, gate: num(0.25, 4), level: num(0, 1.2), accent: num(0, 1), evolve: int(0, 32),
+        },
+        ["rate", "octave", "follow", "gate", "level", "accent", "evolve"],
+      ),
+      (x, p, e) => {
+        if (isObj(x) && Array.isArray(x.notes) && x.notes.filter((n) => n !== null).length < 2) e(`${p}.notes: needs at least 2 notes`);
+      },
+    ),
+    metal: both(
+      shape(
+        { steps: list(3, 16, num(0, 1)), freq: num(200, 6000), ratio: num(0.5, 8), index: num(0, 8), decay: num(0.01, 0.4), level: num(0, 0.5), pan: num(0, 1), jitter: num(0, 15) },
+        ["freq", "ratio", "index", "decay", "level", "pan", "jitter"],
+      ),
+      (x, p, e) => {
+        if (isObj(x) && Array.isArray(x.steps) && !x.steps.some((n) => typeof n === "number" && n > 0)) e(`${p}.steps: needs at least one hit`);
+      },
+    ),
+    jitter: partial({ hat: num(0, 15), ghost: num(0, 15) }),
     ...SOUND_CHECKS,
     kit: electroKit,
     bassTone: partial({
-      osc: list(1, 4, shape({ type: oneOf(waves), detune: num(-40, 40), level: num(0, 1) })),
+      osc: list(1, 4, shape({ type: oneOf([...waves, "pulse25", "pulse12"]), detune: num(-40, 40), level: num(0, 1) })),
       cutoff: num(60, 1200), color: num(0, 3000), q: pair(0.3, 14), open: pair(1, 12), decay: pair(0.01, 0.5), drive: num(0.1, 5),
-      level: pair(0.02, 0.3), sub: pair(0, 2), glide: num(0.001, 0.2), fm: pair(0, 4),
+      level: pair(0.02, 0.3), sub: pair(0, 2), glide: num(0.001, 0.2), fm: pair(0, 4), ratio: num(0.5, 4),
     }),
     pad: padSpec,
-    voice: partial({ pitch: num(60, 400), bits: int(3, 8), hp: num(100, 2000), lp: num(1000, 8000), level: num(0, 0.15) }),
+    voice: partial({ pitch: num(60, 400), bits: int(3, 8), hp: num(100, 2000), lp: num(1000, 8000), level: num(0, 0.15), every: oneOf([2, 4, 8]) }),
     hoover: partial({
       cutoff: num(200, 4000), color: num(0, 4000), q: num(0.3, 8), hp: num(20, 1000), bend: num(0, 12), detune: list(1, 4, num(-50, 50)), level: num(0, 0.4),
     }),
     vox: partial({ ring: num(0.25, 4), level: num(0, 1.2) }),
+    laser: partial({ from: num(300, 6000), color: num(0, 4000), q: num(0.3, 12), level: num(0, 0.4) }),
+    arp: partial({ open: num(1, 8), color: num(0, 6), cap: num(500, 11000), q: num(0.3, 12), level: num(0, 0.4) }),
     // The attention layer's robot word (styledata.ts RobotWordSpec): quiet by construction (level <= 0.1), echo feedback < 0.7.
     ornament: partial({
       vowels: list(1, 4, tuple(num(150, 1200), num(500, 3500))),
@@ -659,13 +799,15 @@ const FIELD_CHECKS: { readonly [G in DataGenre]: Readonly<Record<keyof GenreData
 
 /** Fields whose valid values depend on another table (progression indices / names), checked on the tables in force. */
 function crossCheck(genre: DataGenre, data: Record<string, unknown>, p: string, e: Err) {
+  // With the UK garage voices on, the default chords and progressions are the UK garage ones (9 chords).
+  const house = genre === "futuregarage" && ukgOn(data) ? UKG_CHORD_COUNT : 7;
   if (genre === "futuregarage" && Array.isArray(data.progressions)) {
-    const n = Array.isArray(data.chords) ? data.chords.length : 7;
+    const n = Array.isArray(data.chords) ? data.chords.length : house;
     data.progressions.forEach((prog, i) => {
       if (Array.isArray(prog)) prog.forEach((c, j) => typeof c === "number" && c >= n && e(`${p}.progressions[${i}][${j}]: chord ${c} is not in chords (0..${n - 1})`));
     });
-  } else if (genre === "futuregarage" && Array.isArray(data.chords) && data.chords.length < 7) {
-    e(`${p}.chords: the house progressions use chords 0..6; give 7 or more chords, or your own progressions`);
+  } else if (genre === "futuregarage" && Array.isArray(data.chords) && data.chords.length < house) {
+    e(`${p}.chords: the house progressions use chords 0..${house - 1}; give ${house} or more chords, or your own progressions`);
   }
   // Ambient IDM's progression indices are checked in baseCheck; here only the house progressions over fewer chords.
   if (genre === "ambientidm" && !Array.isArray(data.progressions) && Array.isArray(data.chords) && data.chords.length < 5) {
@@ -705,9 +847,9 @@ function houseStyle(genre: DataGenre, id: string): GenreStyle | undefined {
 
 function checkStyle(genre: DataGenre, style: unknown, p: string, e: Err, seen: Set<string>, patchIds: readonly string[]) {
   if (!isObj(style)) return e(`${p}: expected a style object, got ${show(style)}`);
-  const allowed = ["id", "name", "base", "bpm", "swing", "microScale", "trim", "leads", "data"];
+  const allowed = ["id", "name", "base", "bpm", "swing", "microScale", "trim", "riser", "heat", "breakdown", "intro", "leads", "data"];
   for (const k of Object.keys(style)) if (!allowed.includes(k)) e(`${p}.${k}: unknown field (allowed: ${allowed.join(", ")})`);
-  const { id, name, base, bpm, swing, microScale, trim, leads, data } = style;
+  const { id, name, base, bpm, swing, microScale, trim, riser, heat, breakdown, intro, leads, data } = style;
   if (typeof id !== "string" || !/^[a-z][a-z0-9-]{1,23}$/.test(id)) e(`${p}.id: expected 2..24 of a-z 0-9 "-" starting with a letter, got ${show(id)}`);
   else if (HOUSE_STYLE_IDS.has(id)) e(`${p}.id: "${id}" is a house style id; give the station style its own id`);
   else if (seen.has(id)) e(`${p}.id: "${id}" is used twice in this pack`);
@@ -722,9 +864,17 @@ function checkStyle(genre: DataGenre, style: unknown, p: string, e: Err, seen: S
     list(2, 2, num(lo, hi))(bpm, `${p}.bpm`, e);
     if (Array.isArray(bpm) && bpm[0] > bpm[1]) e(`${p}.bpm: expected [low, high], got ${show(bpm)}`);
   }
-  if (swing !== undefined) num(0.5, 0.68)(swing, `${p}.swing`, e);
+  // Future garage may swing harder (to an MPC ~65%: the engine delays the odd 16ths by swing - 0.5 of a 16th).
+  if (swing !== undefined) num(0.5, genre === "futuregarage" ? 0.8 : 0.68)(swing, `${p}.swing`, e);
   if (microScale !== undefined) num(0, 2.5)(microScale, `${p}.microScale`, e);
   if (trim !== undefined) num(0.25, 3)(trim, `${p}.trim`, e);
+  if (riser !== undefined) num(0, 1)(riser, `${p}.riser`, e);
+  if (heat !== undefined) num(0, 1)(heat, `${p}.heat`, e);
+  // The breakdown's and the intro's own layer levels (styles.ts GenreStyle.breakdown, .intro).
+  const layer = num(0, 1);
+  const layers = partial({ kick: layer, snare: layer, hat: layer, glitch: layer, bass: layer, pad: layer, lead: layer, texture: layer, bed: layer, filter: layer });
+  if (breakdown !== undefined) layers(breakdown, `${p}.breakdown`, e);
+  if (intro !== undefined) layers(intro, `${p}.intro`, e);
   if (leads !== undefined) {
     const known = (x: unknown) => typeof x === "string" && (x in LEAD_PATCHES || patchIds.includes(x));
     list(1, 4, (x, q, err) => !known(x) && err(`${q}: unknown lead patch ${show(x)} (leads.ts, or the pack's patches)`))(leads, `${p}.leads`, e);

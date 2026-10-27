@@ -259,6 +259,16 @@ body.has-nft-screen .side-col .nft-screen { grid-row: 1 / 3; }
 }
 .nft-tag[hidden] { display: none; }
 .nft-screen.lock .nft-cap { color: var(--phos); }
+/* Hamster station (wheelscreen.ts): the wheel at his live speed, what he is doing, the replay of his last run. */
+.wheel-glass canvas { width: 100%; height: 100%; display: block; }
+.wheel-cap { min-height: 2.1em; color: var(--phos); }
+.wheel-replay {
+  font-family: var(--lcd); font-size: 15px; letter-spacing: 0.05em; padding: 4px 6px; cursor: pointer;
+  color: var(--phos); background: var(--lcd-bg); border: 1px solid var(--phos-dim); border-radius: 2px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.wheel-replay:hover:not(:disabled) { border-color: var(--phos); }
+.wheel-replay:disabled { color: var(--phos-dim); cursor: default; opacity: 0.7; }
 .nft-screen.lock .nft-glass { box-shadow: inset 0 0 0 2px var(--phos-dim), inset 0 0 18px rgba(0, 0, 0, 0.8); }
 
 /* The Credits skin (registry theme panel / sell / whale, stations.ts applySkin): a print-shop faceplate, black ink

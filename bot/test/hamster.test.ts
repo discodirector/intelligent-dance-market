@@ -136,7 +136,7 @@ describe("hamster stats", () => {
     JSON.stringify({ rx: T0 + 90_000, status: { status: "unavailable", reason: "no_measurement" } }),
   ];
 
-  it("counts lines, finds ACTIVE periods, intervals, maxima, distance and blocks", () => {
+  it("counts lines, finds running periods, intervals, maxima, distance and blocks", () => {
     const s = dayStats(lines);
     expect(s).toMatchObject({ lines: 10, statusLines: 7, heartbeats: 1, errorLines: 1, badLines: 1, unavailable: 1, samples: 6 });
     expect(s.active).toEqual([
@@ -151,7 +151,7 @@ describe("hamster stats", () => {
     expect(s.blockHeight).toEqual({ first: 100n, last: 105n, delta: 5n });
     expect(s.lag!.median).toBeCloseTo(0.5, 6);
     const text = formatStats(s);
-    expect(text).toContain("ACTIVE periods 2");
+    expect(text).toContain("running periods 2");
     expect(text).toContain("22:01:01 - 22:01:10");
     expect(text).toContain("median 5.00");
   });

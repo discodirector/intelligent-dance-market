@@ -35,6 +35,8 @@ export interface StationPostOpts {
   skin?: string;
   /** Releases of a collection station (kind "nft"): sales, not swaps, on screen and in the headline. */
   nft?: ReleaseNft;
+  /** Releases of the hamster station: notes (the wheel's), not swaps. */
+  hamster?: { name: string };
 }
 
 /** The caption: the station's own when given (source "station"), else the model's with the template fallback. */
@@ -99,7 +101,7 @@ export async function produceRelease(
   const work = mkdtempSync(join(tmpdir(), "seq-release-"));
   try {
     const sel = selectTrack(entries, o.track);
-    const r = await renderRelease({ timeline: entries, track: sel.trackNo, initial: o.initial, outDir: work, mp4: true, station: o.station, pack: o.pack, theme: o.theme, quote: o.quote, title: o.title, skin: o.skin, nft: o.nft });
+    const r = await renderRelease({ timeline: entries, track: sel.trackNo, initial: o.initial, outDir: work, mp4: true, station: o.station, pack: o.pack, theme: o.theme, quote: o.quote, title: o.title, skin: o.skin, nft: o.nft, hamster: o.hamster });
     const sum = r.summary as any;
     const max = o.maxPostSeconds ?? Number(process.env.X_VIDEO_MAX_SECONDS ?? X_VIDEO_MAX_SECONDS);
     const cut = postCut(r.seconds, sum.dropTime ?? null, max);
@@ -115,7 +117,7 @@ export async function produceRelease(
     // The release plays one genre and style, the ones the track finished in (SPEC §4.6); posts name the genre only.
     const genre = sum.genre.eraName as string;
     // A station's track numbers are its own: the headline names the station so they never read as $IDM tracks.
-    facts.headline = (o.station ? `${o.station} · ` : "") + releaseHeadline(sel.trackNo, facts.track?.swaps ?? track.length, genre, o.nft ? "sales" : "swaps");
+    facts.headline = (o.station ? `${o.station} · ` : "") + releaseHeadline(sel.trackNo, facts.track?.swaps ?? track.length, genre, o.nft ? "sales" : o.hamster ? "notes" : "swaps");
     facts.release = {
       seconds: Math.round(r.seconds),
       bars: sum.bars,

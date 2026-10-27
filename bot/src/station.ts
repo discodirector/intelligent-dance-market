@@ -9,8 +9,8 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname, join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import {
-  CHECKPOINT_VERSION, decodeNftLogs, decodeSwapLogs, nftCarryFromJSON, nftCarryToJSON, encode, parseCreditTable, readNftLogs, readNftPageLogs, stationFingerprint, swapLogFilter,
-  type Calibration, type CreditTable, type CheckpointSwap, type DecodedSwap, type NftCarryJSON, type NftTag, type PoolKind, type StationCheckpoint, type StationSource, type SwapSource,
+  CHECKPOINT_VERSION, decodeHamster, decodeNftLogs, emptyHamsterCarry, decodeSwapLogs, nftCarryFromJSON, nftCarryToJSON, encode, parseCreditTable, readNftLogs, readNftPageLogs, stationFingerprint, swapLogFilter,
+  type Calibration, type CreditTable, type CheckpointSwap, type DecodedSwap, type HamsterCarry, type HamsterEvent, type NftCarryJSON, type NftTag, type PoolKind, type StationCheckpoint, type StationSource, type SwapSource,
 } from "@swarm-sequencer/core";
 import { getRawLogsChunked, makeClients, withRetry } from "./replay/rpc.ts";
 import { MAIN_POOL_ID, POOL_MANAGER } from "./replay/pools.ts";
@@ -65,7 +65,9 @@ export interface RegistryEntry {
   ticker: string;
   chainId: number;
   rpcUrls?: string[];
-  kind: "hook" | PoolKind | "nft";
+  kind: "hook" | PoolKind | "nft" | "hamster";
+  /** kind "hamster": the night the publisher writes (bot hamster/publish.ts) and the sleep pack (site only). */
+  hamster?: { data: string; sleep?: string; tag?: string };
   poolManager?: `0x${string}`;
   poolId?: `0x${string}`;
   pool?: `0x${string}`;
@@ -110,6 +112,7 @@ export const loadRegistry = (path: string | URL = REGISTRY_PATH): Registry => JS
 /** A played registry entry as a bot station (site/scripts/check-stations.mjs has checked its fields). */
 export function stationFromEntry(e: RegistryEntry, reg: Registry): BotStation {
   if (e.kind === "hook") throw new Error(`${e.key}: the hook station is read on chain, not replayed`);
+  if (e.kind === "hamster") throw new Error(`${e.key}: a hamster station reads its published night (updateHamsterStation)`);
   const chain = reg.chains[String(e.chainId)];
   let source: StationSource;
   if (e.kind === "nft") source = { kind: "nft", collection: e.token, ...e.nft!, weth: chain.weth };
@@ -140,6 +143,8 @@ export interface StationCache {
   entries: TimelineEntry[];
   /** NFT stations: the decoder's carry after `cursor` (core nft.ts nftCarryToJSON: last price, the median's window). */
   nft?: NftCarryJSON;
+  /** The hamster station: the decoder's carry (core hamster.ts); `cursor` is then its last measurement, unix seconds. */
+  hamster?: HamsterCarry;
 }
 
 const hex = (v: bigint) => "0x" + v.toString(16);
@@ -290,6 +295,30 @@ export async function updateStation(path: string, st: BotStation = IMD_STATION, 
   return { entries: c.entries, finished };
 }
 
+/**
+ * The hamster station (docs/STATIONS.md "Hamster station"): the publisher's file (`dataDir`/<name>.json, written next
+ * to the checkpoints) decoded from the cached carry, through the rules from the cached state. No checkpoint: the site
+ * decodes the same file itself.
+ */
+export function updateHamsterStation(path: string, e: RegistryEntry, dataDir: string, opts: { keep?: number } = {}) {
+  const file = join(dataDir, (e.hamster?.data ?? "").split("/").pop() ?? "");
+  if (!e.hamster || !existsSync(file)) throw new Error(`${e.key}: no hamster data at ${file}`);
+  const c: StationCache = existsSync(path)
+    ? JSON.parse(readFileSync(path, "utf8"))
+    : (() => { const s = encode(initialFor("v2"), slotOptions("v2")); return { cursor: 0, slot0: hex(s.slot0), slot1: hex(s.slot1), trackStart: 0, entries: [] }; })();
+  const j = JSON.parse(readFileSync(file, "utf8")) as { samples: [number, number, number, number][]; events?: HamsterEvent[] };
+  const samples = j.samples.map(([t, rpmMilli, speedMmPerSecond, distanceMm]) => ({ t, rpmMilli, speedMmPerSecond, distanceMm }));
+  const r = decodeHamster(samples, j.events ?? [], c.hamster ?? emptyHamsterCarry());
+  let finished: { trackNo: number; block: number }[] = [];
+  if (r.inputs.length || !c.hamster) {
+    finished = extendCache(c, r.inputs.map(({ t: _t, ...i }) => i), Math.floor(r.carry.lastT / 1000), opts.keep);
+    c.hamster = r.carry;
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify(c, (_k, v) => (typeof v === "bigint" ? v.toString() : v)));
+  }
+  return { entries: c.entries, finished };
+}
+
 /** Timeline entries a non-house station keeps in its cache (house stations keep all: their tracks are released). */
 const KEEP_ENTRIES = 2_000;
 
@@ -306,6 +335,14 @@ export async function updateStations(outDir: string, checkpointDir: string, opts
     if (e.kind === "hook" || e.status === "paused" || (opts.keys && !opts.keys.includes(e.key))) continue;
     // A lapsed subscription (stations/subscription.ts) is off air: its cache and last checkpoint stay as they are.
     if (opts.expired?.has(e.key)) continue;
+    if (e.kind === "hamster") {
+      try {
+        out.set(e.key, updateHamsterStation(join(outDir, "stations", `${e.key}.json`), e, checkpointDir, { keep: KEEP_ENTRIES }));
+      } catch (err) {
+        out.set(e.key, err as Error);
+      }
+      continue;
+    }
     // The IMD/ETH station keeps its own RPC list and chunk (the bot's Ethereum RPCs), as before the registry.
     const st = e.key === IMD_STATION.key ? IMD_STATION : stationFromEntry(e, reg);
     try {

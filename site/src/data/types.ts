@@ -1,4 +1,4 @@
-import { whaleThresholdFor, type NftTag, type State } from "@swarm-sequencer/core";
+import { whaleThresholdFor, type HamsterInput, type NftTag, type State } from "@swarm-sequencer/core";
 
 export interface SwapEvent {
   ts: number; // unix seconds
@@ -20,6 +20,8 @@ export interface SwapEvent {
   trackComplete?: TrackDone;
   /** NFT stations: the item sold (a compose: the page) and the venue (core nft.ts). */
   nft?: NftTag;
+  /** Hamster station: what the wheel did (core hamster.ts). `quote` is then the speed in m/s. */
+  hamster?: HamsterInput["hamster"];
 }
 
 export interface TrackDone {
@@ -41,6 +43,8 @@ export interface Feed {
   onStatus(text: string, ok: boolean): void;
   /** Virtual clock for replay (unix seconds); null = wall clock. */
   onClock(now: number | null): void;
+  /** Hamster station's replay of the last run: start over from this state (it may be older than the one shown). */
+  onReset?(s: State): void;
 }
 
 export type QuoteSymbol = "ETH" | "IMD";

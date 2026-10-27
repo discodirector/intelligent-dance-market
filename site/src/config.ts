@@ -4,6 +4,7 @@
 import sepolia from "@deployments/sepolia.json";
 import sepoliaV2 from "@deployments/sepolia-v2.json";
 import { isRulesVersion, type RulesVersion } from "./rules";
+import type { HamsterSourceConfig } from "./data/hamster";
 import type { VirtualPool } from "./data/virtual";
 import { STATIONS, stationNetwork } from "./stations";
 
@@ -35,6 +36,8 @@ export interface Network {
   treasury: `0x${string}` | null;
   /** A station without the hook: this pool's swaps run through the v2 rules in the browser (data/virtual.ts). */
   virtual?: VirtualPool;
+  /** The hamster station: its published night (data/hamster.ts) and its sleep pack (synth sleep.ts). */
+  hamster?: HamsterSourceConfig & { sleep?: string };
 }
 
 /** Native ETH as a v4 currency. */

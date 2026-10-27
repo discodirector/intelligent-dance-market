@@ -34,6 +34,24 @@ export interface GenreStyle {
   microScale?: number;
   /** Loudness multiplier on top of the genre trim, so every style lands at the genre's level. */
   trim?: number;
+  /**
+   * The noise risers, 0..1 (default 1; 0 = none): the heat riser on every bar while the floor is hot, and the base's
+   * own (future garage UK garage's into a drop, Alien Rave's into a section change).
+   */
+  riser?: number;
+  /** How much the floor's heat moves this style, 0..1 (default 1): its filter, drive, resonance, rolls and risers. */
+  heat?: number;
+  /**
+   * The breakdown's layer levels over the song form's (arrange.ts sectionAt: kick 0, snare 0, hat 0 then 0.35,
+   * bass 0.45, filter 0.6), each 0..1: a style that would fall nearly silent keeps more of itself.
+   */
+  breakdown?: Partial<Record<"kick" | "snare" | "hat" | "glitch" | "bass" | "pad" | "lead" | "texture" | "bed" | "filter", number>>;
+  /**
+   * The intro's layer levels over the song form's (arrange.ts sectionAt: kick 0.75, snare 0, hat 0 then 0.45, bass 0
+   * then 0.6, filter 0.3 opening to 0.5), the same fields as `breakdown`, for all eight bars: a style whose intro
+   * would fall far under its body keeps more of itself. Left out, the form's.
+   */
+  intro?: Partial<Record<"kick" | "snare" | "hat" | "glitch" | "bass" | "pad" | "lead" | "texture" | "bed" | "filter", number>>;
   /** Lead patch ids (leads.ts) this style picks from; overrides the genre list. */
   leads?: readonly string[];
   /** Station styles: the pack's own lead patches by id (pack.ts `patches`), which `leads` may name. */

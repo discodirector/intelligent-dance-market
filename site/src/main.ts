@@ -1,6 +1,6 @@
 import "./style.css";
 import { initialState, plateLetters, type State } from "@swarm-sequencer/core";
-import { ERAS, epochOf, eraOf, FORM_BARS, genreKey, idleStage, programFor, NOTE_NAMES, sectionAt, stepDuration, styleOf, stylesAt, type Era, type Program, type SequencerState } from "@swarm-sequencer/synth";
+import { ERAS, epochOf, eraOf, FORM_BARS, genreKey, idleStage, packFor, programFor, NOTE_NAMES, sectionAt, sleepAt, SLEEP_SLOT_SEC, stepDuration, styleOf, stylesAt, withSleep, type Era, type Program, type SequencerState, type SleepSlot } from "@swarm-sequencer/synth";
 import { LINKS, NATIVE_ETH, readSource } from "./config";
 import { RULES, toSynth } from "./rules";
 import { Audio } from "./audio";
@@ -10,9 +10,11 @@ import { WaveSky } from "./sky";
 import { drawGrid, drawScope, drawSpectrum, Surface, type Flash } from "./visuals";
 import { startLive } from "./data/live";
 import { startVirtual } from "./data/virtual";
+import { startHamster, type HamsterControl } from "./data/hamster";
+import { WheelScreen } from "./wheelscreen";
 import { applySkin, applyTheme, chainOf, loadStatus, stationFor, stationName } from "./stations";
 import { NftScreen } from "./nftscreen";
-import { applyNftHow } from "./how";
+import { applyStationHow } from "./how";
 import { playerMode, type PlayerMode } from "./runtime";
 import { EPOCH_PLAY, startReplay } from "./data/replay";
 import { formatQuote, inkCueOf, inkText, noteNftCues, type Feed, type OrnamentEvent, type SwapEvent } from "./data/types";
@@ -30,7 +32,7 @@ const station = stationFor(net);
 if (station && source.kind === "live") {
   applyTheme(station.theme);
   applySkin(station);
-  applyNftHow(station);
+  applyStationHow(station);
 }
 /**
  * An nft station (kind "nft", core nft.ts): every input is one item sold, named on the feed ("BUY Credit #1234 ·
@@ -72,16 +74,23 @@ const counts = { buys: 0, sells: 0, whales: 0 };
  * the genre count. The house stations ($IDM, IMD/ETH) play the house program; a station from the registry plays its
  * pack's (synth stations/index.ts), and everything below follows it.
  */
-const program: Program = programFor(station?.program ?? "idm");
+const awakeProgram: Program = programFor(station?.program ?? "idm");
+/** The hamster station's sleep pack (synth sleep.ts): the player plays it while the wheel is still; the rig has both. */
+const sleepPack = net.hamster?.sleep ? (packFor(net.hamster.sleep) ?? null) : null;
+const program: Program = sleepPack ? withSleep(awakeProgram, sleepPack) : awakeProgram;
 /** The genres this program ever plays: the rack shows only these. */
 const programGenres = new Set(program.eras.flatMap((e) => e.ids));
 const RACK = ERAS.filter((era) => programGenres.has(era.id));
-const audio = new Audio(program);
+const audio = new Audio(awakeProgram, sleepPack);
 let eraOverride: string | null = null;
 /** Testnets and replays let a listener audition genres; the mainnet live view plays only what the chain picks. */
 const canAudition = !(source.kind === "live" && net.mainnet);
 const nowSec = () => clock ?? Date.now() / 1000;
 const asSynth = (s: State): SequencerState => toSynth(s, rules);
+/** Hamster station: its data source and wheel screen (boot below); the sleep slot now, live only (a replay is awake). */
+let hamster: HamsterControl | null = null;
+let wheel: WheelScreen | null = null;
+const sleepNow = (): SleepSlot | null => (sleepPack && clock === null ? sleepAt(state.lastTs, nowSec(), program, sleepPack) : null);
 let drops = 0;
 
 // ---------------------------------------------------------------- terminal
@@ -120,6 +129,25 @@ function nftWhat(e: SwapEvent): string {
   return `<span class="sd">${e.isBuy ? "BUY " : "SELL"}</span> ${nftItem} #${n.id} · ${amt} ETH · ${n.venue}${rating}`;
 }
 
+/**
+ * A hamster station's input as the feed says it: "RUN 1.18 m/s · +30 m" (every 30 m of wheel), "STOP" (the wheel
+ * stands), "MILESTONE 5.00 KM TODAY". Digits from the decoder only.
+ */
+function hamsterWhat(e: SwapEvent): string {
+  const h = e.hamster!;
+  if (h.via === "run") return `<span class="sd">RUN </span> ${(h.speed / 1000).toFixed(2)} m/s · +30 m`;
+  if (h.via === "stop") return `<span class="sd">STOP</span> the wheel stands`;
+  const v = Number(h.value ?? 0);
+  const what =
+    h.kind === "daily_distance_milestone" ? `${(v / 1e6).toFixed(2)} KM TODAY`
+    : h.kind === "distance_milestone" ? `${(v / 1e6).toFixed(2)} KM IN ALL`
+    : h.kind === "speed_record" ? `SPEED RECORD ${(v / 1000).toFixed(2)} M/S`
+    : h.kind === "speed_milestone" ? `${(v / 1000).toFixed(2)} M/S`
+    : h.kind === "distance_streak" ? `${v} DAYS IN A ROW`
+    : (h.kind ?? "").toUpperCase();
+  return `<span class="sd">MILESTONE</span> ${what}`;
+}
+
 function swapLine(e: SwapEvent) {
   const li = document.createElement("li");
   li.className = (e.whale ? "whale" : e.isBuy ? "buy" : "sell") + (e.pulse ? " pulse" : "");
@@ -128,11 +156,11 @@ function swapLine(e: SwapEvent) {
   const amt = formatQuote(shownQuote(e)).padStart(8, " ");
   const tag = (e.whale ? ` <span class="tag">${e.isBuy ? "FILL" : "DROP"}</span>` : "") + pulseTag(e);
   const tx = e.tx ? `<a href="${explorer}/tx/${e.tx}" target="_blank" rel="noopener">${short(e.tx)}</a>` : "";
-  const what = e.nft ? nftWhat(e) : `<span class="sd">${side}</span> ${amt} ${quoteName ?? e.quoteSymbol}`;
+  const what = e.nft ? nftWhat(e) : e.hamster ? hamsterWhat(e) : `<span class="sd">${side}</span> ${amt} ${quoteName ?? e.quoteSymbol}`;
   li.innerHTML =
     `<span class="p">&gt;</span> <span class="t">${hhmm(e.ts)}</span>  ${what}  ` +
-    `<span class="trk">${TRACKS[e.track].padEnd(6, " ")}</span> s${String(e.step + 1).padStart(2, "0")} <span class="pm">${e.on ? "+" : "−"}</span>${tag}  ${tx}  ` +
-    `<a class="blk" href="${explorer}/block/${e.block}" target="_blank" rel="noopener">blk ${e.block}</a>`;
+    `<span class="trk">${TRACKS[e.track].padEnd(6, " ")}</span> s${String(e.step + 1).padStart(2, "0")} <span class="pm">${e.on ? "+" : "−"}</span>${tag}  ${tx}` +
+    (e.hamster ? "" : `  <a class="blk" href="${explorer}/block/${e.block}" target="_blank" rel="noopener">blk ${e.block}</a>`);
   pushLine(li);
 }
 
@@ -151,7 +179,7 @@ function tapeSwap(e: SwapEvent) {
   const side = e.isBuy ? "BUY " : "SELL";
   const tag = (e.whale ? ` <span class="tag">${e.isBuy ? "FILL" : "DROP"}</span>` : "") + pulseTag(e);
   const tx = e.tx ? ` <a href="${explorer}/tx/${e.tx}" target="_blank" rel="noopener">${short(e.tx)}</a>` : "";
-  const what = e.nft ? nftWhat(e) : `<span class="sd">${side}</span> ${formatQuote(shownQuote(e)).padStart(8, " ")} ${quoteName ?? e.quoteSymbol}`;
+  const what = e.nft ? nftWhat(e) : e.hamster ? hamsterWhat(e) : `<span class="sd">${side}</span> ${formatQuote(shownQuote(e)).padStart(8, " ")} ${quoteName ?? e.quoteSymbol}`;
   tapeLine(
     `<span class="t">${hhmm(e.ts)}</span> ${what} ` +
       `<span class="trk">${TRACKS[e.track].padEnd(7, " ")}</span>s${String(e.step + 1).padStart(2, "0")} <span class="pm">${e.on ? "+" : "−"}</span>${tag}${tx}`,
@@ -245,6 +273,11 @@ const feed: Feed = {
     clock = c;
     audio.player?.setClock(c);
   },
+  onReset(s) {
+    state = s;
+    flashes.length = 0;
+    audio.player?.setState(asSynth(state));
+  },
 };
 
 // v2 drop moment: the module and grid flash, every row lights, walls strobe, the background rings out.
@@ -266,7 +299,8 @@ function trackDrop(now: number) {
 
 function updateCounts() {
   $("c-swaps").textContent = String(events.length);
-  $("c-buys").textContent = String(counts.buys);
+  // The hamster's whales are milestones, not runs: its runs count only the wheel's notes.
+  $("c-buys").textContent = String(net.hamster ? counts.buys - counts.whales : counts.buys);
   $("c-sells").textContent = String(counts.sells);
   $("c-whales").textContent = String(counts.whales);
   $("sb-swaps").textContent = String(state.swapCount);
@@ -434,6 +468,23 @@ $("oc-grid").innerHTML = [
   ocRow("SOURCE", "discodirector/intelligent-dance-market", [["github", LINKS.github]]),
   ocRow("X", LINKS.x ?? "account soon", LINKS.x ? [["x.com", LINKS.x]] : []),
 ].join("");
+// The hamster station: no pool, no hook; the wheel's API, our recorder and Squeekchain's token on Sepolia.
+if (net.hamster) {
+  $("oc-grid").innerHTML = [
+    ocRow("WHEEL", "a real hamster's wheel · Squeekchain (docs.squeekchain.com) · api.squeekchain.com/v1", [["docs", "https://docs.squeekchain.com/"]]),
+    ocRow("RECORDER", "theidm logs the wheel 24/7 (the API keeps no history) · one note per 30 m, a stop thins the grid, a milestone is a whale"),
+    ocRow("HOOK", "none · the $IDM rules run in your browser"),
+    ocRow("CHAIN", `${net.label} · Squeekchain's contracts on Sepolia (id ${net.chainId})`),
+    ocRow("TOKEN SQK", net.token ?? "—", addr(net.token, "token")),
+    ocRow("SLEEP", `the wheel still for 10 min: ambient, another style every ${SLEEP_SLOT_SEC / 60} min`),
+    ocRow("SOURCE", "discodirector/intelligent-dance-market", [["github", LINKS.github]]),
+    ocRow("X", LINKS.x ?? "account soon", LINKS.x ? [["x.com", LINKS.x]] : []),
+  ].join("");
+  $("c-swaps-label").textContent = "notes";
+  // A run note, the wheel stopping, a milestone: what buy, sell and whale are on this station.
+  for (const [id, text] of [["c-buys-label", "runs"], ["c-sells-label", "stops"], ["c-whales-label", "milestones"], ["lg-buy", "run"], ["lg-sell", "stop"], ["lg-whale", "milestone"]]) $(id).textContent = text;
+  $("console-sub").textContent = "every 30 m of wheel plays · a real hamster · times in UTC";
+}
 // An nft station's log counts sales and reads the chain, not a hook.
 if (net.virtual?.source.kind === "nft") {
   $("c-swaps-label").textContent = "sales";
@@ -517,6 +568,8 @@ function frame(now: number) {
   while (flashes.length && now - flashes[0].at > 1200) flashes.shift();
   drawGrid(grid, asSynth(state), step, bar, phase, flashes, now);
   nftScreen?.tick(bar * 16 + step);
+  const asleep = sleepNow();
+  wheel?.frame(now, { lastInput: state.lastTs, sleep: asleep, sleepStyle: asleep ? styleOf(asleep.era, asleep.epoch, program).style.name : undefined, clock });
 
   const rms = audio.sample();
   level = Math.max(rms * 3, level * 0.9);
@@ -533,7 +586,9 @@ function frame(now: number) {
   if (now - lastSlow > 66) {
     lastSlow = now;
     updateWalls((now - t0) / 1000, level, step, audio.running ? audio.freqData : null);
-    const era = audio.running ? audio.player!.getEra() : { ...eraOf(epochOf(state), program), epoch: epochOf(state), fading: false };
+    const era = audio.running
+      ? audio.player!.getEra()
+      : asleep ? { ...asleep.era, epoch: asleep.epoch, fading: false } : { ...eraOf(epochOf(state), program), epoch: epochOf(state), fading: false };
     const shown = eraOverride ? ERAS.find((e) => e.id === eraOverride)! : era;
     updateReadouts(bpm, ERAS.find((e) => e.id === shown.id)!);
     // The style the engine plays: an audition keeps the chain epoch, so styleOf picks exactly as the engine does.
@@ -542,7 +597,12 @@ function frame(now: number) {
     $("era-name").textContent = shown.name.toUpperCase();
     const part = audio.running ? ` · ${sectionAt(bar).name.toUpperCase()} ${(bar % FORM_BARS) + 1}/${FORM_BARS}` : "";
     const styleTag = `STYLE ${style.name.toUpperCase()} · `;
-    $("era-sub").textContent = eraOverride ? `${styleTag}AUDITION · CHAIN EPOCH ${epochOf(state)}${part}` : `${styleTag}EPOCH ${epochOf(state)}${era.fading ? " · CROSSFADE" : ""}${part || " · FOLLOWING CHAIN"}`;
+    const nextDream = asleep ? Math.ceil(((asleep.slot + 1) * SLEEP_SLOT_SEC - nowSec()) / 60) : 0;
+    $("era-sub").textContent = eraOverride
+      ? `${styleTag}AUDITION · CHAIN EPOCH ${epochOf(state)}${part}`
+      : asleep
+        ? `${styleTag}SLEEP MODE · NEXT DREAM IN ${nextDream}M${era.fading ? " · CROSSFADE" : ""}`
+        : `${styleTag}EPOCH ${epochOf(state)}${era.fading ? " · CROSSFADE" : ""}${part || " · FOLLOWING CHAIN"}`;
     for (const el of rack.children) {
       const id = (el as HTMLElement).dataset.id;
       el.classList.toggle("current", id === era.id && !eraOverride);
@@ -552,7 +612,8 @@ function frame(now: number) {
     const idle = idleStage(state, nowSec());
     const order = ["full", "thinning", "sparse", "drone"];
     idleLis.forEach((li) => li.classList.toggle("on", order.indexOf(li.dataset.stage!) <= order.indexOf(idle.stage)));
-    $("idle-label").textContent = state.lastTs ? idle.label : "NO SWAPS YET";
+    const slept = Math.floor((nowSec() - state.lastTs) / 60);
+    $("idle-label").textContent = asleep ? `ASLEEP ${Math.floor(slept / 60)}h ${String(slept % 60).padStart(2, "0")}m · SLEEP MODE` : state.lastTs ? idle.label : "NO SWAPS YET";
     $("sb-bpm").textContent = String(Math.round(bpm));
     $("sb-epoch").textContent = String(epochOf(state));
     showGenreCount(epochOf(state));
@@ -581,14 +642,30 @@ function sparkline() {
 
 // ---------------------------------------------------------------- boot
 systemLine(
-  (source.kind === "replay" ? `${source.replay.label} · ${EPOCH_PLAY[0]}–${EPOCH_PLAY[1]} s per genre` : net.virtual && station ? `${net.label} · ${station.label} ${station.kind === "nft" ? "collection" : "pool"} on ${chainOf(station).name}${station.kind === "nft" ? " · one note per item sold" : ""} · no hook, the $IDM rules run here` : `${net.label} · hook ${net.hook ? short(net.hook) : "pending"}`) +
+  (source.kind === "replay" ? `${source.replay.label} · ${EPOCH_PLAY[0]}–${EPOCH_PLAY[1]} s per genre` : net.hamster ? `${net.label} · a real hamster's wheel (Squeekchain) · one note per 30 m · asleep, it dreams in ambient · the $IDM rules run here` : net.virtual && station ? `${net.label} · ${station.label} ${station.kind === "nft" ? "collection" : "pool"} on ${chainOf(station).name}${station.kind === "nft" ? " · one note per item sold" : ""} · no hook, the $IDM rules run here` : `${net.label} · hook ${net.hook ? short(net.hook) : "pending"}`) +
     (v2 ? ` · rules v2${source.kind === "replay" && source.resim ? " (re-simulated)" : ""}` : ""),
 );
 requestAnimationFrame(frame);
 if (source.kind === "replay") {
   startReplay(source.replay.url, source.speed, source.replay.label, feed, rules, source.resim, source.replay.epochPlay).catch((e) => feed.onStatus(`replay failed: ${e.message}`, false));
 } else if (net.virtual) startVirtual(net, feed);
-else startLive(net, feed);
+else if (net.hamster) {
+  hamster = startHamster(net, feed, net.hamster);
+  wheel = new WheelScreen($("wheel-screen"), hamster, (on) => {
+    if (!on) return hamster!.stopReplay();
+    const run = hamster!.lastRun();
+    if (!run) return;
+    if (!audio.running) audio.unlock(); // in the gesture (iOS)
+    const started = hamster!.replay(() => {
+      wheel!.setReplay(null);
+      systemLine("REPLAY OVER · BACK TO LIVE");
+    });
+    if (!started) return;
+    wheel!.setReplay(run);
+    systemLine(`REPLAY · LAST RUN ${hhmm(run.start)}–${hhmm(run.end)} UTC · ${(run.metres / 1000).toFixed(2)} KM`);
+    if (!audio.running) void setPlaying(true);
+  });
+} else startLive(net, feed);
 
 // Hooks for the headless check (scripts/check.mjs).
 (window as unknown as { __site: unknown }).__site = {

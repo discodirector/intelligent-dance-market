@@ -86,3 +86,6 @@ export { audioBufferToWavBase64 } from "./wav.ts";
 
 export { counterBars, planRelease, RELEASE_DEFAULTS, RELEASE_HEAT_MAX, RELEASE_SAT_BITS, releaseBodyForm, releaseGenre, releasePace, releaseTempo } from "./release.ts";
 export type { ReleaseGenre, ReleaseInput, ReleaseOptions, ReleasePace, ReleasePlan, ReleaseSection, ReleaseSwap } from "./release.ts";
+
+export { SLEEP_AFTER_SEC, SLEEP_SLOT_SEC, sleepAt, sleepState, withSleep } from "./sleep.ts";
+export type { SleepSlot } from "./sleep.ts";
