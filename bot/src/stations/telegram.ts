@@ -13,15 +13,18 @@ export function clean(text: string, max = MAX_TEXT): string {
 }
 
 export type Command =
-  | { cmd: "status" | "balance" | "help" }
-  | { cmd: "live" | "hold" | "reject"; key: string };
+  | { cmd: "status" | "balance" | "help" | "gallery" }
+  | { cmd: "live" | "hold" | "reject"; key: string }
+  /** Style Lab submissions (lab/gallery.ts): `code` is the 12 hex characters that end a submission's id. */
+  | { cmd: "approve" | "unapprove"; code: string };
 
 /** A message's command; null for anything else (plain text, unknown commands, a bad key). */
 export function parseCommand(text: string): Command | null {
   const m = /^\/([a-z]+)(?:@\w+)?(?:\s+(\S+))?\s*$/.exec(String(text).trim());
   if (!m) return null;
   const [, cmd, arg] = m;
-  if (cmd === "status" || cmd === "balance" || cmd === "help" || cmd === "start") return arg ? null : { cmd: cmd === "start" ? "help" : cmd };
+  if (cmd === "status" || cmd === "balance" || cmd === "help" || cmd === "start" || cmd === "gallery") return arg ? null : { cmd: cmd === "start" ? "help" : cmd };
+  if (cmd === "approve" || cmd === "unapprove") return arg && /^[0-9a-f]{12}$/.test(arg) ? { cmd, code: arg } : null;
   if (cmd === "live" || cmd === "hold" || cmd === "reject") return arg && /^[a-z0-9][a-z0-9-]{0,39}$/.test(arg) ? { cmd, key: arg } : null;
   return null;
 }
@@ -64,9 +67,14 @@ export function ownerCommands(updates: Update[], chatId: string): { updateId: nu
     .map((u) => ({ updateId: u.update_id, command: parseCommand(u.message!.text!), text: u.message!.text! }));
 }
 
+/** A file for sendAudio / sendDocument (multipart). */
+export interface TgFile { name: string; bytes: Buffer; type: string }
+
 export interface Telegram {
   enabled: boolean;
   send(text: string): Promise<void>;
+  /** A file with a caption (plain text, at most 1024): an audio track (sendAudio, plays in the chat) or a document. */
+  sendFile(kind: "audio" | "document", file: TgFile, caption: string, extra?: { title?: string; performer?: string }): Promise<void>;
   /** Long poll (timeout seconds): the next updates after `offset`. */
   updates(offset: number, timeoutSec: number): Promise<Update[]>;
 }
@@ -94,6 +102,21 @@ export function telegram(token: string | undefined, chatId: string | undefined, 
       } catch (e) {
         log(`notify failed: ${(e as Error).message}`);
       }
+    },
+    async sendFile(kind, file, caption, extra) {
+      const c = clean(caption, 1024);
+      log(`notify file: ${file.name} (${file.bytes.length} bytes)`);
+      if (!enabled) return;
+      const form = new FormData();
+      form.set("chat_id", String(chatId));
+      form.set("caption", c);
+      if (extra?.title) form.set("title", clean(extra.title, 64));
+      if (extra?.performer) form.set("performer", clean(extra.performer, 64));
+      form.set(kind, new Blob([new Uint8Array(file.bytes)], { type: file.type }), file.name);
+      const method = kind === "audio" ? "sendAudio" : "sendDocument";
+      const res = await fetchFn(`https://api.telegram.org/bot${token}/${method}`, { method: "POST", body: form, signal: AbortSignal.timeout(60_000) });
+      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string };
+      if (!j.ok) throw new Error(`telegram ${method}: ${res.status} ${clean(j.description ?? "", 200)}`);
     },
     async updates(offset, timeoutSec) {
       if (!enabled) return [];

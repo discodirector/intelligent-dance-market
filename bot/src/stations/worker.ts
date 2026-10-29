@@ -21,6 +21,9 @@ import { advance, fmtImd, goLive, hold, newPipeline, reject, TERMINAL, type JobV
 import { finishEntry, resolvePool, stationContext } from "./register.ts";
 import { addRuntimeEntry, loadMergedRegistry, publishPack, readRuntime, updateRuntimeEntry } from "./runtime.ts";
 import { writeJsonAtomic } from "./subscription.ts";
+import { LabStore } from "../lab/submissions.ts";
+import { notifyLab } from "../lab/notify.ts";
+import { approve, listGallery, unapprove } from "../lab/gallery.ts";
 import { loopText, ownerCommands, plusSlotsText, renewalText, telegram, type Command } from "./telegram.ts";
 
 const env = process.env;
@@ -133,6 +136,7 @@ interface WorkerState {
   loopsNotified?: Record<string, string>;
 }
 const STATE = join(OUT, "applications", "worker.json");
+const labStore = new LabStore(join(OUT, "lab-submissions"));
 function loadState(): WorkerState {
   try {
     return { renewalsNotified: [], telegramOffset: 0, ...JSON.parse(readFileSync(STATE, "utf8")) };
@@ -238,7 +242,7 @@ async function tick() {
 }
 
 // ---------------------------------------------------------------- owner commands
-const HELP = "/status · /balance · /live <key> · /hold <key> · /reject <key>";
+const HELP = "/status · /balance · /live <key> · /hold <key> · /reject <key> · lab: /approve <code> · /unapprove <code> · /gallery";
 function findByKey(k: string): { app: Application; p: Pipeline } | null {
   for (const app of paidSetups()) {
     const p = store.pipeline<Pipeline>(app.id);
@@ -266,6 +270,10 @@ async function command(c: Command): Promise<string> {
     const plus = `Station+: ${s.used} of ${s.max} slots${s.active.length ? ` (on air: ${s.active.join(", ")})` : ""}`;
     return [`${lines.length} paid application(s), ${open} open quote(s)`, plus, ...lines.slice(-30)].join("\n");
   }
+  // Style Lab gallery (lab/gallery.ts): out/stations-data/community.json, served to the site.
+  if (c.cmd === "approve") return approve(labStore, DATA, c.code, new Date());
+  if (c.cmd === "unapprove") return unapprove(DATA, c.code, new Date());
+  if (c.cmd === "gallery") return listGallery(DATA);
   if (!("key" in c)) return HELP;
   const found = findByKey(c.key);
   if (!found) return `no pipeline station "${c.key}"`;
@@ -314,5 +322,7 @@ await tg.send(`stations worker started; hot wallet ${account.address}`);
 void pollTelegram();
 for (;;) {
   await locked(tick).catch((e) => log("tick failed:", (e as Error)?.stack ?? e));
+  // Style Lab submissions the API stored (lab/notify.ts): to the owner's chat.
+  await notifyLab({ store: labStore, tg, site: SITE, log }).catch((e) => log("lab notify failed:", (e as Error)?.message ?? e));
   await new Promise((r) => setTimeout(r, TICK_MS));
 }

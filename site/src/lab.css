@@ -1,0 +1,268 @@
+/* lab.html: the style lab. One bone device (like the station cards): the LCD and the trade keys on the left, the
+   style's controls on the right; one column on a phone. */
+body.lab-page { background: var(--black); }
+.nav a[aria-current="page"] { color: var(--phos); }
+.lab { max-width: 1260px; margin: 0 auto; padding: 24px clamp(var(--gutter), 2.5vw, 36px) 96px; display: grid; gap: 28px; }
+
+.lab-intro { max-width: 780px; }
+.lab-intro .eyebrow { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.24em; color: var(--muted); }
+.lab-intro h1 { margin: 6px 0 12px; font-size: clamp(30px, 5vw, 52px); line-height: 1.02; font-weight: 800; letter-spacing: -0.02em; color: var(--bone); }
+.lab-intro .lede { font-family: var(--lcd); font-size: 24px; line-height: 1.25; color: var(--phos); margin: 0; }
+
+/* A style opened from a link: say whose it is. */
+.lab-shared { margin: 0 0 -16px; justify-self: start; padding: 6px 10px; border: 1px solid var(--amber); color: var(--amber); font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+.lab-shared[hidden] { display: none; }
+
+.lab-device {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 12px;
+  padding: 12px;
+  background: var(--bone) var(--noise);
+  color: var(--ink);
+  border: 1px solid #8f876d;
+  box-shadow: inset 0 1px 0 #f6f1e2, inset 0 -2px 0 var(--bone-3);
+}
+.lab-screen, .lab-panel { display: grid; gap: 12px; align-content: start; min-width: 0; }
+
+/* ------------------------------------------------------------ LCD */
+.lab-lcd {
+  font-family: var(--lcd);
+  color: var(--phos);
+  text-shadow: 0 0 6px rgba(var(--phos-rgb), 0.55);
+  background: radial-gradient(circle, rgba(var(--phos-rgb), 0.07) 0.8px, transparent 1px) 0 0 / 4px 4px, var(--lcd-bg);
+  border: 1px solid #000;
+  box-shadow: inset 0 0 0 1px #3a3a33, inset 0 0 18px rgba(0, 0, 0, 0.8), 0 1px 0 #fffdf4;
+  padding: 12px 14px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.lcd-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; min-width: 0; font-size: 20px; line-height: 1; }
+.lcd-row > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lcd-row.dim { color: var(--phos-dim); text-shadow: none; }
+.lcd-name { font-size: 40px; line-height: 0.9; }
+.lcd-sync { flex: none; font-size: 16px; padding: 2px 6px 0; border: 1px solid currentColor; opacity: 0.18; }
+.lcd-sync.on { opacity: 1; animation: lab-blink 0.5s steps(1) infinite; }
+@keyframes lab-blink { 50% { opacity: 0.3; } }
+.lab-grid { display: block; width: 100%; aspect-ratio: 2.2; }
+.lab-meter { height: 6px; background: var(--phos-ghost); overflow: hidden; }
+.lab-meter i { display: block; height: 100%; background: var(--phos); transform-origin: left; transform: scaleX(0); transition: transform 0.08s linear; }
+.lab-tape { list-style: none; margin: 0; padding: 0; min-height: 5.5em; font-size: 18px; line-height: 1.1; color: var(--phos-dim); text-shadow: none; }
+.lab-tape li:first-child { color: var(--phos); text-shadow: 0 0 6px rgba(var(--phos-rgb), 0.55); }
+.lab-tape li.sell:first-child { color: var(--sell); text-shadow: 0 0 6px rgba(255, 95, 82, 0.5); }
+.lab-tape li.whale:first-child { color: var(--amber); text-shadow: 0 0 6px rgba(255, 181, 61, 0.5); }
+
+/* ------------------------------------------------------------ transport */
+.lab-transport { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: stretch; }
+.lab-play {
+  grid-row: span 2;
+  width: 92px; min-height: 92px;
+  display: grid; place-items: center; align-content: center; gap: 8px;
+  background: var(--ink); color: var(--bone); border: 1px solid #000;
+  box-shadow: inset 0 1px 0 #3b3a33, 0 2px 0 #8f876d;
+  font-weight: 800; font-size: 12px; letter-spacing: 0.2em;
+}
+.lab-play .ico { width: 0; height: 0; border-left: 18px solid var(--phos); border-top: 11px solid transparent; border-bottom: 11px solid transparent; filter: drop-shadow(0 0 6px rgba(var(--phos-rgb), 0.6)); }
+body.playing .lab-play .ico { width: 18px; height: 18px; border: 0; background: linear-gradient(90deg, var(--phos) 0 35%, transparent 35% 65%, var(--phos) 65%); }
+.lab-play:active, .trade:active { transform: translateY(1px); box-shadow: none; }
+.lab-trades { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.trade {
+  min-height: 52px; border: 1px solid #000; font-weight: 800; font-size: 13px; letter-spacing: 0.16em;
+  background: var(--ink); box-shadow: inset 0 1px 0 #3b3a33, 0 2px 0 #8f876d;
+}
+.trade.buy { color: var(--phos); }
+.trade.sell { color: var(--sell); }
+.trade.whale { color: var(--amber); }
+/* Who runs the track: a two-sided switch. AUTO MARKET lit green (the market trades, the form runs), MANUAL MODE lit amber. */
+.lab-mode { position: relative; display: grid; grid-template-columns: 1fr 1fr; border: 1px solid #000; background: var(--ink); cursor: pointer; box-shadow: 0 2px 0 #8f876d; user-select: none; }
+.lab-mode input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.lab-mode span { display: grid; place-items: center; min-height: 38px; padding: 0 8px; font-size: 12px; font-weight: 800; letter-spacing: 0.14em; color: var(--phos-dim); transition: background 0.12s, color 0.12s; }
+.lab-mode input:checked ~ .mode-auto { background: var(--phos); color: var(--ink); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 0 14px rgba(108, 245, 149, 0.35); }
+.lab-mode input:not(:checked) ~ .mode-manual { background: var(--amber); color: var(--ink); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 0 14px rgba(255, 181, 61, 0.35); }
+.lab-mode:has(input:focus-visible) { outline: 2px solid var(--amber); outline-offset: 2px; }
+.lab-hint { margin: 0; font-size: 11px; color: var(--ink-2); line-height: 1.5; }
+/* The parts: one switch per part (lit: on), BLANK and ALL IN. A switch waiting for the downbeat blinks. */
+.lab-parts { display: grid; gap: 6px; }
+.parts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+.part { min-height: 34px; border: 1px solid #000; background: var(--phos); color: var(--ink); font-weight: 800; font-size: 10px; letter-spacing: 0.12em; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 2px 0 #8f876d; }
+.part.off { background: var(--ink); color: var(--phos-dim); box-shadow: inset 0 1px 0 #3b3a33, 0 2px 0 #8f876d; }
+.part.pending { animation: lab-blink 0.5s steps(1) infinite; }
+.part.none { opacity: 0.3; }
+.part { position: relative; }
+.part::before { content: attr(data-key); position: absolute; top: 3px; left: 5px; font-size: 9px; font-weight: 500; letter-spacing: 0; opacity: 0.55; }
+@media (hover: none) { .part::before { display: none; } }
+.parts-all { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.parts-all .take-btn { min-height: 32px; }
+/* The take: REC / PLAY TAKE / CLEAR, the lanes under the LCD, the automated marks. */
+.lab-take { display: grid; grid-template-columns: 1.2fr 1.2fr 1fr; gap: 6px; }
+.take-btn { min-height: 40px; border: 1px solid #000; background: var(--ink); color: var(--bone); font-weight: 800; font-size: 11px; letter-spacing: 0.14em; box-shadow: inset 0 1px 0 #3b3a33, 0 2px 0 #8f876d; }
+.take-btn[disabled] { opacity: 0.4; cursor: default; }
+.take-btn.rec { color: var(--sell); }
+body.recording .take-btn.rec { background: var(--sell); color: var(--ink); animation: lab-blink 1s steps(1) infinite; }
+body.take-playing #take-play { background: var(--amber); color: var(--ink); }
+.lab-lanes { display: grid; gap: 6px; }
+.lab-lanes[hidden] { display: none; }
+#lane-canvas { width: 100%; height: 28px; display: block; background: rgba(0, 0, 0, 0.35); }
+.lane-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.lane-chip { border: 1px solid var(--phos-dim); background: transparent; color: var(--phos-dim); font: 400 15px/1 var(--lcd); padding: 2px 6px 0; text-shadow: none; }
+.lane-chip:hover { color: var(--phos); border-color: var(--phos); }
+.lk.automated output { box-shadow: 0 0 0 1px var(--amber); }
+.lk.automated .lk-name::before, .macro.automated .ends b:first-child::before { content: "A "; color: #8a5a12; }
+.macro.automated { box-shadow: inset 0 0 0 1px var(--amber); }
+.lab-contact { flex: 1 1 220px; }
+/* Share / download under the take; send for review with the handle, the brightest button of the screen. */
+.lab-keep { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.lab-send { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: end; }
+.lab-send .lab-field input { min-height: 40px; }
+.btn-submit { min-height: 40px; padding: 0 16px; border: 1px solid #000; background: var(--phos); color: var(--ink); font-weight: 800; font-size: 12px; letter-spacing: 0.14em; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 2px 0 #8f876d, 0 0 14px rgba(108, 245, 149, 0.3); }
+.btn-submit:hover { filter: brightness(1.08); }
+.out-btn[disabled] { opacity: 0.5; cursor: progress; }
+@media (max-width: 420px) { .lab-send { grid-template-columns: 1fr; } }
+
+/* Following a station: the market keys rest, the feed plays. */
+body.following .lab-take { opacity: 0.35; pointer-events: none; }
+body.following .lab-trades, body.following .lab-mode { opacity: 0.35; pointer-events: none; }
+.lab-out button[disabled] { opacity: 0.5; cursor: progress; }
+
+/* ------------------------------------------------------------ panel */
+.lab-pick { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; align-items: end; }
+.lab-tabs { grid-column: 1 / -1; display: flex; flex-wrap: wrap; border: 1px solid var(--ink); }
+.lab-tabs button { flex: 1 1 auto; border: 0; background: transparent; padding: 9px 10px; font-size: 11px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; white-space: nowrap; }
+.lab-tabs button + button { border-left: 1px solid var(--ink); }
+@media (max-width: 560px) { .lab-tabs button { flex: 1 1 33%; border-bottom: 1px solid var(--ink); } }
+.lab-tabs button[aria-selected="true"] { background: var(--ink); color: var(--bone); }
+.lab-field { display: grid; gap: 4px; min-width: 0; }
+.lab-field select, .lab-field input {
+  width: 100%; min-width: 0; font: 700 12px/1.2 var(--mono); color: var(--ink); background: var(--bone-2);
+  border: 1px solid var(--ink); border-radius: 0; padding: 8px 8px; letter-spacing: 0.04em;
+}
+.lab-field select:focus-visible, .lab-field input:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+.lab-macros { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.macro { display: grid; gap: 4px; padding: 10px 12px; background: var(--ink); color: var(--bone); border: 1px solid #000; }
+.macro .ends { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; }
+.macro.off { opacity: 0.55; }
+.macro em { font-style: normal; font-size: 10px; color: var(--muted); }
+.lab-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+
+.lab-knobs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.lk { display: grid; gap: 6px; padding: 8px 10px 10px; background: var(--bone-2); border: 1px solid #a49c80; box-shadow: inset 0 1px 0 #f6f1e2; min-width: 0; }
+.lk-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; min-width: 0; }
+/* A long name (ECHO REPEATS and its dot) wraps onto a second line rather than pushing the readout out of the card. */
+.lk-name { flex: 1 1 auto; min-width: 0; font-size: 10px; font-weight: 800; letter-spacing: 0.14em; line-height: 1.25; text-transform: uppercase; overflow-wrap: anywhere; }
+.lk.bar .lk-name::after, .bar-dot { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 1px #8a5a12; vertical-align: 1px; }
+.lk output { flex: 0 0 auto; font-family: var(--lcd); font-size: 18px; line-height: 1; padding: 1px 5px 0; background: var(--lcd-bg); color: var(--phos); min-width: 3.4em; text-align: right; }
+.lab-legend { margin: 0; font-size: 11px; color: var(--ink-2); }
+.bar-dot { margin: 0 4px 0 0; }
+
+/* The riff editor: five degree rows over 16 steps, then octave / accent / slide per step; the chord picker's slots. */
+.lab-editor { display: grid; gap: 6px; min-width: 0; }
+.lab-editor:empty { display: none; }
+.re-grid { display: grid; gap: 2px; padding: 8px; background: var(--ink); border: 1px solid #000; overflow-x: auto; }
+.re-row { display: grid; grid-template-columns: 40px repeat(16, minmax(14px, 1fr)); gap: 2px; align-items: stretch; }
+.re-row.flags { margin-top: 2px; }
+.re-label { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); align-self: center; }
+.re-cell, .re-flag { min-height: 18px; padding: 0; border: 0; background: #1c1d18; }
+.re-cell.beat { background: #26271f; }
+.re-cell.on { background: var(--phos); box-shadow: 0 0 6px rgba(var(--phos-rgb), 0.6); }
+.re-flag { font: 700 10px/1 var(--mono); color: var(--phos); background: #15160f; }
+.re-flag.off { color: transparent; }
+.re-note { margin: 0; font-size: 11px; color: var(--ink-2); }
+.cp-slots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.cp-slots select { width: 100%; min-width: 0; font: 700 12px/1.2 var(--mono); color: var(--ink); background: var(--bone-2); border: 1px solid var(--ink); border-radius: 0; padding: 8px 6px; }
+
+/* Faders: a dark slot, a bone cap. */
+.lab input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; margin: 0; background: transparent; cursor: pointer; touch-action: pan-y; }
+.lab input[type="range"]::-webkit-slider-runnable-track { height: 4px; background: var(--ink); box-shadow: inset 0 1px 2px #000; }
+.lab input[type="range"]::-moz-range-track { height: 4px; background: var(--ink); }
+.lab input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 20px; margin-top: -8px; background: var(--bone); border: 1px solid #000; box-shadow: inset 0 -3px 0 var(--bone-3), inset 0 2px 0 #fff; }
+.lab input[type="range"]::-moz-range-thumb { width: 14px; height: 20px; border-radius: 0; background: var(--bone); border: 1px solid #000; }
+.macro input[type="range"]::-webkit-slider-runnable-track { background: #2b2a24; }
+.macro input[type="range"]::-webkit-slider-thumb { background: var(--phos); border-color: #0a2a14; box-shadow: 0 0 8px rgba(var(--phos-rgb), 0.6); }
+.macro input[type="range"]::-moz-range-thumb { background: var(--phos); }
+.lab input[type="range"]:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* ------------------------------------------------------------ share / export */
+.lab-out { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.lab-out .btn-outline { margin-left: 0; }
+.lab-status { font-size: 12px; color: var(--phos); background: var(--ink); padding: 6px 8px; min-height: 1.5em; }
+.lab-status:empty { display: none; }
+.lab-status.bad { color: var(--sell); }
+
+@media (max-width: 960px) {
+  .lab-device { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .lab { gap: 20px; }
+  .lab-intro .lede { font-size: 21px; }
+  .lab-device { padding: 8px; gap: 10px; }
+  .lab-pick { grid-template-columns: minmax(0, 1fr); }
+  .lab-macros { grid-template-columns: minmax(0, 1fr); }
+  .lab-knobs { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .re-row { grid-template-columns: 30px repeat(16, minmax(12px, 1fr)); gap: 1px; }
+  .re-grid { padding: 6px 4px; }
+  .re-cell, .re-flag { min-height: 22px; }
+  .cp-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lab-play { width: 76px; min-height: 76px; }
+  .lcd-name { font-size: 32px; }
+  .lab-out .btn-outline { flex: 1; text-align: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lcd-sync.on { animation: none; }
+}
+
+/* ------------------------------------------------------------ the guide (under the device) */
+.lab-guide { display: grid; gap: 16px; }
+.lab-guide h2 { margin: 0; font-size: 13px; font-weight: 800; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); }
+.guide-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr; gap: 10px; counter-reset: step; }
+@media (min-width: 640px) { .guide-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 960px) { .guide-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.guide-steps li { counter-increment: step; position: relative; padding: 14px 16px 16px 52px; border: 1px solid rgba(108, 245, 149, 0.18); background: rgba(0, 0, 0, 0.35); }
+.guide-steps li::before { content: counter(step); position: absolute; left: 14px; top: 12px; width: 26px; height: 26px; display: grid; place-items: center; font: 400 24px/1 var(--lcd); color: var(--ink); background: var(--phos); }
+.guide-steps h3 { margin: 4px 0 6px; font-size: 13px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--bone); }
+.guide-steps p { margin: 0; font-size: 13px; line-height: 1.55; color: var(--muted); }
+.guide-steps b { color: var(--bone); font-weight: 800; letter-spacing: 0.04em; }
+.guide-steps .t-buy { color: var(--phos); }
+.guide-steps .t-sell { color: var(--sell); }
+.guide-steps .t-whale { color: var(--amber); }
+.guide-steps kbd { font: 700 11px/1 var(--mono); padding: 2px 5px; border: 1px solid var(--muted); border-bottom-width: 2px; color: var(--bone); }
+.guide-tip { margin: 0; padding: 12px 16px; border-left: 3px solid var(--amber); background: rgba(255, 181, 61, 0.08); font-size: 13px; line-height: 1.55; color: var(--bone); }
+.guide-tip b { color: var(--amber); }
+
+/* FILL (hits on the grid, the mark where full starts) and HEAT (16 leds, red near the drop), on the LCD. */
+.lab-gauges { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.gauge { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; font: 400 18px/1 var(--lcd); color: var(--phos-dim); }
+.g-val { color: var(--phos); min-width: 3.4em; text-align: right; }
+.fill-bar { position: relative; height: 10px; background: rgba(108, 245, 149, 0.08); border: 1px solid rgba(108, 245, 149, 0.25); }
+.fill-bar i { position: absolute; inset: 0 auto 0 0; background: var(--phos-dim); transition: width 0.15s; }
+.fill-bar i.full { background: var(--amber); box-shadow: 0 0 6px rgba(255, 181, 61, 0.5); }
+.fill-bar .sat { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--amber); }
+.heat-leds { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 2px; height: 10px; }
+.heat-leds i { background: rgba(255, 181, 61, 0.12); }
+.heat-leds i.on { background: var(--amber); box-shadow: 0 0 4px rgba(255, 181, 61, 0.6); }
+.heat-leds i:nth-child(n + 13).on { background: var(--sell); box-shadow: 0 0 5px var(--sell); }
+@media (max-width: 520px) { .lab-gauges { grid-template-columns: 1fr; gap: 6px; } }
+
+/* The screen's groups, as a panel prints them: a silkscreen name and an engraved line, a little air above. */
+.lab-group { display: flex; align-items: center; gap: 10px; margin: 8px 0 -4px; font-size: 9px; font-weight: 800; letter-spacing: 0.22em; color: var(--ink-2); }
+.lab-group::after { content: ""; flex: 1; height: 0; border-top: 1px solid rgba(0, 0, 0, 0.28); border-bottom: 1px solid rgba(255, 255, 255, 0.45); }
+.lab-lcd + .lab-group { margin-top: 4px; }
+
+/* ------------------------------------------------------------ community (listeners' tracks we keep) */
+.lab-jump { display: inline-block; margin-top: 14px; font-size: 12px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--amber); text-decoration: none; border-bottom: 1px solid rgba(255, 181, 61, 0.4); }
+.lab-jump:hover { color: var(--bone); border-color: var(--bone); }
+.lab-community { display: grid; gap: 14px; scroll-margin-top: 20px; }
+.community-head h2 { margin: 0 0 6px; font-size: 13px; font-weight: 800; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); }
+.community-head p { margin: 0; font-size: 13px; line-height: 1.55; color: var(--muted); }
+.community-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 10px; }
+.cm-card { display: grid; gap: 8px; align-content: start; padding: 14px 16px 16px; background: var(--bone) var(--noise); border: 1px solid #000; box-shadow: inset 0 1px 0 #f6f1e2, 0 3px 0 #000; color: var(--ink); }
+.cm-card.on { box-shadow: inset 0 1px 0 #f6f1e2, 0 3px 0 #000, 0 0 0 2px var(--phos), 0 0 18px rgba(108, 245, 149, 0.35); }
+.cm-top { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-2); }
+.cm-by { color: var(--ink); text-transform: none; letter-spacing: 0.06em; }
+.cm-card h3 { margin: 0; font: 400 34px/1 var(--lcd); color: var(--phos); background: var(--lcd-bg); padding: 8px 10px 6px; text-shadow: 0 0 10px rgba(108, 245, 149, 0.45); overflow-wrap: anywhere; }
+.cm-note { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+.cm-actions { display: grid; grid-template-columns: 1.2fr 1.3fr 1fr; gap: 6px; }
+.cm-actions button { min-height: 36px; border: 1px solid #000; background: var(--ink); color: var(--bone); font-weight: 800; font-size: 10px; letter-spacing: 0.12em; box-shadow: 0 2px 0 #8f876d; }
+.cm-actions .cm-play { background: var(--phos); color: var(--ink); }
+.cm-card.on .cm-play { background: var(--sell); color: var(--ink); }

@@ -57,8 +57,8 @@ export { PACKS, packFor, programFor, registerPack } from "./stations/index.ts";
 export { PackSyntaxError, parsePackSource } from "./packLiteral.ts";
 export type { PackBases, PackLeadPatch, StationPack, StationStyle } from "./pack.ts";
 export { BUS_NAMES, DATA_FIELDS, DATA_GENRES } from "./styledata.ts";
-export { ORNAMENT_PLAN, SOUND_DEFAULTS } from "./engine.ts";
-export type { OrnamentPlay } from "./engine.ts";
+export { ORNAMENT_PLAN, PARTS, SOUND_DEFAULTS } from "./engine.ts";
+export type { OrnamentPlay, Part } from "./engine.ts";
 export type {
   AcidData,
   BusName,

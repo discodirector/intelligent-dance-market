@@ -4,7 +4,7 @@
 // (gitignored), so a rerun resumes an order instead of paying twice, and a revision continues the right job.
 //
 //   npx tsx bot/scripts/swarm-style.ts check  --key chog --genres liquid,acid --brief "<the owner's words>"
-//                                             [--styles 2] [--repo https://github.com/o/r] [--commit <sha>]
+//                                             [--styles 2 | 3,2 (per genre)] [--repo https://github.com/o/r] [--commit <sha>]
 //       builds the job.open body and runs the FREE POST /requests/check; prints the body and the blockers (--json: the
 //       whole response). No key.
 //   npx tsx bot/scripts/swarm-style.ts order  (same args) [--payer 0x...]       pays 0.5 IMD, opens the job
@@ -70,7 +70,7 @@ function orderArgs(): StyleOrder {
   // The commit the job starts from: the public repository's main unless named.
   const baseCommit = (arg("commit") ?? git("ls-remote", repoUrl, "main").split(/\s/)[0]).toLowerCase();
   const styles = arg("styles");
-  return { key, genres: genres.split(",").map((g) => g.trim()).filter(Boolean), brief, repoUrl, baseCommit, ...(styles ? { styles: Number(styles) } : {}) };
+  return { key, genres: genres.split(",").map((g) => g.trim()).filter(Boolean), brief, repoUrl, baseCommit, ...(styles ? { styles: styles.includes(",") ? styles.split(",").map(Number) : Number(styles) } : {}) };
 }
 
 /** Prints a check (body first when asked); returns the number of blockers. */

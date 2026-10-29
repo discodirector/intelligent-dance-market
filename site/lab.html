@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Style Lab — Intelligent Dance Market</title>
+  <meta name="description" content="Design a style like a producer; the market plays it. Knobs over the $IDM synth, live in the browser." />
+  <meta name="theme-color" content="#050605" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23050605'/%3E%3Crect x='2' y='9' width='3' height='5' fill='%2365f08c'/%3E%3Crect x='6.5' y='5' width='3' height='9' fill='%23e8e2cf'/%3E%3Crect x='11' y='2' width='3' height='12' fill='%2365f08c'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=VT323&display=swap" rel="stylesheet" />
+</head>
+<body class="lab-page">
+  <!-- The style lab (src/lab.ts): you set the style, the market (buttons or the auto market) plays it. -->
+  <header class="top">
+    <a class="brand" href="/" aria-label="Intelligent Dance Market home">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><rect x="3" y="14" width="4" height="7"/><rect x="10" y="8" width="4" height="13" class="mid"/><rect x="17" y="3" width="4" height="18"/><rect x="1" y="22.4" width="22" height="1.2" class="base"/></svg>
+      </span>
+      <span class="word">IDM</span>
+    </a>
+    <nav class="nav">
+      <a href="/">PLAYER</a>
+      <a href="/stations">STATIONS</a>
+      <a href="/lab" aria-current="page">LAB</a>
+      <a href="/docs">DOCS</a>
+    </nav>
+  </header>
+
+  <main class="lab">
+    <div class="lab-intro">
+      <p class="eyebrow">INTELLIGENT DANCE MARKET · STYLE LAB · PROTOTYPE</p>
+      <h1>You make the style. The market plays it.</h1>
+      <p class="lede">Pick a sound, turn the knobs, press play. Every trade is a note: BUY, SELL and WHALE write the pattern.</p>
+      <a class="lab-jump" href="#community">Listen to tracks by the community ↓</a>
+    </div>
+
+    <p id="shared" class="lab-shared" hidden>Shared style · made by a listener, not by IDM</p>
+    <section class="lab-device" aria-label="Style lab">
+      <div class="lab-screen">
+        <div class="lab-lcd">
+          <div class="lcd-row">
+            <span id="lcd-name" class="lcd-name">—</span>
+            <span id="lcd-sync" class="lcd-sync" title="A sound change lands on the next bar">NEXT BAR</span>
+          </div>
+          <div class="lcd-row dim"><span id="lcd-genre">—</span><span id="lcd-section">stopped</span></div>
+          <canvas class="lab-grid" id="grid" aria-label="Pattern: four drum rows and the bass"></canvas>
+          <div class="lcd-row dim"><span id="lcd-bpm">— BPM</span><span id="lcd-bar">BAR —</span><span id="lcd-swaps">0 TRADES</span></div>
+          <div class="lab-gauges">
+            <div class="gauge" title="How full the grid is. From 44 of 64 hits the grid is full: every BUY then heats it up">
+              <span class="g-name">FILL</span><div class="fill-bar"><i id="fill"></i><b class="sat"></b></div><span class="g-val" id="fill-label">00/64</span>
+            </div>
+            <div class="gauge" title="BUY on a full grid +1, SELL −1. At 16 the track is finished: a drop, and a fresh grid">
+              <span class="g-name">HEAT</span><div class="heat-leds" id="heat-leds"></div><span class="g-val" id="heat-label">00/16</span>
+            </div>
+          </div>
+          <div class="lab-meter" aria-hidden="true"><i id="meter"></i></div>
+          <div class="lab-lanes" id="lanes" hidden>
+            <canvas id="lane-canvas" aria-label="The take's automation lanes"></canvas>
+            <div class="lane-list" id="lanes-list"></div>
+          </div>
+          <ol class="lab-tape" id="tape" aria-live="polite"></ol>
+        </div>
+
+        <p class="lab-group" aria-hidden="true"><span>PLAY · MARKET</span></p>
+        <div class="lab-transport">
+          <button id="play" class="lab-play" type="button" aria-pressed="false"><span class="ico" aria-hidden="true"></span><span class="txt">PLAY</span></button>
+          <div class="lab-trades">
+            <button id="buy" class="trade buy" type="button">BUY</button>
+            <button id="sell" class="trade sell" type="button">SELL</button>
+            <button id="whale" class="trade whale" type="button">WHALE</button>
+          </div>
+          <label class="lab-mode" title="Auto market: the market trades and the song form runs. Manual mode: you trade and run the track, no form.">
+            <input id="auto" type="checkbox" role="switch" checked aria-label="Auto market (off: manual mode)" />
+            <span class="mode-manual">MANUAL MODE</span><span class="mode-auto">AUTO MARKET</span>
+          </label>
+        </div>
+        <p class="lab-group" aria-hidden="true"><span>PARTS · KEYS 1–8</span></p>
+        <div class="lab-parts" role="group" aria-label="Parts on and off, from the next bar">
+          <div class="parts" id="parts"></div>
+          <div class="parts-all">
+            <button id="blank" class="take-btn" type="button" title="Every part off: start from nothing">BLANK</button>
+            <button id="all-in" class="take-btn" type="button" title="Every part on">ALL IN</button>
+          </div>
+        </div>
+        <p class="lab-group" aria-hidden="true"><span>RECORD</span></p>
+        <div class="lab-take" role="group" aria-label="Record a take">
+          <button id="rec" class="take-btn rec" type="button">REC</button>
+          <button id="take-play" class="take-btn" type="button" disabled>PLAY TAKE</button>
+          <button id="take-clear" class="take-btn" type="button" disabled>CLEAR</button>
+        </div>
+        <p class="lab-group" aria-hidden="true"><span>SHARE · SEND</span></p>
+        <div class="lab-keep" role="group" aria-label="Share and download">
+          <button id="share" class="take-btn out-btn" type="button" title="A link that opens this style (and its take)">SHARE</button>
+          <button id="render" class="take-btn out-btn" type="button">DOWNLOAD WAV</button>
+        </div>
+        <div class="lab-send" role="group" aria-label="Send for review">
+          <label class="lab-field lab-contact"><span class="silk">YOUR X OR TELEGRAM · OPTIONAL</span><input id="contact" type="text" maxlength="40" spellcheck="false" autocomplete="off" placeholder="@handle" /></label>
+          <button id="submit" class="out-btn btn-submit" type="button" title="The style and a 20 s preview go to the IDM team">SEND FOR REVIEW</button>
+        </div>
+        <span id="status" class="lab-status" role="status"></span>
+      </div>
+
+      <div class="lab-panel">
+        <div class="lab-pick">
+          <div class="lab-tabs" id="genres" role="tablist" aria-label="Genre"></div>
+          <label class="lab-field"><span class="silk">START FROM</span><select id="preset"></select></label>
+          <label class="lab-field"><span class="silk">NAME</span><input id="name" type="text" maxlength="24" spellcheck="false" autocomplete="off" /></label>
+        </div>
+        <div class="lab-macros" id="macros"></div>
+        <div class="lab-choices" id="choices"></div>
+        <div class="lab-editor" id="editor"></div>
+        <div class="lab-knobs" id="knobs"></div>
+        <p class="lab-legend"><b class="bar-dot"></b> lands on the next bar · the rest you hear at once</p>
+      </div>
+    </section>
+
+    <section class="lab-community" id="community" aria-labelledby="community-title">
+      <div class="community-head">
+        <h2 id="community-title">Community</h2>
+        <p>Tracks listeners made here and sent to us. Press play to hear one, or open it in the lab and make it yours.</p>
+      </div>
+      <ol class="community-list" id="community-list"></ol>
+    </section>
+
+    <section class="lab-guide" aria-labelledby="guide-title">
+      <h2 id="guide-title">How to make a track</h2>
+      <ol class="guide-steps">
+        <li>
+          <h3>Pick a sound</h3>
+          <p>Choose a genre and a preset, then turn the knobs. Most you hear at once; the ones with an orange dot change on the next bar.</p>
+        </li>
+        <li>
+          <h3>Press play</h3>
+          <p>Every trade is a note. <b class="t-buy">BUY</b> adds a hit, <b class="t-sell">SELL</b> takes one away, <b class="t-whale">WHALE</b> fills or wipes a whole row.</p>
+        </li>
+        <li>
+          <h3>Auto market or manual</h3>
+          <p><b class="t-buy">AUTO MARKET</b>: the market trades by itself and the track builds up and breaks down on its own. <b class="t-whale">MANUAL MODE</b>: nothing changes unless you do it.</p>
+        </li>
+        <li>
+          <h3>Bring the parts in</h3>
+          <p>The part buttons, or keys <kbd>1</kbd>–<kbd>8</kbd>, turn the kick, snare, hats and the rest on and off, on the next bar. <b>BLANK</b> turns everything off so you can start from silence.</p>
+        </li>
+        <li>
+          <h3>Record</h3>
+          <p><b class="t-sell">REC</b> starts on the next bar and keeps everything you do for up to 64 bars, about two minutes: parts, knobs, trades. <b>PLAY TAKE</b> plays it back.</p>
+        </li>
+        <li>
+          <h3>Keep it or send it</h3>
+          <p><b>SHARE</b> gives a link that plays your track. <b>DOWNLOAD WAV</b> saves the audio. <b class="t-buy">SEND FOR REVIEW</b> sends your sound to the IDM team: we listen to every one, and a good one can join a station. Leave your handle so we can credit you.</p>
+        </li>
+      </ol>
+      <p class="guide-tip"><b>Try this:</b> switch to MANUAL MODE, press BLANK, REC and PLAY. Bring in the hats, then the kick a few bars later, then the bass.</p>
+    </section>
+
+    <section class="lab-out" aria-label="Reset">
+      <button id="reset" class="btn-outline out-btn" type="button">RESET THE STYLE</button>
+    </section>
+  </main>
+  <script type="module" src="./src/lab.ts"></script>
+</body>
+</html>

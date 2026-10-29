@@ -412,6 +412,8 @@ function hamsterWhat(e: Entry): string {
 /** The module's words for the hamster station: notes, "every 30 m of wheel is a note". */
 function hamsterLabels(name: string) {
   $("c-swaps-label").textContent = "notes";
+  // A run note, the wheel stopping, a milestone: what buy, sell and whale are on this station (site main.ts).
+  for (const [id, text] of [["c-buys-label", "runs"], ["c-sells-label", "stops"], ["c-whales-label", "milestones"]]) $(id).textContent = text;
   $("swap-silk").textContent = "NOTE #";
   $("foot-left").textContent = `EVERY 30 M OF WHEEL IS A NOTE · ${name.toUpperCase()}`;
 }
@@ -557,7 +559,8 @@ function releaseTape(r: BuiltRelease, n: number, dropped: boolean) {
   if (dropped && tc) rows.push(`<li class="sys track"><span class="p">#</span> TRACK #${tc.trackNo} COMPLETE · ${r.entries.length} ${unit()}S</li>`);
   $("log").innerHTML = rows.join("");
   $("c-swaps").textContent = String(n);
-  $("c-buys").textContent = String(buys);
+  // The hamster's whales are milestones, not runs: its runs count only the wheel's notes.
+  $("c-buys").textContent = String(hamsterMode ? buys - whales : buys);
   $("c-sells").textContent = String(sells);
   $("c-whales").textContent = String(whales);
 }

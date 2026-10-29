@@ -17,7 +17,7 @@ import {
   type TimelinePoint,
   type TransportView,
 } from "./clock.ts";
-import { ceilingCurve, MASTER_CEILING, MixChain, OfflineReaper, setOfflineReaper, VoiceEngine, type OrnamentPlay } from "./engine.ts";
+import { ceilingCurve, MASTER_CEILING, MixChain, OfflineReaper, setOfflineReaper, VoiceEngine, type OrnamentPlay, type Part } from "./engine.ts";
 import { FORM_BARS } from "./arrange.ts";
 import { crossfadeSeconds, epochOf, eraById, eraOf, type Era } from "./eras.ts";
 import { HOUSE_PROGRAM, type Program } from "./program.ts";
@@ -79,13 +79,22 @@ export interface LivePlayer {
    * on the next unscheduled step that suits it (RenderOptions.ornaments). `smart`: the clearer version.
    */
   noteMention(smart?: boolean): void;
-  start(): void;
+  /**
+   * Starts the grid now. `from` (opt-in, the style lab's seamless restart): the first step lands at context time
+   * `from.time` (a downbeat of the player it replaces) on bar `from.bar` of the song form, so the new player picks up
+   * where the old one was. Omitted: step 0 of bar 0, 50 ms from now, as always.
+   */
+  start(from?: { time: number; bar: number }): void;
   stop(): void;
   readonly running: boolean;
   getTransport(): TransportView;
   getEra(): EraView;
   /** Sleep mode: the slot playing now (or that the next step would play), null when awake or without a sleep pack. */
   getSleep(): SleepSlot | null;
+  /** Opt-in (the style lab): these parts muted from the next unscheduled step. Never called: nothing changes. */
+  setMutes(parts: readonly Part[]): void;
+  /** Opt-in (the style lab): no song form from the next unscheduled step (true), or the form again. */
+  setFormless(on: boolean): void;
   onStep(listener: (event: StepListenerEvent) => void): () => void;
 }
 
@@ -107,6 +116,10 @@ export interface RenderOptions {
    * empty: the render is exactly what it was without them.
    */
   inks?: readonly { time: number; cue: InkCue }[];
+  /** Opt-in (the style lab): these parts muted for the whole render. Omitted or empty: the render as without it. */
+  mutes?: readonly Part[];
+  /** Opt-in (the style lab's manual mode): no song form, every bar a bar of the full part. Omitted: the form. */
+  formless?: boolean;
 }
 
 /**
@@ -215,6 +228,9 @@ class EraRig {
   private outRamp = { t0: 0, t1: 0, from: 1, to: 1 };
   /** Attention layer: mentions not played yet. */
   private readonly ornaments = new OrnamentQueue();
+  /** Opt-in (the style lab): muted parts, for every engine now and to come. */
+  private mutes: readonly Part[] = [];
+  private formless = false;
 
   constructor(
     private readonly ctx: BaseAudioContext,
@@ -264,6 +280,16 @@ class EraRig {
       (slot) => time < slot.ramp.t1 - 1e-4 && Math.abs(slot.ramp.to - slot.ramp.from) > 0.02,
     );
     return { epoch: epochOf(state), id: era.id, name: era.name, fading };
+  }
+
+  setMutes(parts: readonly Part[]) {
+    this.mutes = [...parts];
+    for (const slot of this.slots) slot.engine.setMutes(this.mutes);
+  }
+
+  setFormless(on: boolean) {
+    this.formless = on;
+    for (const slot of this.slots) slot.engine.setFormless(on);
   }
 
   /** Attention layer: queue one mention for the primary engine (OrnamentQueue). */
@@ -350,6 +376,8 @@ class EraRig {
 
   private create(era: Era, time: number, level: number, schedule: boolean): Slot {
     const engine = new VoiceEngine(this.ctx, era.index, this.instance, this.program);
+    if (this.mutes.length) engine.setMutes(this.mutes);
+    if (this.formless) engine.setFormless(true);
     const gain = this.ctx.createGain();
     stereo(gain);
     const held = Math.max(SILENT, level);
@@ -534,16 +562,16 @@ export function createLivePlayer(ctx: AudioContext, options?: LivePlayerOptions)
     noteMention(smart) {
       if (running) rig.requestOrnament({ time: ctx.currentTime, smart });
     },
-    start() {
+    start(from) {
       if (running) return;
       if (!committed) committed = initialState();
       running = true;
       stepIndex = 0;
-      formShift = 0;
+      formShift = from ? ((Math.floor(from.bar) % FORM_BARS) + FORM_BARS) % FORM_BARS : 0;
       trackHold = null;
       idleMem = freshIdleMemory();
       scheduled.length = 0;
-      nextGrid = ctx.currentTime + 0.05;
+      nextGrid = from ? Math.max(from.time, ctx.currentTime + 0.05) : ctx.currentTime + 0.05;
       rig.fadeOutput(1, ctx.currentTime, 0.02);
       tick();
       timer = window.setInterval(tick, TICK_MS);
@@ -583,6 +611,12 @@ export function createLivePlayer(ctx: AudioContext, options?: LivePlayerOptions)
     },
     getSleep() {
       return sleepOf(pending ?? committed ?? initialState(), clockNow());
+    },
+    setMutes(parts) {
+      rig.setMutes(parts);
+    },
+    setFormless(on) {
+      rig.setFormless(on);
     },
     onStep(listener) {
       listeners.add(listener);
@@ -627,6 +661,8 @@ export async function renderTimelineToBuffer(
   const program = options?.program ?? HOUSE_PROGRAM;
   const rig = new EraRig(ctx, eraId, false, null, program);
   rig.connect(ctx.destination);
+  if (options?.mutes?.length) rig.setMutes(options.mutes);
+  if (options?.formless) rig.setFormless(true);
   for (const cue of options?.ornaments ?? []) rig.requestOrnament(cue);
   const hits = planSteps(points, seconds, eraId, options?.barOffset ?? 0, program, options?.inks ?? []);
   for (const hit of hits) {

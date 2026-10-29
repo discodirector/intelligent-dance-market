@@ -21,8 +21,10 @@ COPY contracts/deployments contracts/deployments
 # The station registry (site alias @stations), its rules (validate.mjs: runtime stations, site/src/runtime.ts) and
 # stations.html: vite.config.ts builds every page.
 COPY stations/registry.json stations/validate.mjs stations/validate.d.mts stations/
-COPY site/index.html site/docs.html site/stations.html site/bot.html site/stream.html site/listen.html site/vite.config.ts site/tsconfig.json site/
+COPY site/index.html site/docs.html site/stations.html site/bot.html site/stream.html site/listen.html site/lab.html site/vite.config.ts site/tsconfig.json site/
 COPY site/src site/src
+# The lab's loudness match (site/src/lab-loudness.ts) renders on the gate's tape stretches.
+COPY web/scripts/station-gate-windows.json web/scripts/
 COPY site/public site/public
 RUN cd site && npx vite build
 
@@ -75,6 +77,10 @@ COPY packages/core/src packages/core/src
 # The Credit rating table: the credits station tags its sales with it (bot/src/station.ts ratingsFor).
 COPY packages/core/data packages/core/data
 COPY bot/src bot/src
+# Style Lab submissions (bot/src/lab): the API checks a style with the lab's own codec and rebuild.
+COPY site/src/lab-codec.ts site/src/lab-styles.ts site/src/lab-take.ts site/src/lab-market.ts site/src/rules.ts site/src/
+# ES modules, as in the repo (site/package.json "type": "module"): tsx would load them as CommonJS otherwise.
+RUN echo '{"type":"module"}' > site/package.json
 COPY bot/data bot/data
 # The station registry (bot/src/station.ts loadRegistry: ../../stations/registry.json) and its rules (validate.mjs,
 # merging the pipeline's runtime stations): checkpoints, subscription status, the API and the stations worker read

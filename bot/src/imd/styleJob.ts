@@ -52,8 +52,8 @@ export interface StyleOrder {
   genres: readonly string[];
   /** The owner's words about the vibe. */
   brief: string;
-  /** Styles per genre, 1..4 (default 2). */
-  styles?: number;
+  /** Styles per genre, 1..4 (default 2): one number for every genre, or one per genre in the genres' order. */
+  styles?: number | readonly number[];
   repoUrl?: string;
   /** 40 lowercase hex: the public repository's commit the job starts from (and the gate diffs against). */
   baseCommit: string;
@@ -66,21 +66,27 @@ export function orderProblems(o: StyleOrder): string[] {
   if (o.genres.length < 1 || o.genres.length > DATA_GENRES.length) out.push(`genres: 1..${DATA_GENRES.length} of ${DATA_GENRES.join(", ")}, got ${o.genres.length}`);
   for (const g of o.genres) if (!(DATA_GENRES as readonly string[]).includes(g)) out.push(`genre "${g}": not one of ${DATA_GENRES.join(", ")}`);
   if (new Set(o.genres).size !== o.genres.length) out.push("genres: listed twice");
-  const n = o.styles ?? 2;
-  if (!Number.isInteger(n) || n < 1 || n > 4) out.push(`styles per genre: 1..4, got ${n}`);
+  const counts = stylesPer(o);
+  if (Array.isArray(o.styles) && o.styles.length !== o.genres.length) out.push(`styles: one count per genre (${o.genres.length}), got ${o.styles.length}`);
+  for (const n of counts) if (!Number.isInteger(n) || n < 1 || n > 4) out.push(`styles per genre: 1..4, got ${n}`);
   if (!o.brief.trim()) out.push("brief: the owner's words about the vibe are required");
   if (o.brief.length > 1500) out.push(`brief: at most 1500 chars, got ${o.brief.length}`);
   if (!/^[0-9a-f]{40}$/.test(o.baseCommit)) out.push(`commit "${o.baseCommit}": 40 lowercase hex`);
   return out;
 }
 
+/** The number of styles of each genre, in the genres' order. */
+const stylesPer = (o: StyleOrder): number[] => (Array.isArray(o.styles) ? [...o.styles] : o.genres.map(() => (o.styles as number | undefined) ?? 2));
+
 const quote = (s: string) => JSON.stringify(s.trim().replace(/\s+/g, " "));
 
 /** The job's objective: one file, data only, the genres, the vibe, taste, and the gate it must pass. */
 export function styleObjective(o: StyleOrder): string {
-  const n = o.styles ?? 2;
+  const counts = stylesPer(o);
+  const n = counts[0];
   const file = packPath(o.key);
   const genres = o.genres as readonly StyleGenre[];
+  const howMany = counts.every((c) => c === n) ? `${n} style${n > 1 ? "s" : ""} per genre` : genres.map((g, i) => `${counts[i]} ${g} style${counts[i] > 1 ? "s" : ""}`).join(", ");
   return [
     `Write the style pack of the "${o.key}" station of Intelligent Dance Market: exactly one new file, ${file}. Change nothing else in the repository.`,
     "",
@@ -88,7 +94,7 @@ export function styleObjective(o: StyleOrder): string {
     "",
     "The pack:",
     `- export default { key: "${o.key}", name, genres: [${genres.map((g) => `"${g}"`).join(", ")}], styles, patches? } satisfies StationPack; the only import is \`import type { StationPack } from "../pack.ts"\`.`,
-    `- genres in this order: ${genres.join(", ")}. ${n} style${n > 1 ? "s" : ""} per genre, ids prefixed "${o.key}-", each on a base the README table lists for its genre.`,
+    `- genres in this order: ${genres.join(", ")}. ${howMany}, ids prefixed "${o.key}-", each on a base the README table lists for its genre.`,
     "- Data only: one object literal. No functions, loops, computed values, randomness or other imports. No engine edits.",
     "",
     `The owner's vibe: ${quote(o.brief)}`,

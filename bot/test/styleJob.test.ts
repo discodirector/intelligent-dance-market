@@ -42,6 +42,12 @@ describe("styleOpenBody", () => {
     expect(o).toContain('The owner\'s vibe: "slow \\"smoky\\" rooms"');
   });
 
+  it("takes a style count per genre", () => {
+    const o = styleObjective(chog({ genres: ["ambientidm", "drone"], styles: [3, 2] }));
+    expect(o).toContain("genres in this order: ambientidm, drone. 3 ambientidm styles, 2 drone styles, ids");
+    expect(styleObjective(chog({ styles: [2, 2] }))).toContain("2 styles per genre");
+  });
+
   it("fits the API: objective <= 8000 chars, body < 16 KiB even with the longest brief and seven genres", () => {
     const body = styleOpenBody(chog({ genres: ["liquid", "futuregarage", "triphop", "lofihouse", "acid", "dubtechno", "electro"], styles: 4, brief: "x".repeat(1500) }));
     expect(body.objective.length).toBeLessThanOrEqual(8000);
@@ -64,6 +70,8 @@ describe("styleOpenBody", () => {
     expect(bad({ genres: ["liquid", "liquid"] })).toThrow(/listed twice/);
     expect(bad({ styles: 5 })).toThrow(/styles per genre/);
     expect(bad({ styles: 1.5 })).toThrow(/styles per genre/);
+    expect(bad({ styles: [2, 5] })).toThrow(/styles per genre/);
+    expect(bad({ styles: [2] })).toThrow(/one count per genre/);
     expect(bad({ brief: "  " })).toThrow(/brief/);
     expect(bad({ brief: "x".repeat(1501) })).toThrow(/brief/);
     expect(bad({ baseCommit: "8E39EF78A198EDED3CB43FF6982E39393E521B55" })).toThrow(/commit/);

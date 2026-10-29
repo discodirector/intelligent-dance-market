@@ -109,6 +109,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .btn-stations:hover { border-color: var(--phos); box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.8), 0 0 26px rgba(var(--phos-rgb), 0.4); }
 .btn-stations .led { width: 8px; height: 8px; border-radius: 50%; background: var(--phos); box-shadow: 0 0 8px var(--phos); animation: st-blink 1.6s steps(1) infinite; }
 .btn-stations .arr { font-size: 11px; }
+/* The style lab: the same key in amber, next to the stations. */
+.btn-lab { border-color: rgba(255, 181, 61, 0.45); color: var(--amber); text-shadow: 0 0 10px rgba(255, 181, 61, 0.55); box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.8), 0 0 18px rgba(255, 181, 61, 0.14); }
+.btn-lab:hover { border-color: var(--amber); box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.8), 0 0 26px rgba(255, 181, 61, 0.35); }
+.btn-lab .led { background: var(--amber); box-shadow: 0 0 8px var(--amber); animation: none; }
 @keyframes st-blink { 50% { opacity: 0.25; } }
 
 /* ------------------------------------------------------------ hero / module wall */
@@ -615,6 +619,12 @@ i.g { background: var(--phos); } i.r { background: var(--sell); } i.a { backgrou
 @media (max-width: 560px) {
   .top { gap: 12px; }
   .btn-outline { padding: 9px 10px; font-size: 10.5px; }
+  .btn-stations { height: 36px; padding: 0 10px; gap: 7px; font-size: 10.5px; letter-spacing: 0.14em; }
+  .btn-stations .arr { display: none; }
+}
+@media (max-width: 380px) {
+  .btn-stations { padding: 0 8px; letter-spacing: 0.1em; }
+  .btn-stations .led { display: none; }
   .hero { padding: 0 var(--gutter); }
   .module { padding: 14px 12px 10px; }
   .panel-head { flex-direction: column; align-items: flex-start; }

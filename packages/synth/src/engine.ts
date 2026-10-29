@@ -110,6 +110,10 @@ import { bassAt, midiToFreq, type SequencerState } from "./state.ts";
 /** Voice gains that follow the idle stage (IdleGains.heat is a multiplier, not a bus). */
 type IdleVoice = Exclude<keyof IdleGains, "heat">;
 
+/** The parts a listener can mute (the style lab): the drum rows' and the music's buses; `fx` is the tex and fx buses. */
+export const PARTS = ["kick", "snare", "hat", "glitch", "bass", "pad", "lead", "fx"] as const;
+export type Part = (typeof PARTS)[number];
+
 /** Soft-knee ceiling, about -1.2 dBFS, so the master stays under -1 dBFS. */
 export const MASTER_CEILING = 0.87;
 
@@ -744,6 +748,13 @@ export class VoiceEngine {
   private idleReady = false;
   private idleNow: Record<IdleVoice, number> = { kick: 1, snare: 1, hat: 1, glitch: 1, bass: 1, pad: 1, lead: 1, drone: 0 };
   private idleSet: Record<IdleVoice, number> = { kick: -1, snare: -1, hat: -1, glitch: -1, bass: -1, pad: -1, lead: -1, drone: -1 };
+  /** Opt-in (the style lab): muted parts, heard from the next step. Empty: every bus exactly as without it. */
+  private muted: ReadonlySet<Part> = new Set();
+  private fxMuted = false;
+  /** Opt-in (the style lab): no song form. */
+  private formless = false;
+  /** The style trim in force (the output gain after the master stage). */
+  private trimNow = 1;
   private macro = { primed: false, drive: 0, echo: 0, space: 0 };
   private noiseCache = new Map<number, AudioBuffer>();
   private bufCache = new Map<string, AudioBuffer>();
@@ -1035,6 +1046,7 @@ export class VoiceEngine {
       this.instance = this.pinnedInstance ?? epochOf(state);
       const first = styleOf(this.era, this.instance, this.program).style;
       this.styleGain.gain.value = first.trim ?? 1;
+      this.trimNow = first.trim ?? 1;
       if (this.era.id === "dubtechno") {
         this.mix = { ...MIX.dubtechno, ...DUB_MIX[first.base ?? first.id] };
         this.drumLp.frequency.value = this.mix.drumLp;
@@ -1051,10 +1063,18 @@ export class VoiceEngine {
     }
     const epoch = this.instance;
     const { index: styleIndex, style } = styleOf(this.era, epoch, this.program);
+    // A style whose trim moved while it plays (the style lab's loudness guard) glides there over a step. A station's
+    // style never changes inside its instance: nothing is written.
+    if ((style.trim ?? 1) !== this.trimNow) {
+      this.trimNow = style.trim ?? 1;
+      this.styleGain.gain.setTargetAtTime(this.trimNow, hit.time, Math.max(hit.duration, 0.01) / 3);
+    }
     const tonic = genreKey(this.era, epoch);
     // SPEC §4.3: voices play the arrangement of the on-chain grid, never the raw bits. A style may keep more of
     // itself in the breakdown and the intro (GenreStyle.breakdown, .intro) and take less of the heat (GenreStyle.heat).
-    const arr = arrange(hit.state, hit.bar, style.breakdown, style.intro);
+    // Opt-in (the style lab's manual mode): no song form, every bar is a bar of the full part (its phrase kept).
+    const formBar = this.formless ? 16 + (((hit.bar % 8) + 8) % 8) : hit.bar;
+    const arr = arrange(hit.state, formBar, style.breakdown, style.intro);
     const sec = arr.section;
     const hot = style.heat === undefined ? heat : heat * style.heat;
     const c: Ctx = {
@@ -1278,7 +1298,8 @@ export class VoiceEngine {
     const rest: AudioNode[] = [f, amp, out.dest];
     const idle = c.hit.idle?.lead ?? 1;
     for (const [amount, sum] of [[m.echo, this.sends.echoSum], [m.space, this.sends.spaceSum]] as const) {
-      if (amount <= 0) continue;
+      // Its sends skip the lead bus: a muted lead sends nothing.
+      if (amount <= 0 || this.muted.has("lead")) continue;
       const g = this.ctx.createGain();
       g.gain.value = amount * idle;
       stereo(g);
@@ -8478,6 +8499,16 @@ export class VoiceEngine {
     dispose(node, rest, when, this.live);
   }
 
+  /** Opt-in (the style lab): these parts muted from the next step on (a fade over one step; back in over 18 ms). */
+  setMutes(parts: Iterable<Part>) {
+    this.muted = new Set(parts);
+  }
+
+  /** Opt-in (the style lab): without the song form from the next step on, every bar a bar of the full part. */
+  setFormless(on: boolean) {
+    this.formless = on;
+  }
+
   /** Piecewise-linear voice levels. The first hit snaps so a new genre does not shout. */
   private followIdle(hit: StepHit, primary: boolean, section: Section, c: Ctx) {
     const idle = hit.idle;
@@ -8489,13 +8520,25 @@ export class VoiceEngine {
     const bassFloor = this.era.id === "drone" ? 0.55 : 0;
     const padFloor = ["drone", "ambientidm", "dubtechno", "liquid", "futuregarage", "triphop"].includes(this.era.id) ? 0.8 : 0;
     const trim = this.busTrim;
-    this.glide(this.bus.kick.gain, "kick", gains.kick, hit.time, dur, trim.kick);
-    this.glide(this.bus.snare.gain, "snare", gains.snare, hit.time, dur, trim.snare);
-    this.glide(this.bus.hat.gain, "hat", gains.hat, hit.time, dur, trim.hat);
-    this.glide(this.bus.perc.gain, "glitch", gains.glitch, hit.time, dur, trim.perc);
-    this.glide(this.bus.bass.gain, "bass", Math.max(gains.bass, bassFloor * (idle ? idle.bass : 1)), hit.time, dur, trim.bass);
-    this.glide(this.bus.harm.gain, "pad", Math.max(gains.pad, padFloor), hit.time, dur, trim.harm);
-    this.glide(this.bus.lead.gain, "lead", gains.lead, hit.time, dur, trim.lead);
+    const on = (p: Part) => (this.muted.has(p) ? 0 : 1);
+    // Muted parts on an engine's first hit: from time 0, so a voice that starts just ahead of the hit is muted too.
+    const at = !this.idleReady && this.muted.size ? 0 : hit.time;
+    this.glide(this.bus.kick.gain, "kick", gains.kick * on("kick"), at, dur, trim.kick);
+    this.glide(this.bus.snare.gain, "snare", gains.snare * on("snare"), at, dur, trim.snare);
+    this.glide(this.bus.hat.gain, "hat", gains.hat * on("hat"), at, dur, trim.hat);
+    this.glide(this.bus.perc.gain, "glitch", gains.glitch * on("glitch"), at, dur, trim.perc);
+    this.glide(this.bus.bass.gain, "bass", Math.max(gains.bass, bassFloor * (idle ? idle.bass : 1)) * on("bass"), at, dur, trim.bass);
+    this.glide(this.bus.harm.gain, "pad", Math.max(gains.pad, padFloor) * on("pad"), at, dur, trim.harm);
+    this.glide(this.bus.lead.gain, "lead", gains.lead * on("lead"), at, dur, trim.lead);
+    if (this.muted.has("fx") !== this.fxMuted) {
+      this.fxMuted = !this.fxMuted;
+      for (const name of ["tex", "fx"] as const) {
+        const param = this.bus[name].gain;
+        const to = this.fxMuted ? 0 : this.busTrim[name];
+        if (this.idleReady) param.setTargetAtTime(to, hit.time, dur / 3);
+        else param.setValueAtTime(to, 0);
+      }
+    }
     this.idleReady = true;
     if (!primary) return;
     if (hit.recover) this.playFill(c);
@@ -8630,7 +8673,8 @@ export class VoiceEngine {
       out.add(amp);
       rest.push(out.dest);
     }
-    if (o.echo > 0) {
+    // The echo send skips the pad bus: muted pads send nothing.
+    if (o.echo > 0 && !this.muted.has("pad")) {
       const send = this.ctx.createGain();
       send.gain.value = o.echo;
       amp.connect(send);

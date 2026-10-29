@@ -22,7 +22,7 @@ export default defineConfig({
     target: "es2022",
     chunkSizeWarningLimit: 900,
     // bot.html is the bot's render page (bot/src/render), stream.html the YouTube radio's audio source (sim/stream/live);
-    // index.html, docs.html and stations.html are the public site.
+    // index.html, docs.html and stations.html are the public site; lab.html the style lab (prototype).
     rollupOptions: {
       input: {
         main: fileURLToPath(new URL("index.html", import.meta.url)),
@@ -31,6 +31,7 @@ export default defineConfig({
         bot: fileURLToPath(new URL("bot.html", import.meta.url)),
         stream: fileURLToPath(new URL("stream.html", import.meta.url)),
         listen: fileURLToPath(new URL("listen.html", import.meta.url)),
+        lab: fileURLToPath(new URL("lab.html", import.meta.url)),
       },
     },
   },

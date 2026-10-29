@@ -2,13 +2,16 @@
 // service from the bot's image. Env: STATION_PAY_TO (unset = 503 "applications not open"), STATIONS_OPEN=1,
 // STATION_PRICE_TIER (launch|regular), API_PORT (8787), API_HOST (0.0.0.0 in the container; compose publishes it on
 // the host's 127.0.0.1 only), API_ORIGINS, API_TRUST_PROXY, OUT_DIR, STATIONS_DATA_DIR. No keys: chain reads only.
+// Also /api/lab/submit (lab.ts): Style Lab styles for review, stored only.
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { loadRegistry } from "../station.ts";
 import { loadMergedRegistry } from "../stations/runtime.ts";
 import { CHAINS } from "../stations/sources.ts";
+import { LabStore } from "../lab/submissions.ts";
 import { createHandler } from "./app.ts";
 import { configFromEnv } from "./config.ts";
+import { createLabHandler, LAB_PREFIX } from "./lab.ts";
 import { cachedCheck, cachedImdPrice } from "./market.ts";
 import { rpcReader } from "./payments.ts";
 import { Store } from "./store.ts";
@@ -37,7 +40,10 @@ const handle = createHandler({
   checkChains: Object.keys(registry.chains).map(Number).filter((id) => CHAINS[id]),
 });
 
-const server = createServer((req, res) => void handle(req, res));
+// Style Lab submissions (lab.ts): stored in out/lab-submissions for the stations worker to send to Telegram.
+const lab = createLabHandler({ store: new LabStore(join(OUT, "lab-submissions")), trustProxy: config.trustProxy, origins: config.origins });
+
+const server = createServer((req, res) => void ((req.url ?? "").startsWith(LAB_PREFIX) ? lab(req, res) : handle(req, res)));
 server.requestTimeout = 120_000;
 server.headersTimeout = 15_000;
 server.listen(PORT, HOST, () => {
